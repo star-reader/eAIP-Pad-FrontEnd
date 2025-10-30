@@ -32,36 +32,20 @@ struct DocumentsView: View {
     }
 }
 
-// MARK: - 文档类型选择器
+// MARK: - 文档类型选择器（使用SwiftUI原生样式）
 struct DocumentTypeSelector: View {
     @Binding var selectedType: DocumentCategory
     
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(DocumentCategory.allCases, id: \.self) { type in
-                    Button {
-                        selectedType = type
-                    } label: {
-                        Text(type.displayName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                selectedType == type ? .orange : .clear,
-                                in: Capsule()
-                            )
-                            .foregroundColor(selectedType == type ? .white : .primary)
-                            .overlay(
-                                Capsule()
-                                    .stroke(.orange, lineWidth: selectedType == type ? 0 : 1)
-                            )
-                    }
-                }
+        Picker("文档类型", selection: $selectedType) {
+            ForEach(DocumentCategory.allCases, id: \.self) { type in
+                Text(type.displayName)
+                    .tag(type)
             }
-            .padding(.horizontal)
         }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 }
 
@@ -386,7 +370,7 @@ struct AIPDocumentRowView: View {
                     .font(.caption2)
                     .foregroundColor(.secondary)
                 
-                if document.isModified {
+                if document.isModified == true {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
@@ -412,7 +396,7 @@ struct SUPDocumentRowView: View {
                     .background(.orange.opacity(0.2), in: Capsule())
                     .foregroundColor(.orange)
                 
-                if document.isModified {
+                if (document.isModified ?? false) || (document.hasUpdate ?? false) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
@@ -454,7 +438,7 @@ struct AMDTDocumentRowView: View {
                     .background(.green.opacity(0.2), in: Capsule())
                     .foregroundColor(.green)
                 
-                if document.isModified {
+                if (document.isModified ?? false) || (document.hasUpdate ?? false) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)

@@ -149,7 +149,7 @@ class AIRACService: ObservableObject {
                         chartModel.htmlPath = chart.htmlPath
                         chartModel.htmlEnPath = chart.htmlEnPath
                         chartModel.isModified = chart.isModified
-                        chartModel.isOpened = chart.isOpened
+                        chartModel.isOpened = chart.isOpened ?? false
                         
                         modelContext.insert(chartModel)
                     }

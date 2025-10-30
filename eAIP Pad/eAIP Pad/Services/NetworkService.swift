@@ -160,7 +160,7 @@ struct ChartResponse: Codable {
     let htmlEnPath: String?
     let airacVersion: String
     let isModified: Bool
-    let isOpened: Bool
+    let isOpened: Bool?  // 改为可选，因为API可能不返回此字段
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -257,8 +257,9 @@ struct AIPDocumentResponse: Codable {
     let htmlPath: String?
     let htmlEnPath: String?
     let airacVersion: String
-    let isModified: Bool
-    let isOpened: Bool
+    let isModified: Bool?  // 改为可选，API返回的是has_update
+    let hasUpdate: Bool?   // 新增字段，对应API的has_update
+    let isOpened: Bool?    // 改为可选，因为API可能不返回此字段
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -273,6 +274,7 @@ struct AIPDocumentResponse: Codable {
         case htmlEnPath = "html_en_path"
         case airacVersion = "airac_version"
         case isModified = "is_modified"
+        case hasUpdate = "has_update"
         case isOpened = "is_opened"
     }
 }
@@ -285,12 +287,13 @@ struct SUPDocumentResponse: Codable {
     let subject: String
     let localSubject: String
     let chapterType: String
-    let pdfPath: String
+    let pdfPath: String?  // 改为可选，API可能不返回
     let effectiveTime: String?
     let outDate: String?
     let pubDate: String?
     let airacVersion: String
-    let isModified: Bool
+    let isModified: Bool?  // 改为可选，API返回的是has_update
+    let hasUpdate: Bool?   // 新增字段，对应API的has_update
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -305,6 +308,7 @@ struct SUPDocumentResponse: Codable {
         case pubDate = "pub_date"
         case airacVersion = "airac_version"
         case isModified = "is_modified"
+        case hasUpdate = "has_update"
     }
 }
 
@@ -316,12 +320,13 @@ struct AMDTDocumentResponse: Codable {
     let subject: String
     let localSubject: String
     let chapterType: String
-    let pdfPath: String
+    let pdfPath: String?  // 改为可选，API可能不返回
     let effectiveTime: String?
     let outDate: String?
     let pubDate: String?
     let airacVersion: String
-    let isModified: Bool
+    let isModified: Bool?  // 改为可选，API返回的是has_update
+    let hasUpdate: Bool?   // 新增字段，对应API的has_update
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -336,6 +341,7 @@ struct AMDTDocumentResponse: Codable {
         case pubDate = "pub_date"
         case airacVersion = "airac_version"
         case isModified = "is_modified"
+        case hasUpdate = "has_update"
     }
 }
 
@@ -344,7 +350,7 @@ struct NOTAMDocumentResponse: Codable {
     let id: Int
     let documentId: String
     let seriesName: String
-    let pdfPath: String
+    let pdfPath: String?  // 改为可选，API可能不返回
     let generateTime: String
     let generateTimeEn: String
     let airacVersion: String
@@ -401,6 +407,10 @@ class NetworkService: ObservableObject {
         self.refreshToken = nil
     }
     
+    func getCurrentAccessToken() -> String? {
+        return accessToken
+    }
+    
     // MARK: - 通用请求方法
     private func makeRequest<T: Codable>(
         endpoint: APIEndpoint,
@@ -422,28 +432,41 @@ class NetworkService: ObservableObject {
             request.httpBody = body
         }
         
+        // 记录请求日志
+        logRequest(request: request, body: body)
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
+            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
             throw NetworkError.invalidResponse
         }
         
         // 处理401错误，尝试刷新token
         if httpResponse.statusCode == 401 && requiresAuth {
+            logResponse(response: httpResponse, data: data, error: nil)
+            
             try await refreshAccessToken()
             // 重新设置认证头并重试
             request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
                   retryHttpResponse.statusCode == 200 else {
+                logResponse(response: retryResponse as? HTTPURLResponse, data: retryData, error: NetworkError.unauthorized)
                 throw NetworkError.unauthorized
             }
+            logResponse(response: retryHttpResponse, data: retryData, error: nil)
             return try JSONDecoder().decode(APIResponse<T>.self, from: retryData).data!
         }
         
         guard httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(httpResponse.statusCode)
+            let error = NetworkError.serverError(httpResponse.statusCode)
+            logResponse(response: httpResponse, data: data, error: error)
+            throw error
         }
+        
+        // 记录成功响应
+        logResponse(response: httpResponse, data: data, error: nil)
         
         let apiResponse = try JSONDecoder().decode(APIResponse<T>.self, from: data)
         guard let responseData = apiResponse.data else {
@@ -622,6 +645,72 @@ class NetworkService: ObservableObject {
     func getCurrentAIRAC() async throws -> AIRACResponse {
         let response: AIRACResponse = try await makeRequest(endpoint: .currentAIRAC)
         return response
+    }
+    
+    // MARK: - 日志记录方法
+    private func logRequest(request: URLRequest, body: Data?) {
+        print("\n===== 网络请求开始 =====")
+        print("方法: \(request.httpMethod ?? "Unknown")")
+        print("URL: \(request.url?.absoluteString ?? "Unknown")")
+        
+        // 记录请求头
+        if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
+            print("请求头:")
+            for (key, value) in headers {
+                // 隐藏敏感信息
+                if key.lowercased().contains("authorization") {
+                    print("  \(key): Bearer ***")
+                } else {
+                    print("  \(key): \(value)")
+                }
+            }
+        }
+        
+        // 记录请求体
+        if let body = body {
+            print("请求体大小: \(body.count) bytes")
+            if let bodyString = String(data: body, encoding: .utf8) {
+                // 隐藏敏感信息
+                let sanitizedBody = bodyString
+                    .replacingOccurrences(of: "\"id_token\":\"[^\"]*\"", with: "\"id_token\":\"***\"", options: .regularExpression)
+                    .replacingOccurrences(of: "\"refresh_token\":\"[^\"]*\"", with: "\"refresh_token\":\"***\"", options: .regularExpression)
+                print("请求体内容: \(sanitizedBody)")
+            }
+        }
+        print("请求时间: \(Date())")
+    }
+    
+    private func logResponse(response: HTTPURLResponse?, data: Data, error: Error?) {
+        print("\n===== 网络响应 =====")
+        
+        if let response = response {
+            print("状态码: \(response.statusCode)")
+            print("URL: \(response.url?.absoluteString ?? "Unknown")")
+            
+            // 记录响应头
+            
+        }
+        
+        // 记录响应体
+        print("响应体大小: \(data.count) bytes")
+        if let responseString = String(data: data, encoding: .utf8) {
+            // 限制日志长度，避免过长的响应
+            let maxLength = 2000
+            let truncatedResponse = responseString.count > maxLength 
+                ? String(responseString.prefix(maxLength)) + "... (截断)"
+                : responseString
+            print("响应内容: \(truncatedResponse)")
+        }
+        
+        // 记录错误
+        if let error = error {
+            print("错误: \(error.localizedDescription)")
+        } else {
+            print("请求成功")
+        }
+        
+        print("响应时间: \(Date())")
+        print("===== 网络响应结束 =====\n")
     }
 }
 

@@ -109,12 +109,21 @@ struct EnrouteView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        Task {
-                            await loadEnrouteCharts()
+                    Menu {
+                        ForEach(EnrouteChartType.allCases, id: \.self) { type in
+                            Button {
+                                selectedChartType = type
+                            } label: {
+                                HStack {
+                                    Text(type.displayName)
+                                    if selectedChartType == type {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
                         }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                     .disabled(isLoading)
                 }
@@ -171,7 +180,7 @@ struct EnrouteView: View {
                 chart.htmlPath = chartResponse.htmlPath
                 chart.htmlEnPath = chartResponse.htmlEnPath
                 chart.isModified = chartResponse.isModified
-                chart.isOpened = chartResponse.isOpened
+                chart.isOpened = chartResponse.isOpened ?? false
                 
                 modelContext.insert(chart)
             }

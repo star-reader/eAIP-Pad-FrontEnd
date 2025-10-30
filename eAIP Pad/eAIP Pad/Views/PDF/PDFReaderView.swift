@@ -139,18 +139,26 @@ struct PDFReaderView: View {
             case .chart:
                 signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: actualID)
             case .enroute:
-                // TODO: 实现航路图签名URL获取
-                throw NetworkError.invalidURL
-            default:
-                // TODO: 实现其他文档类型的签名URL获取
-                throw NetworkError.invalidURL
+                let actualID = Int(chartID.replacingOccurrences(of: "enroute_", with: "")) ?? 0
+                signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: actualID)
+            case .aip, .sup, .amdt, .notam:
+                let actualID = Int(chartID.replacingOccurrences(of: "\(documentType.rawValue)_", with: "")) ?? 0
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: documentType.rawValue, id: actualID)
             }
             
-            // 构建完整URL
-            let fullURL = URL(string: NetworkConfig.baseURL + signedURLResponse.url)!
+            // 构建完整URL - 将 /api/v1/ 替换为 /eaip/v1/
+            let correctedPath = signedURLResponse.url.replacingOccurrences(of: "/api/v1/", with: "/eaip/v1/")
+            let fullURL = URL(string: NetworkConfig.baseURL + correctedPath)!
             
-            // 下载PDF
-            let (data, _) = try await URLSession.shared.data(from: fullURL)
+            // 下载PDF - 需要带Authorization头
+            var pdfRequest = URLRequest(url: fullURL)
+            
+            // 从NetworkService获取当前的access token
+            if let accessToken = NetworkService.shared.getCurrentAccessToken() {
+                pdfRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+            }
+            
+            let (data, _) = try await URLSession.shared.data(for: pdfRequest)
             
             await MainActor.run {
                 if let document = PDFDocument(data: data) {

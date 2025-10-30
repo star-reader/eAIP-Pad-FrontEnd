@@ -146,7 +146,7 @@ struct AirportDetailView: View {
                 chart.htmlPath = chartResponse.htmlPath
                 chart.htmlEnPath = chartResponse.htmlEnPath
                 chart.isModified = chartResponse.isModified
-                chart.isOpened = chartResponse.isOpened
+                chart.isOpened = chartResponse.isOpened ?? false
                 
                 modelContext.insert(chart)
             }
