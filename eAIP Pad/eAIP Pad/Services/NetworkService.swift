@@ -511,7 +511,7 @@ class NetworkService {
     
     // MARK: - 航路图相关
     func getEnrouteCharts(type: String? = nil) async throws -> [ChartResponse] {
-        var endpoint = APIEndpoint.enrouteCharts
+        let endpoint = APIEndpoint.enrouteCharts
         if let type = type, !type.isEmpty {
             // 添加类型参数
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
@@ -533,7 +533,7 @@ class NetworkService {
     
     // MARK: - 文档相关
     func getAIPDocuments(category: String? = nil) async throws -> [AIPDocumentResponse] {
-        var endpoint = APIEndpoint.aipDocuments
+        let endpoint = APIEndpoint.aipDocuments
         if let category = category, !category.isEmpty {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "category", value: category)]

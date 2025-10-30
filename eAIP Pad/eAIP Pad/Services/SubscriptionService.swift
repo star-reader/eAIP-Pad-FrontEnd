@@ -157,7 +157,7 @@ class SubscriptionService {
             #if canImport(StoreKit)
             for await result in Transaction.updates {
                 do {
-                    let transaction = try self.checkVerified(result)
+                    let transaction = try await self.checkVerified(result)
                     
                     // 验证收据
                     await self.verifyReceiptWithBackend(transaction)
