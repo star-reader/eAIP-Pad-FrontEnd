@@ -189,6 +189,7 @@ struct WelcomeView: View {
     let onContinue: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @State private var isStartingTrial = false
+    @StateObject private var subscriptionService = SubscriptionService.shared
     
     var body: some View {
         ZStack {
@@ -239,11 +240,23 @@ struct WelcomeView: View {
                     .background(.white.opacity(0.2))
                     .cornerRadius(12)
                     
-                    Text("试用期内可免费使用所有功能\n包括完整航图库、专业标注、自动更新等")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(3)
+                    VStack(spacing: 8) {
+                        Text("试用期内可免费使用所有功能")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.9))
+                            .fontWeight(.medium)
+                        
+                        Text("包括完整航图库、专业标注、自动更新等")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.8))
+                        
+                        // 价格信息（写死）
+                        Text("试用结束后：¥15/月")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                            .padding(.top, 4)
+                    }
+                    .multilineTextAlignment(.center)
                 }
                 
                 Spacer()
@@ -276,9 +289,26 @@ struct WelcomeView: View {
                 .disabled(isStartingTrial)
                 .padding(.horizontal)
                 
-                Text("无需绑定信用卡，随时可取消")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.7))
+                VStack(spacing: 6) {
+                    // 突出显示不扣费信息
+                    Text("🎉 30天内完全免费，不会自动扣费")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.white.opacity(0.2))
+                        .cornerRadius(8)
+                    
+                    Text("• 试用期结束前可随时取消")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                    
+                    Text("• 续费价格：¥15/月")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .multilineTextAlignment(.center)
                 
                 Spacer(minLength: 40)
             }

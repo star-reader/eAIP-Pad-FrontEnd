@@ -32,7 +32,7 @@ class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
     
     // 产品ID
-    private let monthlyProductID = "com.eaip.monthly"
+    private let monthlyProductID = "com.eaip.pad.monthly"
     
     // 订阅状态
     @Published var subscriptionStatus: AppSubscriptionStatus = .inactive
@@ -112,14 +112,14 @@ class SubscriptionService: ObservableObject {
                 
             case .userCancelled:
                 await MainActor.run {
-                    self.errorMessage = "用户取消购买"
+                    self.errorMessage = "已取消"
                     self.isLoading = false
                 }
                 return false
                 
             case .pending:
                 await MainActor.run {
-                    self.errorMessage = "购买待处理"
+                    self.errorMessage = "购买正在处理中，请稍候"
                     self.isLoading = false
                 }
                 return false
@@ -132,7 +132,16 @@ class SubscriptionService: ObservableObject {
             }
         } catch {
             await MainActor.run {
-                self.errorMessage = "购买失败: \(error.localizedDescription)"
+                // 提供更友好的错误信息
+                if error.localizedDescription.contains("cancelled") || error.localizedDescription.contains("cancel") {
+                    self.errorMessage = "已取消"
+                } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
+                    self.errorMessage = "网络连接失败，请检查网络后重试"
+                } else if error.localizedDescription.contains("No active account") {
+                    self.errorMessage = "请先在设置中登录Apple ID"
+                } else {
+                    self.errorMessage = "发生错误，请稍后重试"
+                }
                 self.isLoading = false
             }
             return false
@@ -151,7 +160,14 @@ class SubscriptionService: ObservableObject {
             await updateSubscriptionStatus()
         } catch {
             await MainActor.run {
-                self.errorMessage = "恢复购买失败: \(error.localizedDescription)"
+                // 提供更友好的错误信息
+                if error.localizedDescription.contains("No active account") {
+                    self.errorMessage = "请先在设置中登录Apple ID"
+                } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
+                    self.errorMessage = "网络连接失败，请检查网络后重试"
+                } else {
+                    self.errorMessage = "未找到可恢复的购买记录"
+                }
             }
         }
         
@@ -237,7 +253,7 @@ class SubscriptionService: ObservableObject {
             
             await MainActor.run {
                 // 根据后端响应设置状态
-                if response.isTrial && response.status == "trial" {
+                if response.isTrial || response.status == "trial" || response.status == "trial_started" {
                     self.subscriptionStatus = .trial
                 } else {
                     self.subscriptionStatus = AppSubscriptionStatus(rawValue: response.status) ?? .inactive

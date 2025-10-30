@@ -42,7 +42,11 @@ class AuthenticationService: NSObject, ObservableObject {
             self.accessToken = storedAccessToken
             self.refreshToken = storedRefreshToken
             
-            // 验证 token 是否仍然有效
+            // 立即设置为已认证状态，避免闪现登录页面
+            self.authenticationState = .authenticated
+            self.currentUser = AuthenticatedUser(accessToken: storedAccessToken)
+            
+            // 后台验证 token 是否仍然有效
             Task {
                 await validateStoredTokens()
             }

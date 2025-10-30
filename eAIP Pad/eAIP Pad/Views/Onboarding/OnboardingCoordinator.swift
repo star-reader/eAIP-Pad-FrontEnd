@@ -8,7 +8,6 @@ enum OnboardingState {
     case needsLogin       // 需要登录
     case newUserWelcome   // 新用户欢迎
     case needsSubscription // 需要订阅
-    case subscriptionExpired // 订阅过期
     case completed        // 完成，进入主应用
 }
 
@@ -25,26 +24,42 @@ class OnboardingCoordinator: ObservableObject {
         // 先做同步检查，避免闪现
         performSyncCheck()
         
+        // 监听认证状态变化
+        setupAuthenticationListener()
+        
         // 然后做异步检查
         checkInitialState()
     }
     
+    // MARK: - 设置认证状态监听
+    private func setupAuthenticationListener() {
+        // 监听认证状态变化，如果token验证失败，跳转到登录页面
+        authService.$authenticationState
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                if state == .notAuthenticated && self?.currentState == .completed {
+                    print("🔄 Token验证失败，跳转到登录页面")
+                    self?.currentState = .needsLogin
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private var cancellables = Set<AnyCancellable>()
+    
     // MARK: - 同步检查（避免闪现）
     private func performSyncCheck() {
-        // 如果已经有存储的token，先设为已认证状态
-        if authService.isAuthenticated {
-            print("🚀 检测到已登录用户，直接进入主应用")
+        // 检查是否有存储的token
+        if let _ = UserDefaults.standard.string(forKey: "access_token") {
+            print("🚀 检测到存储的登录信息，先进入主应用避免闪现")
             currentState = .completed
+        } else {
+            print("📱 未检测到存储的登录信息")
         }
     }
     
     // MARK: - 检查初始状态
     func checkInitialState() {
-        // 如果已经是完成状态，不需要重新检查
-        if currentState == .completed {
-            return
-        }
-        
         isLoading = true
         errorMessage = nil
         
@@ -91,12 +106,8 @@ class OnboardingCoordinator: ObservableObject {
                 // 有效订阅，进入主应用
                 currentState = .completed
                 
-            case .expired:
-                // 订阅过期
-                currentState = .subscriptionExpired
-                
-            case .inactive:
-                // 未订阅
+            case .expired, .inactive:
+                // 订阅过期或未订阅，都显示升级页面
                 currentState = .needsSubscription
             }
         } catch {
@@ -156,8 +167,9 @@ class OnboardingCoordinator: ObservableObject {
         do {
             // 获取当前用户ID（从 accessToken 或其他方式）
             guard let userId = getCurrentUserId() else {
-
-                currentState = .needsSubscription
+                print("❌ 无法获取用户ID，直接进入主应用")
+                // 即使无法获取用户ID，新用户试用也应该直接进入主应用
+                currentState = .completed
                 isLoading = false
                 return
             }
@@ -168,23 +180,36 @@ class OnboardingCoordinator: ObservableObject {
             
             switch response.data.status {
             case "trial_started":
-
-                // 更新订阅服务状态
-                await subscriptionService.updateSubscriptionStatus()
+                print("✅ 试用期开启成功")
+                // 直接使用试用API响应更新订阅状态
+                await MainActor.run {
+                    subscriptionService.subscriptionStatus = .trial
+                    subscriptionService.isTrialActive = true
+                    subscriptionService.daysLeft = response.data.daysLeft
+                    
+                    // 解析试用结束日期
+                    if let trialEndString = response.data.trialEndDate {
+                        subscriptionService.trialEndDate = ISO8601DateFormatter().date(from: trialEndString)
+                    }
+                    
+                    print("📱 直接设置试用状态: subscriptionStatus=\(subscriptionService.subscriptionStatus), daysLeft=\(subscriptionService.daysLeft)")
+                }
+                
+                // 试用开启成功，直接进入主应用
                 currentState = .completed
                 
             case "trial_used", "trial_expired":
-
+                print("⚠️ 试用期已使用或过期")
                 currentState = .needsSubscription
                 
             default:
-
+                print("⚠️ 未知状态: \(response.data.status)")
                 currentState = .needsSubscription
             }
         } catch {
-
-            // 试用期启动失败，跳转到订阅页面
-            currentState = .needsSubscription
+            print("❌ 试用期启动失败: \(error)")
+            // 试用期启动失败，也让用户进入主应用（降级方案）
+            currentState = .completed
         }
         
         isLoading = false
@@ -242,11 +267,6 @@ struct OnboardingFlow: View {
                             coordinator.handleSubscriptionCompleted()
                         }
                     }
-                
-            case .subscriptionExpired:
-                SubscriptionExpiredView {
-                    coordinator.handleSubscriptionCompleted()
-                }
                 
             case .completed:
                 MainAppView()
@@ -306,97 +326,6 @@ struct LoadingView: View {
     }
 }
 
-// MARK: - 订阅过期视图
-struct SubscriptionExpiredView: View {
-    let onRenew: () -> Void
-    
-    var body: some View {
-        ZStack {
-            LinearGradient.primaryBlueGradient
-                .ignoresSafeArea()
-            
-            VStack(spacing: 40) {
-                Spacer()
-                
-                // 过期图标
-                VStack(spacing: 24) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(.warningOrange)
-                    
-                    VStack(spacing: 12) {
-                        Text("订阅已过期")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        
-                        Text("续订以继续使用所有功能")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                    }
-                }
-                
-                // 过期说明
-                VStack(spacing: 16) {
-                    Text("您的订阅已过期，无法访问:")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.9))
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        ExpiredFeatureRow(text: "完整航图库")
-                        ExpiredFeatureRow(text: "PDF 标注功能")
-                        ExpiredFeatureRow(text: "快速访问收藏")
-                        ExpiredFeatureRow(text: "AIRAC 自动更新")
-                    }
-                }
-                .padding()
-                .background(.white.opacity(0.1))
-                .cornerRadius(16)
-                
-                Spacer()
-                
-                // 续订按钮
-                VStack(spacing: 16) {
-                    Button {
-                        onRenew()
-                    } label: {
-                        Text("立即续订")
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primaryBlue)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(.white)
-                            .cornerRadius(25)
-                    }
-                    
-                    Button("稍后提醒") {
-                        // TODO: 实现稍后提醒逻辑
-                    }
-                    .foregroundColor(.white.opacity(0.8))
-                }
-                .padding(.horizontal)
-                
-                Spacer(minLength: 50)
-            }
-        }
-    }
-}
-
-// MARK: - 过期功能行
-struct ExpiredFeatureRow: View {
-    let text: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "xmark.circle.fill")
-                .foregroundColor(.errorRed)
-            Text(text)
-                .foregroundColor(.white.opacity(0.9))
-            Spacer()
-        }
-    }
-}
 
 // MARK: - 超时错误
 struct TimeoutError: Error {
@@ -440,8 +369,3 @@ struct MainAppView: View {
     LoadingView()
 }
 
-#Preview("Subscription Expired") {
-    SubscriptionExpiredView {
-        print("Renew tapped")
-    }
-}

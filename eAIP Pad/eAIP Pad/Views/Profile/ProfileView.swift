@@ -8,7 +8,7 @@ struct ProfileView: View {
     @Query private var userSettings: [UserSettings]
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var airacVersions: [AIRACVersion]
-    @State private var subscriptionService = SubscriptionService.shared
+    @StateObject private var subscriptionService = SubscriptionService.shared
     @State private var showingSubscription = false
     @State private var showingSettings = false
     @State private var showingAbout = false
