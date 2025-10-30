@@ -37,12 +37,10 @@ class OnboardingCoordinator: ObservableObject {
     
     @MainActor
     private func performInitialChecks() async {
-        print("🔍 开始检查初始状态...")
         
         // 1. 检查登录状态
         print("📱 检查登录状态: \(authService.isAuthenticated)")
         if !authService.isAuthenticated {
-            print("❌ 未登录，跳转到登录页面")
             currentState = .needsLogin
             isLoading = false
             return
@@ -51,14 +49,12 @@ class OnboardingCoordinator: ObservableObject {
         // 2. 检查是否是新用户
         print("👤 检查是否新用户: \(authService.isNewUser)")
         if authService.isNewUser {
-            print("✨ 新用户，显示欢迎页面")
             currentState = .newUserWelcome
             isLoading = false
             return
         }
         
         // 3. 检查订阅状态
-        print("💳 开始检查订阅状态...")
         await checkSubscriptionStatus()
     }
     
@@ -75,22 +71,18 @@ class OnboardingCoordinator: ObservableObject {
             switch subscriptionService.subscriptionStatus {
             case .trial, .active:
                 // 有效订阅，进入主应用
-                print("✅ 有效订阅，进入主应用")
                 currentState = .completed
                 
             case .expired:
                 // 订阅过期
-                print("⏰ 订阅过期")
                 currentState = .subscriptionExpired
                 
             case .inactive:
                 // 未订阅
-                print("❓ 未订阅")
                 currentState = .needsSubscription
             }
         } catch {
             // 如果订阅检查失败，也允许用户进入应用（降级方案）
-            print("⚠️ 订阅状态检查失败: \(error.localizedDescription)，允许进入应用")
             currentState = .completed
         }
         
@@ -132,10 +124,61 @@ class OnboardingCoordinator: ObservableObject {
         }
     }
     
-    // MARK: - 处理新用户欢迎完成
+    // MARK: - 处理新用户欢迎完成（开始试用）
     func handleWelcomeCompleted() {
-        // 新用户自动获得试用期，直接进入主应用
-        currentState = .completed
+        Task {
+            await startTrialForNewUser()
+        }
+    }
+    
+    @MainActor
+    private func startTrialForNewUser() async {
+        isLoading = true
+        
+        do {
+            // 获取当前用户ID（从 accessToken 或其他方式）
+            guard let userId = getCurrentUserId() else {
+                print("⚠️ 无法获取用户ID")
+                currentState = .needsSubscription
+                isLoading = false
+                return
+            }
+            
+            print("🎁 开始为新用户启动试用期...")
+            let response = try await NetworkService.shared.startTrial(userId: userId)
+            
+            print("📊 试用期响应: \(response.data.status)")
+            
+            switch response.data.status {
+            case "trial_started":
+                print("✅ 试用期已开始，进入主应用")
+                // 更新订阅服务状态
+                await subscriptionService.updateSubscriptionStatus()
+                currentState = .completed
+                
+            case "trial_used", "trial_expired":
+                print("❌ 试用期已使用或过期，需要订阅")
+                currentState = .needsSubscription
+                
+            default:
+                print("❓ 未知试用期状态: \(response.data.status)")
+                currentState = .needsSubscription
+            }
+        } catch {
+            print("⚠️ 试用期启动失败: \(error.localizedDescription)")
+            // 试用期启动失败，跳转到订阅页面
+            currentState = .needsSubscription
+        }
+        
+        isLoading = false
+    }
+    
+    // 获取当前用户ID的辅助方法
+    private func getCurrentUserId() -> String? {
+        // 这里可以从 AuthenticationService 获取用户ID
+        // 或者从 JWT token 中解析用户ID
+        // 暂时使用一个模拟的用户ID
+        return authService.currentUser?.accessToken.hashValue.description
     }
     
     // MARK: - 处理订阅完成
@@ -153,7 +196,7 @@ class OnboardingCoordinator: ObservableObject {
 
 // MARK: - 引导流程主视图
 struct OnboardingFlow: View {
-    @State private var coordinator = OnboardingCoordinator()
+    @StateObject private var coordinator = OnboardingCoordinator()
     @Environment(\.modelContext) private var modelContext
     
     var body: some View {

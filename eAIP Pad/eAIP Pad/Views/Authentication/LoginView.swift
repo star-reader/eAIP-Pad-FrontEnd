@@ -187,22 +187,32 @@ struct FeatureCard: View {
 // MARK: - 欢迎界面（新用户）
 struct WelcomeView: View {
     let onContinue: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isStartingTrial = false
     
     var body: some View {
         ZStack {
-            LinearGradient.primaryBlueGradient
-                .ignoresSafeArea()
+            // 背景渐变（适配夜间模式）
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    colorScheme == .dark ? Color(red: 0.05, green: 0.15, blue: 0.25) : Color(red: 0.5, green: 0.8, blue: 1.0),
+                    colorScheme == .dark ? Color(red: 0.0, green: 0.1, blue: 0.2) : Color(red: 0.0, green: 0.48, blue: 1.0)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
             
-            VStack(spacing: 40) {
+            VStack(spacing: 32) {
                 Spacer()
                 
                 // 欢迎图标
-                VStack(spacing: 24) {
+                VStack(spacing: 20) {
                     Image(systemName: "hand.wave.fill")
-                        .font(.system(size: 80))
+                        .font(.system(size: 70))
                         .foregroundColor(.white)
                     
-                    VStack(spacing: 12) {
+                    VStack(spacing: 8) {
                         Text("欢迎使用 eAIP Pad")
                             .font(.largeTitle)
                             .fontWeight(.bold)
@@ -215,11 +225,13 @@ struct WelcomeView: View {
                 }
                 
                 // 新用户福利
-                VStack(spacing: 20) {
-                    HStack {
+                VStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         Image(systemName: "gift.fill")
+                            .font(.title2)
                             .foregroundColor(.white)
                         Text("新用户专享 30 天免费试用")
+                            .font(.headline)
                             .fontWeight(.medium)
                             .foregroundColor(.white)
                     }
@@ -227,29 +239,48 @@ struct WelcomeView: View {
                     .background(.white.opacity(0.2))
                     .cornerRadius(12)
                     
-                    Text("试用期内可免费使用所有功能")
+                    Text("试用期内可免费使用所有功能\n包括完整航图库、专业标注、自动更新等")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
+                        .lineLimit(3)
                 }
                 
                 Spacer()
                 
-                // 继续按钮
+                // 开始试用按钮
                 Button {
+                    isStartingTrial = true
                     onContinue()
                 } label: {
-                    Text("开始使用")
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primaryBlue)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(.white)
-                        .cornerRadius(25)
+                    HStack(spacing: 12) {
+                        if isStartingTrial {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "play.fill")
+                                .font(.title3)
+                        }
+                        
+                        Text(isStartingTrial ? "正在开启试用..." : "开始 30 天免费试用")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.primaryBlue)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(.white)
+                    .cornerRadius(25)
+                    .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
                 }
+                .disabled(isStartingTrial)
                 .padding(.horizontal)
                 
-                Spacer(minLength: 50)
+                Text("无需绑定信用卡，随时可取消")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+                
+                Spacer(minLength: 40)
             }
         }
     }

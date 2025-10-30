@@ -135,7 +135,8 @@ class AuthenticationService: NSObject, ObservableObject {
             }
         } catch {
             await MainActor.run {
-                self.authenticationState = .error("登录失败: \(error.localizedDescription)")
+                let errorMessage = self.friendlyBackendErrorMessage(from: error)
+                self.authenticationState = .error(errorMessage)
             }
         }
     }
@@ -186,71 +187,85 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         Task {
             await MainActor.run {
-                // 解析错误类型
-                let errorMessage: String
-                if let authError = error as? ASAuthorizationError {
-                    switch authError.code {
-                    case .canceled:
-                        errorMessage = "用户取消了登录"
-                        print("⚠️ 用户取消 Apple 登录")
-                    case .failed:
-                        errorMessage = "认证失败，请重试"
-                        print("❌ Apple 登录失败")
-                    case .invalidResponse:
-                        errorMessage = "收到无效响应"
-                        print("❌ Apple 登录响应无效")
-                    case .notHandled:
-                        errorMessage = "请求未被处理"
-                        print("❌ Apple 登录请求未处理")
-                    case .unknown:
-                        errorMessage = "发生未知错误"
-                        print("❌ Apple 登录发生未知错误")
-                    case .notInteractive:
-                        errorMessage = "无法显示登录界面"
-                        print("❌ Apple 登录无法显示界面")
-                    @unknown default:
-                        errorMessage = "登录过程出错"
-                        print("❌ Apple 登录发生未知错误类型")
-                    }
-                } else {
-                    errorMessage = "Apple 登录失败: \(error.localizedDescription)"
-                    print("❌ Apple 登录错误: \(error)")
-                }
-                
+                let errorMessage = self.friendlyErrorMessage(from: error)
                 self.authenticationState = .error(errorMessage)
-                
-                // 在开发环境下，自动设置为已登录（用于测试）
-                #if DEBUG
-                if authError.code == .canceled || authError.code == .failed {
-                    print("🔧 开发模式：5秒后自动跳过登录...")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                        self.simulateLogin()
-                    }
-                }
-                #endif
             }
         }
     }
     
-    #if DEBUG
-    // 开发模式：模拟登录（仅用于测试）
-    private func simulateLogin() {
-        print("🔧 开发模式：模拟登录成功")
-        self.accessToken = "dev_access_token_\(UUID().uuidString)"
-        self.refreshToken = "dev_refresh_token"
-        self.isNewUser = false
-        self.authenticationState = .authenticated
-        self.currentUser = AuthenticatedUser(
-            accessToken: self.accessToken!,
-            isNewUser: false,
-            subscriptionStatus: "trial"
-        )
+    // MARK: - 友好的错误提示（Apple 登录）
+    private func friendlyErrorMessage(from error: Error) -> String {
+        let nsError = error as NSError
         
-        // 保存到 UserDefaults
-        UserDefaults.standard.set(self.accessToken, forKey: "access_token")
-        UserDefaults.standard.set(self.refreshToken, forKey: "refresh_token")
+        // 检查是否是 AuthenticationServices 的错误
+        if nsError.domain == "com.apple.AuthenticationServices.AuthorizationError" {
+            switch nsError.code {
+            case 1000:
+                return "登录已取消"
+            case 1001:
+                return "登录请求无效，请重试"
+            case 1002:
+                return "登录请求未被处理"
+            case 1003:
+                return "登录失败，请稍后重试"
+            case 1004:
+                return "当前设备不支持 Apple 登录"
+            default:
+                return "登录失败，请重试"
+            }
+        }
+        
+        // 网络相关错误
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "网络连接失败，请检查网络设置"
+            case NSURLErrorTimedOut:
+                return "网络请求超时，请重试"
+            case NSURLErrorCannotConnectToHost:
+                return "无法连接到服务器"
+            default:
+                return "网络错误，请检查网络连接"
+            }
+        }
+        
+        // 其他错误
+        return "发生未知错误，请稍后重试"
     }
-    #endif
+    
+    // MARK: - 友好的错误提示（后端登录）
+    private func friendlyBackendErrorMessage(from error: Error) -> String {
+        let nsError = error as NSError
+        
+        // 网络相关错误
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorNotConnectedToInternet:
+                return "网络连接失败，请检查网络设置"
+            case NSURLErrorTimedOut:
+                return "服务器响应超时，请稍后重试"
+            case NSURLErrorCannotConnectToHost:
+                return "无法连接到服务器，请检查网络"
+            default:
+                return "网络错误，请检查网络连接"
+            }
+        }
+        
+        // HTTP 状态码错误（如果有的话）
+        let errorDescription = error.localizedDescription
+        if errorDescription.contains("401") {
+            return "身份验证失败，请重新登录"
+        } else if errorDescription.contains("403") {
+            return "访问被拒绝，请联系客服"
+        } else if errorDescription.contains("404") {
+            return "服务不可用，请稍后重试"
+        } else if errorDescription.contains("500") || errorDescription.contains("502") || errorDescription.contains("503") {
+            return "服务器繁忙，请稍后重试"
+        }
+        
+        // 默认错误
+        return "登录失败，请检查网络或稍后重试"
+    }
 }
 
 // MARK: - ASAuthorizationControllerPresentationContextProviding

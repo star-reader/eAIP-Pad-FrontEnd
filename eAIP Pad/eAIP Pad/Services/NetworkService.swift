@@ -4,7 +4,7 @@ import Combine
 
 // MARK: - 网络配置
 struct NetworkConfig {
-    static let baseURL = "http://localhost:6644"
+    static let baseURL = "https://api.usagi-jin.top"
     static let apiVersion = "/eaip/v1"
     
     static var baseAPIURL: String {
@@ -39,6 +39,7 @@ enum APIEndpoint {
     case deleteAnnotation(type: String, id: Int, page: Int)
     case verifyIAP
     case subscriptionStatus
+    case trialStart
     case currentAIRAC
     
     var path: String {
@@ -93,6 +94,8 @@ enum APIEndpoint {
             return "/iap/verify"
         case .subscriptionStatus:
             return "/subscription/status"
+        case .trialStart:
+            return "/trial/start"
         case .currentAIRAC:
             return "/airac/current"
         }
@@ -203,6 +206,26 @@ struct SubscriptionStatusResponse: Codable {
         case trialEnd = "trial_end"
         case subscriptionEnd = "subscription_end"
         case daysLeft = "days_left"
+    }
+}
+
+// MARK: - 试用期响应
+struct TrialStartResponse: Codable {
+    let message: String
+    let data: TrialData
+    
+    struct TrialData: Codable {
+        let status: String // trial_started, trial_used, trial_expired
+        let trialEndDate: String?
+        let daysLeft: Int
+        let message: String
+        
+        enum CodingKeys: String, CodingKey {
+            case status
+            case trialEndDate = "trial_end_date"
+            case daysLeft = "days_left"
+            case message
+        }
     }
 }
 
@@ -503,6 +526,19 @@ class NetworkService: ObservableObject {
         
         let response: SubscriptionStatusResponse = try await makeRequest(
             endpoint: .verifyIAP,
+            method: .POST,
+            body: bodyData
+        )
+        return response
+    }
+    
+    // MARK: - 试用期开始
+    func startTrial(userId: String) async throws -> TrialStartResponse {
+        let body = ["user_id": userId]
+        let bodyData = try JSONEncoder().encode(body)
+        
+        let response: TrialStartResponse = try await makeRequest(
+            endpoint: .trialStart,
             method: .POST,
             body: bodyData
         )

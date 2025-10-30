@@ -12,22 +12,9 @@
 		D5DBE0DC2EB33A8C0074D54A /* eAIP Pad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "eAIP Pad.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		D523D7F12EB37EB500D977E3 /* Exceptions for "eAIP Pad" folder in "eAIP Pad" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"eAIP-Pad-Info.plist",
-			);
-			target = D5DBE0DB2EB33A8C0074D54A /* eAIP Pad */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D5DBE0DE2EB33A8C0074D54A /* eAIP Pad */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				D523D7F12EB37EB500D977E3 /* Exceptions for "eAIP Pad" folder in "eAIP Pad" target */,
-			);
 			path = "eAIP Pad";
 			sourceTree = "<group>";
 		};
@@ -276,6 +263,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "eAIP Pad/eAIP Pad.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2S577ZVVWZ;
@@ -315,6 +303,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "eAIP Pad/eAIP Pad.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2S577ZVVWZ;
