@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - 网络配置
 struct NetworkConfig {
@@ -358,8 +359,7 @@ struct DocumentDetailResponse: Codable {
 }
 
 // MARK: - 网络服务
-@Observable
-class NetworkService {
+class NetworkService: ObservableObject {
     static let shared = NetworkService()
     
     private var accessToken: String?

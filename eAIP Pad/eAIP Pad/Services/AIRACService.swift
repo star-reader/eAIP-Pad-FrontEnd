@@ -1,15 +1,15 @@
 import Foundation
 import SwiftData
 import SwiftUI
+import Combine
 
 // MARK: - AIRAC 版本管理服务
-@Observable
-class AIRACService {
+class AIRACService: ObservableObject {
     static let shared = AIRACService()
     
-    var isUpdating = false
-    var updateProgress: Double = 0.0
-    var updateMessage = ""
+    @Published var isUpdating = false
+    @Published var updateProgress: Double = 0.0
+    @Published var updateMessage = ""
     var errorMessage: String?
     
     private init() {}

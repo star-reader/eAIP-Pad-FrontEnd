@@ -8,9 +8,10 @@
 import SwiftUI
 import SwiftData
 
+// 导入所有需要的模型和服务
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     // 查询用户设置
     @Query private var userSettings: [UserSettings]
@@ -28,20 +29,12 @@ struct ContentView: View {
     }
     
     var body: some View {
-        Group {
-            if horizontalSizeClass == .compact {
-                // iPhone: 使用 TabView
-                MainTabView()
-            } else {
-                // iPad: 使用 Sidebar
-                MainSidebarView()
+        OnboardingFlow()
+            .preferredColorScheme(currentSettings.isDarkMode ? .dark : .light)
+            .tint(.primaryBlue) // 设置全局主题色为蓝色
+            .onAppear {
+                initializeApp()
             }
-        }
-        .preferredColorScheme(currentSettings.isDarkMode ? .dark : .light)
-        .onAppear {
-            // 初始化应用
-            initializeApp()
-        }
     }
     
     private func initializeApp() {
@@ -49,36 +42,6 @@ struct ContentView: View {
         if userSettings.isEmpty {
             let settings = UserSettings()
             modelContext.insert(settings)
-        }
-        
-        // 初始化网络服务等
-        Task {
-            await loadInitialData()
-        }
-    }
-    
-    private func loadInitialData() async {
-        // 加载初始数据，如当前AIRAC版本等
-        do {
-            let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-            
-            // 检查是否已存在该版本
-            let existingVersions = try modelContext.fetch(
-                FetchDescriptor<AIRACVersion>(
-                    predicate: #Predicate { $0.version == airacResponse.version }
-                )
-            )
-            
-            if existingVersions.isEmpty {
-                let newVersion = AIRACVersion(
-                    version: airacResponse.version,
-                    effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
-                    isCurrent: airacResponse.isCurrent
-                )
-                modelContext.insert(newVersion)
-            }
-        } catch {
-            print("加载初始数据失败: \(error)")
         }
     }
 }

@@ -181,8 +181,12 @@ enum DocumentType: String, CaseIterable {
     }
 }
 
-// MARK: - 订阅状态枚举
-enum SubscriptionStatus: String, CaseIterable {
+// MARK: - Models 命名空间
+enum Models {}
+
+extension Models {
+    // MARK: - 订阅状态枚举
+    enum SubscriptionStatus: String, CaseIterable {
     case trial = "trial"
     case active = "active"
     case expired = "expired"
@@ -199,5 +203,6 @@ enum SubscriptionStatus: String, CaseIterable {
     
     var isValid: Bool {
         return self == .trial || self == .active
+    }
     }
 }

@@ -27,6 +27,7 @@ struct eAIPPadApp: App {
             ContentView()
                 .modelContainer(modelContainer)
                 .preferredColorScheme(.dark) // 默认深色模式
+                .tint(.primaryBlue) // 全局蓝色主题
         }
     }
 }

@@ -3,313 +3,402 @@ import SwiftData
 
 // MARK: - 细则视图
 struct RegulationsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var localCharts: [LocalChart]
-    @State private var airports: [AirportResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
     @State private var searchText = ""
-    
-    // 过滤后的机场列表
-    private var filteredAirports: [AirportResponse] {
-        if searchText.isEmpty {
-            return airports
-        } else {
-            return airports.filter { airport in
-                airport.icao.localizedCaseInsensitiveContains(searchText) ||
-                airport.nameEn.localizedCaseInsensitiveContains(searchText) ||
-                airport.nameCn.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-    }
+    @State private var selectedCategory: RegulationCategory = .all
+    @State private var isLoading = false
+    @State private var regulations: [RegulationItem] = []
     
     var body: some View {
-        NavigationStack {
-            VStack {
+        NavigationView {
+            VStack(spacing: 0) {
+                // 搜索栏
+                SearchBar(text: $searchText, placeholder: "搜索细则...")
+                    .padding()
+                
+                // 分类选择
+                CategoryPicker(selectedCategory: $selectedCategory)
+                    .padding(.horizontal)
+                
+                // 细则列表
                 if isLoading {
-                    ProgressView("加载机场细则...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                        Button("重试") {
-                            Task {
-                                await loadAirports()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Spacer()
+                    ProgressView("加载中...")
+                        .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
+                    Spacer()
+                } else if regulations.isEmpty {
+                    ContentUnavailableView(
+                        "暂无细则",
+                        systemImage: "doc.text.magnifyingglass",
+                        description: Text("当前分类下没有找到相关细则")
+                    )
+                    .foregroundColor(.primaryBlue)
                 } else {
-                    List(filteredAirports, id: \.icao) { airport in
-                        NavigationLink {
-                            AirportRegulationView(airport: airport)
-                        } label: {
-                            AirportRegulationRowView(airport: airport)
-                        }
+                    List(filteredRegulations) { regulation in
+                        RegulationRow(regulation: regulation)
                     }
-                    .searchable(text: $searchText, prompt: "搜索机场细则")
-                    .refreshable {
-                        await loadAirports()
-                    }
+                    .listStyle(PlainListStyle())
                 }
             }
-            .navigationTitle("机场细则")
+            .navigationTitle("细则")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        Task {
-                            await loadAirports()
-                        }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .disabled(isLoading)
-                }
+            .refreshable {
+                await loadRegulations()
             }
         }
-        .task {
-            await loadAirports()
+        .onAppear {
+            Task {
+                await loadRegulations()
+            }
         }
     }
     
-    private func loadAirports() async {
-        isLoading = true
-        errorMessage = nil
+    // MARK: - 过滤后的细则
+    private var filteredRegulations: [RegulationItem] {
+        var filtered = regulations
         
-        do {
-            let response = try await NetworkService.shared.getAirports()
-            await MainActor.run {
-                self.airports = response
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
+        // 按分类过滤
+        if selectedCategory != .all {
+            filtered = filtered.filter { $0.category == selectedCategory }
+        }
+        
+        // 按搜索文本过滤
+        if !searchText.isEmpty {
+            filtered = filtered.filter { regulation in
+                regulation.title.localizedCaseInsensitiveContains(searchText) ||
+                regulation.description.localizedCaseInsensitiveContains(searchText) ||
+                regulation.code.localizedCaseInsensitiveContains(searchText)
             }
         }
         
-        isLoading = false
+        return filtered
+    }
+    
+    // MARK: - 加载细则
+    private func loadRegulations() async {
+        await MainActor.run {
+            isLoading = true
+        }
+        
+        // 模拟加载数据
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        await MainActor.run {
+            regulations = RegulationItem.mockData
+            isLoading = false
+        }
     }
 }
 
-// MARK: - 机场细则行视图
-struct AirportRegulationRowView: View {
-    let airport: AirportResponse
+// MARK: - 搜索栏
+struct SearchBar: View {
+    @Binding var text: String
+    let placeholder: String
     
     var body: some View {
         HStack {
-            // 机场图标
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.orange.opacity(0.1))
-                    .frame(width: 40, height: 40)
-                
-                Image(systemName: "doc.text")
-                    .foregroundColor(.orange)
-                    .font(.title3)
-            }
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
             
-            VStack(alignment: .leading, spacing: 4) {
+            TextField(placeholder, text: $text)
+                .textFieldStyle(PlainTextFieldStyle())
+            
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - 分类选择器
+struct CategoryPicker: View {
+    @Binding var selectedCategory: RegulationCategory
+    
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(RegulationCategory.allCases, id: \.self) { category in
+                    Button {
+                        selectedCategory = category
+                    } label: {
+                        Text(category.displayName)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(selectedCategory == category ? Color.primaryBlue : Color.clear)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 20)
+                                            .stroke(Color.primaryBlue, lineWidth: 1)
+                                    )
+                            )
+                            .foregroundColor(selectedCategory == category ? .white : .primaryBlue)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+}
+
+// MARK: - 细则行
+struct RegulationRow: View {
+    let regulation: RegulationItem
+    
+    var body: some View {
+        NavigationLink {
+            RegulationDetailView(regulation: regulation)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(airport.icao)
+                    Text(regulation.code)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(regulation.category.color.opacity(0.2))
+                        .foregroundColor(regulation.category.color)
+                        .cornerRadius(6)
+                    
+                    Spacer()
+                    
+                    Text(regulation.effectiveDate, style: .date)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text(regulation.title)
+                    .font(.headline)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+                
+                Text(regulation.description)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+                
+                HStack {
+                    Label(regulation.category.displayName, systemImage: regulation.category.icon)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    if regulation.isNew {
+                        Text("新")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.red)
+                            .foregroundColor(.white)
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+// MARK: - 细则详情视图
+struct RegulationDetailView: View {
+    let regulation: RegulationItem
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // 标题区域
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text(regulation.code)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(regulation.category.color.opacity(0.2))
+                            .foregroundColor(regulation.category.color)
+                            .cornerRadius(8)
+                        
+                        Spacer()
+                        
+                        if regulation.isNew {
+                            Text("新")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.red)
+                                .foregroundColor(.white)
+                                .cornerRadius(6)
+                        }
+                    }
+                    
+                    Text(regulation.title)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    HStack {
+                        Label(regulation.category.displayName, systemImage: regulation.category.icon)
+                        
+                        Spacer()
+                        
+                        Text("生效日期: \(regulation.effectiveDate, style: .date)")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                }
+                
+                Divider()
+                
+                // 内容区域
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("细则内容")
                         .font(.headline)
                         .fontWeight(.semibold)
                     
-                    Text("细则")
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.blue.opacity(0.2), in: Capsule())
-                        .foregroundColor(.blue)
+                    Text(regulation.content)
+                        .font(.body)
+                        .lineSpacing(4)
                 }
                 
-                Text(airport.nameCn)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                
-                Text(airport.nameEn)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
-            
-            Spacer()
-            
-            Image(systemName: "chevron.right")
-                .foregroundColor(.secondary)
-                .font(.caption)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - 机场细则详情视图
-struct AirportRegulationView: View {
-    let airport: AirportResponse
-    @Environment(\.modelContext) private var modelContext
-    @Query private var pinnedCharts: [PinnedChart]
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    
-    private var regulationChartID: String {
-        "regulation_\(airport.icao)"
-    }
-    
-    private var isPinned: Bool {
-        pinnedCharts.contains { $0.chartID == regulationChartID }
-    }
-    
-    var body: some View {
-        VStack {
-            if isLoading {
-                ProgressView("加载细则文档...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        openRegulationPDF()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                // 机场细则信息卡片
-                VStack(spacing: 16) {
-                    // 机场信息
-                    VStack(spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(airport.icao)
-                                    .font(.largeTitle)
-                                    .fontWeight(.bold)
-                                
-                                Text(airport.nameCn)
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                
-                                Text(airport.nameEn)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            VStack(spacing: 8) {
-                                Button {
-                                    togglePin()
-                                } label: {
-                                    Image(systemName: isPinned ? "pin.fill" : "pin")
-                                        .foregroundColor(isPinned ? .orange : .secondary)
-                                        .font(.title2)
-                                }
-                                
-                                Text(isPinned ? "已收藏" : "收藏")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                if !regulation.attachments.isEmpty {
+                    Divider()
                     
-                    // 打开PDF按钮
-                    Button {
-                        openRegulationPDF()
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.text.fill")
-                            Text("查看机场细则")
-                                .fontWeight(.medium)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.orange, in: RoundedRectangle(cornerRadius: 12))
-                        .foregroundColor(.white)
-                    }
-                    
-                    // 说明文字
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("机场细则包含:")
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("相关附件")
                             .font(.headline)
-                            .fontWeight(.medium)
+                            .fontWeight(.semibold)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("• 机场运行规则和限制")
-                            Text("• 地面服务信息")
-                            Text("• 特殊程序和注意事项")
-                            Text("• 联系方式和频率")
+                        ForEach(regulation.attachments, id: \.self) { attachment in
+                            HStack {
+                                Image(systemName: "doc.fill")
+                                    .foregroundColor(.primaryBlue)
+                                Text(attachment)
+                                    .font(.subheadline)
+                                Spacer()
+                                Image(systemName: "arrow.down.circle")
+                                    .foregroundColor(.primaryBlue)
+                            }
+                            .padding()
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                         }
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                    
-                    Spacer()
                 }
-                .padding()
             }
+            .padding()
         }
-        .navigationTitle("\(airport.icao) 细则")
+        .navigationTitle("细则详情")
         .navigationBarTitleDisplayMode(.inline)
     }
+}
+
+// MARK: - 细则分类枚举
+enum RegulationCategory: String, CaseIterable {
+    case all = "all"
+    case flight = "flight"
+    case airspace = "airspace"
+    case airport = "airport"
+    case weather = "weather"
+    case communication = "communication"
+    case navigation = "navigation"
+    case emergency = "emergency"
     
-    private func openRegulationPDF() {
-        // TODO: 实现机场细则PDF打开逻辑
-        // 这里应该导航到PDFReaderView
-        print("打开 \(airport.icao) 机场细则PDF")
-    }
-    
-    private func togglePin() {
-        if isPinned {
-            // 移除收藏
-            if let pinToRemove = pinnedCharts.first(where: { $0.chartID == regulationChartID }) {
-                modelContext.delete(pinToRemove)
-            }
-        } else {
-            // 添加收藏
-            let newPin = PinnedChart(
-                chartID: regulationChartID,
-                displayName: "\(airport.icao) 细则",
-                icao: airport.icao,
-                type: "REGULATION",
-                documentType: "aip",
-                airacVersion: "2510" // TODO: 获取实际AIRAC版本
-            )
-            modelContext.insert(newPin)
+    var displayName: String {
+        switch self {
+        case .all: return "全部"
+        case .flight: return "飞行"
+        case .airspace: return "空域"
+        case .airport: return "机场"
+        case .weather: return "气象"
+        case .communication: return "通信"
+        case .navigation: return "导航"
+        case .emergency: return "应急"
         }
-        
-        try? modelContext.save()
+    }
+    
+    var icon: String {
+        switch self {
+        case .all: return "list.bullet"
+        case .flight: return "airplane"
+        case .airspace: return "cloud"
+        case .airport: return "building"
+        case .weather: return "cloud.rain"
+        case .communication: return "antenna.radiowaves.left.and.right"
+        case .navigation: return "location"
+        case .emergency: return "exclamationmark.triangle"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .all: return .primary
+        case .flight: return .primaryBlue
+        case .airspace: return .skyBlue
+        case .airport: return .aviationBlue
+        case .weather: return .mutedBlue
+        case .communication: return .accentBlue
+        case .navigation: return .secondaryBlue
+        case .emergency: return .errorRed
+        }
     }
 }
 
-#Preview("Regulations List") {
-    NavigationStack {
-        RegulationsView()
-    }
-    .modelContainer(for: LocalChart.self, inMemory: true)
+// MARK: - 细则项目模型
+struct RegulationItem: Identifiable {
+    let id = UUID()
+    let code: String
+    let title: String
+    let description: String
+    let content: String
+    let category: RegulationCategory
+    let effectiveDate: Date
+    let isNew: Bool
+    let attachments: [String]
+    
+    static let mockData: [RegulationItem] = [
+        RegulationItem(
+            code: "CCAR-91",
+            title: "一般运行和飞行规则",
+            description: "规定了民用航空器的一般运行和飞行规则，包括飞行准备、飞行程序等内容。",
+            content: "本规则规定了在中华人民共和国境内进行民用航空活动应当遵守的一般运行和飞行规则...",
+            category: .flight,
+            effectiveDate: Date().addingTimeInterval(-86400 * 30),
+            isNew: false,
+            attachments: ["CCAR-91附件A.pdf", "CCAR-91附件B.pdf"]
+        ),
+        RegulationItem(
+            code: "CCAR-121",
+            title: "大型飞机公共航空运输承运人运行合格审定规则",
+            description: "规定了使用大型飞机从事公共航空运输的承运人的运行合格审定要求。",
+            content: "本规则规定了使用大型飞机从事公共航空运输的承运人应当具备的条件...",
+            category: .flight,
+            effectiveDate: Date().addingTimeInterval(-86400 * 60),
+            isNew: true,
+            attachments: []
+        ),
+        RegulationItem(
+            code: "MH/T 4013",
+            title: "民用机场飞行区技术标准",
+            description: "规定了民用机场飞行区的设计、建设和维护技术标准。",
+            content: "本标准规定了民用机场飞行区的跑道、滑行道、停机坪等设施的技术要求...",
+            category: .airport,
+            effectiveDate: Date().addingTimeInterval(-86400 * 90),
+            isNew: false,
+            attachments: ["技术标准图表.pdf"]
+        )
+    ]
 }
 
-#Preview("Airport Regulation") {
-    NavigationStack {
-        AirportRegulationView(airport: AirportResponse(
-            icao: "ZBAA",
-            nameEn: "Beijing Capital International Airport",
-            nameCn: "北京首都国际机场",
-            hasTerminalCharts: true,
-            createdAt: "2024-01-01T00:00:00Z"
-        ))
-    }
-    .modelContainer(for: PinnedChart.self, inMemory: true)
+#Preview {
+    RegulationsView()
 }

@@ -498,10 +498,8 @@ struct PinGridCard: View {
 
 #Preview("Compact View") {
     PinboardCompactView()
-        .modelContainer(for: PinnedChart.self, inMemory: true)
 }
 
 #Preview("Full View") {
     PinboardFullView()
-        .modelContainer(for: PinnedChart.self, inMemory: true)
 }
