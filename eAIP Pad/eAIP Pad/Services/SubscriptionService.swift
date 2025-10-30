@@ -163,26 +163,31 @@ class SubscriptionService: ObservableObject {
     // MARK: - 更新订阅状态
     @MainActor
     func updateSubscriptionStatus() async {
-        // 检查当前订阅状态
-        for await result in Transaction.currentEntitlements {
-            do {
-                let transaction = try checkVerified(result)
-                
-                if transaction.productID == monthlyProductID {
-                    // 有活跃订阅
-                    subscriptionStatus = .active
+        print("🔄 开始更新订阅状态...")
+        
+        // 首先从后端获取最新状态（包括试用期状态）
+        await fetchSubscriptionStatusFromBackend()
+        
+        // 如果后端显示没有订阅，再检查本地 StoreKit 交易
+        if subscriptionStatus == .inactive {
+            print("📱 后端显示未订阅，检查本地 StoreKit 交易...")
+            
+            for await result in Transaction.currentEntitlements {
+                do {
+                    let transaction = try checkVerified(result)
                     
-                    // 从后端获取详细状态
-                    await fetchSubscriptionStatusFromBackend()
-                    return
+                    if transaction.productID == monthlyProductID {
+                        print("✅ 发现本地活跃订阅")
+                        subscriptionStatus = .active
+                        return
+                    }
+                } catch {
+                    print("⚠️ 验证交易失败: \(error)")
                 }
-            } catch {
-                print("验证交易失败: \(error)")
             }
         }
         
-        // 没有活跃订阅，检查试用状态
-        await fetchSubscriptionStatusFromBackend()
+        print("📊 最终订阅状态: \(subscriptionStatus)")
     }
     
     // MARK: - 监听交易更新
@@ -228,10 +233,20 @@ class SubscriptionService: ObservableObject {
         do {
             let response = try await NetworkService.shared.getSubscriptionStatus()
             
+            print("🌐 后端订阅状态响应: status=\(response.status), isTrial=\(response.isTrial), daysLeft=\(response.daysLeft ?? 0)")
+            
             await MainActor.run {
-                self.subscriptionStatus = AppSubscriptionStatus(rawValue: response.status) ?? .inactive
+                // 根据后端响应设置状态
+                if response.isTrial && response.status == "trial" {
+                    self.subscriptionStatus = .trial
+                } else {
+                    self.subscriptionStatus = AppSubscriptionStatus(rawValue: response.status) ?? .inactive
+                }
+                
                 self.isTrialActive = response.isTrial
                 self.daysLeft = response.daysLeft ?? 0
+                
+                print("📱 设置本地状态: subscriptionStatus=\(self.subscriptionStatus), isTrialActive=\(self.isTrialActive)")
                 
                 // 解析日期
                 if let trialEndString = response.trialEnd {
@@ -243,6 +258,7 @@ class SubscriptionService: ObservableObject {
                 }
             }
         } catch {
+            print("⚠️ 获取后端订阅状态失败: \(error.localizedDescription)")
             await MainActor.run {
                 self.subscriptionStatus = .inactive
             }
@@ -259,9 +275,16 @@ class SubscriptionService: ObservableObject {
         return subscriptionStatus.isValid
     }
     
-    // MARK: - 获取收据URL
-    var receiptURL: URL? {
-        return Bundle.main.appStoreReceiptURL
+    // MARK: - 获取收据数据
+    func getReceiptData() async -> Data? {
+        do {
+            let verificationResult = try await AppTransaction.shared
+            let appTransaction = try checkVerified(verificationResult)
+            return Data(appTransaction.originalAppVersion.utf8)
+        } catch {
+            print("获取收据数据失败: \(error)")
+            return nil
+        }
     }
     
     // MARK: - 订阅描述

@@ -22,11 +22,29 @@ class OnboardingCoordinator: ObservableObject {
     private let subscriptionService = SubscriptionService.shared
     
     init() {
+        // 先做同步检查，避免闪现
+        performSyncCheck()
+        
+        // 然后做异步检查
         checkInitialState()
+    }
+    
+    // MARK: - 同步检查（避免闪现）
+    private func performSyncCheck() {
+        // 如果已经有存储的token，先设为已认证状态
+        if authService.isAuthenticated {
+            print("🚀 检测到已登录用户，直接进入主应用")
+            currentState = .completed
+        }
     }
     
     // MARK: - 检查初始状态
     func checkInitialState() {
+        // 如果已经是完成状态，不需要重新检查
+        if currentState == .completed {
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
@@ -138,34 +156,33 @@ class OnboardingCoordinator: ObservableObject {
         do {
             // 获取当前用户ID（从 accessToken 或其他方式）
             guard let userId = getCurrentUserId() else {
-                print("⚠️ 无法获取用户ID")
+
                 currentState = .needsSubscription
                 isLoading = false
                 return
             }
             
-            print("🎁 开始为新用户启动试用期...")
+
             let response = try await NetworkService.shared.startTrial(userId: userId)
             
-            print("📊 试用期响应: \(response.data.status)")
             
             switch response.data.status {
             case "trial_started":
-                print("✅ 试用期已开始，进入主应用")
+
                 // 更新订阅服务状态
                 await subscriptionService.updateSubscriptionStatus()
                 currentState = .completed
                 
             case "trial_used", "trial_expired":
-                print("❌ 试用期已使用或过期，需要订阅")
+
                 currentState = .needsSubscription
                 
             default:
-                print("❓ 未知试用期状态: \(response.data.status)")
+
                 currentState = .needsSubscription
             }
         } catch {
-            print("⚠️ 试用期启动失败: \(error.localizedDescription)")
+
             // 试用期启动失败，跳转到订阅页面
             currentState = .needsSubscription
         }
