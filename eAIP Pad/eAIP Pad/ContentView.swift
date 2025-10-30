@@ -10,52 +10,80 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    
+    // 查询用户设置
+    @Query private var userSettings: [UserSettings]
+    
+    // 当前用户设置（单例）
+    private var currentSettings: UserSettings {
+        if let settings = userSettings.first {
+            return settings
+        } else {
+            // 创建默认设置
+            let newSettings = UserSettings()
+            modelContext.insert(newSettings)
+            return newSettings
+        }
+    }
+    
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        Group {
+            if horizontalSizeClass == .compact {
+                // iPhone: 使用 TabView
+                MainTabView()
+            } else {
+                // iPad: 使用 Sidebar
+                MainSidebarView()
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
+        }
+        .preferredColorScheme(currentSettings.isDarkMode ? .dark : .light)
+        .onAppear {
+            // 初始化应用
+            initializeApp()
         }
     }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    
+    private func initializeApp() {
+        // 确保用户设置存在
+        if userSettings.isEmpty {
+            let settings = UserSettings()
+            modelContext.insert(settings)
+        }
+        
+        // 初始化网络服务等
+        Task {
+            await loadInitialData()
         }
     }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+    
+    private func loadInitialData() async {
+        // 加载初始数据，如当前AIRAC版本等
+        do {
+            let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
+            
+            // 检查是否已存在该版本
+            let existingVersions = try modelContext.fetch(
+                FetchDescriptor<AIRACVersion>(
+                    predicate: #Predicate { $0.version == airacResponse.version }
+                )
+            )
+            
+            if existingVersions.isEmpty {
+                let newVersion = AIRACVersion(
+                    version: airacResponse.version,
+                    effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                    isCurrent: airacResponse.isCurrent
+                )
+                modelContext.insert(newVersion)
             }
+        } catch {
+            print("加载初始数据失败: \(error)")
         }
     }
 }
 
 #Preview {
     ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+        .modelContainer(for: UserSettings.self, inMemory: true)
 }
