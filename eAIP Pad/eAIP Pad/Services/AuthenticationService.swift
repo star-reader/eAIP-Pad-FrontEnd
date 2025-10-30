@@ -186,10 +186,71 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         Task {
             await MainActor.run {
-                self.authenticationState = .error("Apple 登录失败: \(error.localizedDescription)")
+                // 解析错误类型
+                let errorMessage: String
+                if let authError = error as? ASAuthorizationError {
+                    switch authError.code {
+                    case .canceled:
+                        errorMessage = "用户取消了登录"
+                        print("⚠️ 用户取消 Apple 登录")
+                    case .failed:
+                        errorMessage = "认证失败，请重试"
+                        print("❌ Apple 登录失败")
+                    case .invalidResponse:
+                        errorMessage = "收到无效响应"
+                        print("❌ Apple 登录响应无效")
+                    case .notHandled:
+                        errorMessage = "请求未被处理"
+                        print("❌ Apple 登录请求未处理")
+                    case .unknown:
+                        errorMessage = "发生未知错误"
+                        print("❌ Apple 登录发生未知错误")
+                    case .notInteractive:
+                        errorMessage = "无法显示登录界面"
+                        print("❌ Apple 登录无法显示界面")
+                    @unknown default:
+                        errorMessage = "登录过程出错"
+                        print("❌ Apple 登录发生未知错误类型")
+                    }
+                } else {
+                    errorMessage = "Apple 登录失败: \(error.localizedDescription)"
+                    print("❌ Apple 登录错误: \(error)")
+                }
+                
+                self.authenticationState = .error(errorMessage)
+                
+                // 在开发环境下，自动设置为已登录（用于测试）
+                #if DEBUG
+                if authError.code == .canceled || authError.code == .failed {
+                    print("🔧 开发模式：5秒后自动跳过登录...")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                        self.simulateLogin()
+                    }
+                }
+                #endif
             }
         }
     }
+    
+    #if DEBUG
+    // 开发模式：模拟登录（仅用于测试）
+    private func simulateLogin() {
+        print("🔧 开发模式：模拟登录成功")
+        self.accessToken = "dev_access_token_\(UUID().uuidString)"
+        self.refreshToken = "dev_refresh_token"
+        self.isNewUser = false
+        self.authenticationState = .authenticated
+        self.currentUser = AuthenticatedUser(
+            accessToken: self.accessToken!,
+            isNewUser: false,
+            subscriptionStatus: "trial"
+        )
+        
+        // 保存到 UserDefaults
+        UserDefaults.standard.set(self.accessToken, forKey: "access_token")
+        UserDefaults.standard.set(self.refreshToken, forKey: "refresh_token")
+    }
+    #endif
 }
 
 // MARK: - ASAuthorizationControllerPresentationContextProviding

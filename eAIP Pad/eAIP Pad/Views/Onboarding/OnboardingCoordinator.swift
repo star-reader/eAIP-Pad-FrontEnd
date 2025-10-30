@@ -37,43 +37,82 @@ class OnboardingCoordinator: ObservableObject {
     
     @MainActor
     private func performInitialChecks() async {
+        print("🔍 开始检查初始状态...")
+        
         // 1. 检查登录状态
+        print("📱 检查登录状态: \(authService.isAuthenticated)")
         if !authService.isAuthenticated {
+            print("❌ 未登录，跳转到登录页面")
             currentState = .needsLogin
             isLoading = false
             return
         }
         
         // 2. 检查是否是新用户
+        print("👤 检查是否新用户: \(authService.isNewUser)")
         if authService.isNewUser {
+            print("✨ 新用户，显示欢迎页面")
             currentState = .newUserWelcome
             isLoading = false
             return
         }
         
         // 3. 检查订阅状态
+        print("💳 开始检查订阅状态...")
         await checkSubscriptionStatus()
     }
     
     @MainActor
     private func checkSubscriptionStatus() async {
-        await subscriptionService.updateSubscriptionStatus()
-        
-        switch subscriptionService.subscriptionStatus {
-        case .trial, .active:
-            // 有效订阅，进入主应用
+        do {
+            // 添加超时保护，避免卡住
+            try await withTimeout(seconds: 5) {
+                await self.subscriptionService.updateSubscriptionStatus()
+            }
+            
+            print("📊 订阅状态: \(subscriptionService.subscriptionStatus)")
+            
+            switch subscriptionService.subscriptionStatus {
+            case .trial, .active:
+                // 有效订阅，进入主应用
+                print("✅ 有效订阅，进入主应用")
+                currentState = .completed
+                
+            case .expired:
+                // 订阅过期
+                print("⏰ 订阅过期")
+                currentState = .subscriptionExpired
+                
+            case .inactive:
+                // 未订阅
+                print("❓ 未订阅")
+                currentState = .needsSubscription
+            }
+        } catch {
+            // 如果订阅检查失败，也允许用户进入应用（降级方案）
+            print("⚠️ 订阅状态检查失败: \(error.localizedDescription)，允许进入应用")
             currentState = .completed
-            
-        case .expired:
-            // 订阅过期
-            currentState = .subscriptionExpired
-            
-        case .inactive:
-            // 未订阅
-            currentState = .needsSubscription
         }
         
         isLoading = false
+    }
+    
+    // 超时辅助函数
+    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
     
     // MARK: - 处理登录完成
@@ -299,9 +338,28 @@ struct ExpiredFeatureRow: View {
     }
 }
 
+// MARK: - 超时错误
+struct TimeoutError: Error {
+    var localizedDescription: String {
+        return "操作超时"
+    }
+}
+
 // MARK: - 主应用视图
 struct MainAppView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.modelContext) private var modelContext
+    @Query private var userSettings: [UserSettings]
+    
+    private var currentSettings: UserSettings {
+        if let settings = userSettings.first {
+            return settings
+        } else {
+            let newSettings = UserSettings()
+            modelContext.insert(newSettings)
+            return newSettings
+        }
+    }
     
     var body: some View {
         Group {
@@ -313,6 +371,8 @@ struct MainAppView: View {
                 MainSidebarView()
             }
         }
+        .preferredColorScheme(currentSettings.isDarkMode ? .dark : .light)
+        .tint(.primaryBlue)
     }
 }
 
