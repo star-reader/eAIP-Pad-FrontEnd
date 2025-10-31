@@ -149,6 +149,9 @@ struct PDFReaderView: View {
             // 构建完整URL - 将 /api/v1/ 替换为 /eaip/v1/
             let correctedPath = signedURLResponse.url.replacingOccurrences(of: "/api/v1/", with: "/eaip/v1/")
             let fullURL = URL(string: NetworkConfig.baseURL + correctedPath)!
+
+            print("signedURLResponse: \(signedURLResponse)")
+            print("fullURL: \(fullURL)")
             
             // 下载PDF - 需要带Authorization头
             var pdfRequest = URLRequest(url: fullURL)
