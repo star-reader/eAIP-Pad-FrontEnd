@@ -55,6 +55,7 @@ struct DocumentTypeSelector: View {
 // MARK: - AIP文档视图
 struct AIPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [AIPDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -115,14 +116,41 @@ struct AIPDocumentsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(filteredDocuments, id: \.id) { document in
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "aip_\(document.id)",
-                            displayName: document.nameCn,
-                            documentType: .aip
-                        )
-                    } label: {
-                        AIPDocumentRowView(document: document)
+                    if let binding = selectedChartBinding {
+                        // iPad 模式
+                        Button {
+                            print("📄 AIPDocumentsView - 点击文档: ID=\(document.id), Name=\(document.nameCn)")
+                            // 转换为 ChartResponse
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: document.documentId,
+                                parentId: document.parentId,
+                                icao: document.airportIcao,
+                                nameEn: document.name,
+                                nameCn: document.nameCn,
+                                chartType: document.category,
+                                pdfPath: document.pdfPath,
+                                htmlPath: document.htmlPath,
+                                htmlEnPath: document.htmlEnPath,
+                                airacVersion: document.airacVersion,
+                                isModified: document.isModified ?? false,
+                                isOpened: document.isOpened
+                            )
+                        } label: {
+                            AIPDocumentRowView(document: document)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // iPhone 模式
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "aip_\(document.id)",
+                                displayName: document.nameCn,
+                                documentType: .aip
+                            )
+                        } label: {
+                            AIPDocumentRowView(document: document)
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -187,6 +215,7 @@ struct AIPDocumentsView: View {
 // MARK: - SUP文档视图
 struct SUPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [SUPDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?

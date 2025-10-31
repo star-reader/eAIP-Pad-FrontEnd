@@ -220,8 +220,21 @@ struct PDFReaderView: View {
                 }
             }
         }
-        .task {
+        .task(id: chartID) {
+            print("🎬 PDFReaderView.task 触发 - chartID: \(chartID), documentType: \(documentType.rawValue)")
             await loadPDF()
+        }
+        .onChange(of: chartID) { oldValue, newValue in
+            print("🔄 PDFReaderView chartID 变化: \(oldValue) -> \(newValue)")
+            Task {
+                await loadPDF()
+            }
+        }
+        .onAppear {
+            print("👁️ PDFReaderView.onAppear - chartID: \(chartID)")
+        }
+        .onDisappear {
+            print("👋 PDFReaderView.onDisappear - chartID: \(chartID)")
         }
     }
     

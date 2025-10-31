@@ -68,6 +68,7 @@ struct MainSidebarView: View {
                 selectedItem: selectedSidebarItem,
                 selectedChart: selectedChart
             )
+            .id(selectedChart?.id ?? -1)  // 强制根据 selectedChart 重新创建视图
         }
         .navigationSplitViewStyle(.balanced)
         .tint(.primaryBlue)
@@ -207,7 +208,7 @@ struct DetailView: View {
                     displayName: chart.nameCn,
                     documentType: documentType
                 )
-                .id("pdf_\(chart.chartType)_\(chart.id)")  // 包含类型以避免冲突
+                .id("\(documentType.rawValue)_\(chart.chartType)_\(chart.id)")  // 包含 documentType 确保唯一
             } else {
                 // 占位符
                 placeholderView
