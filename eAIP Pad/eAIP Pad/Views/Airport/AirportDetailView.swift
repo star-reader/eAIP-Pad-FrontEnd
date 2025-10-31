@@ -59,7 +59,9 @@ struct AirportDetailView: View {
                     // 使用原生 Picker 作为分段控制器
                     Picker("航图类型", selection: $selectedChartType) {
                         ForEach(ChartType.allCases, id: \.self) { type in
-                            Text(type.displayName).tag(type)
+                            if (type != .others) {
+                                Text(type.displayName).tag(type)
+                            }
                         }
                     }
                     .pickerStyle(.segmented)

@@ -619,12 +619,31 @@ struct PDFThumbnailView: View {
     @Binding var currentPage: Int
     @Environment(\.dismiss) private var dismiss
     
-    // 使用固定列数，让每个缩略图有足够空间显示完整比例
-    private let columns = [
-        GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20),
-        GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20),
-        GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20)
-    ]
+    // iOS 每行显示 2 个缩略图，iPad 显示 3 个
+    private var columns: [GridItem] {
+        #if os(iOS)
+        // 检测设备类型
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        if isIPad {
+            return [
+                GridItem(.flexible(minimum: 120, maximum: 250), spacing: 20),
+                GridItem(.flexible(minimum: 120, maximum: 250), spacing: 20),
+                GridItem(.flexible(minimum: 120, maximum: 250), spacing: 20)
+            ]
+        } else {
+            // iPhone 只显示 2 列
+            return [
+                GridItem(.flexible(minimum: 140, maximum: 300), spacing: 20),
+                GridItem(.flexible(minimum: 140, maximum: 300), spacing: 20)
+            ]
+        }
+        #else
+        return [
+            GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20),
+            GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20)
+        ]
+        #endif
+    }
     
     var body: some View {
         NavigationStack {
