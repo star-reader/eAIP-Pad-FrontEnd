@@ -174,9 +174,18 @@ struct AirportInfoCard: View {
         VStack(spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(airport.icao)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                    HStack(spacing: 8) {
+                        Text(airport.icao)
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        
+                        // 更新提示图标
+                        if airport.isModified == true {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.title3)
+                                .foregroundColor(.orange)
+                        }
+                    }
                     
                     Text(airport.nameCn)
                         .font(.headline)
@@ -350,7 +359,8 @@ enum ChartType: String, CaseIterable {
             nameEn: "Beijing Capital International Airport",
             nameCn: "北京首都国际机场",
             hasTerminalCharts: true,
-            createdAt: "2024-01-01T00:00:00Z"
+            createdAt: "2024-01-01T00:00:00Z",
+            isModified: false
         ))
     }
     .modelContainer(for: PinnedChart.self, inMemory: true)

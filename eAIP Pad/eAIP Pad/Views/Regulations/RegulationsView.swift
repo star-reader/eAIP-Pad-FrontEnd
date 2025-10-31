@@ -1,12 +1,21 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - 细则导航项
+struct RegulationNavigation: Identifiable, Hashable {
+    let id = UUID()
+    let chartID: String
+    let displayName: String
+}
+
 // MARK: - 细则视图（AD细则）
 struct RegulationsView: View {
     @State private var searchText = ""
     @State private var isLoading = false
     @State private var airports: [AirportResponse] = []
     @State private var errorMessage: String?
+    @State private var selectedRegulation: RegulationNavigation?
+    @State private var isLoadingRegulation = false
     
     // 过滤后的机场列表
     private var filteredAirports: [AirportResponse] {
@@ -56,13 +65,33 @@ struct RegulationsView: View {
                     .foregroundColor(.primaryBlue)
                 } else {
                     List(filteredAirports, id: \.icao) { airport in
-                        NavigationLink {
-                            AirportRegulationsView(airport: airport)
+                        Button {
+                            Task {
+                                await openFirstRegulation(for: airport)
+                            }
                         } label: {
                             AirportRegulationRowView(airport: airport)
                         }
                     }
                     .listStyle(.insetGrouped)
+                }
+            }
+            .overlay {
+                if isLoadingRegulation {
+                    ZStack {
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                        
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                            Text("加载细则...")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    }
                 }
             }
             .navigationTitle("机场细则")
@@ -71,6 +100,13 @@ struct RegulationsView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     PinboardToolbarButton()
                 }
+            }
+            .navigationDestination(item: $selectedRegulation) { regulation in
+                PDFReaderView(
+                    chartID: regulation.chartID,
+                    displayName: regulation.displayName,
+                    documentType: .ad
+                )
             }
         }
         .task {
@@ -95,6 +131,34 @@ struct RegulationsView: View {
         }
         
         isLoading = false
+    }
+    
+    // MARK: - 打开第一个细则
+    private func openFirstRegulation(for airport: AirportResponse) async {
+        isLoadingRegulation = true
+        
+        do {
+            let regulations = try await NetworkService.shared.getAIPDocumentsByICAO(icao: airport.icao)
+            
+            await MainActor.run {
+                if let firstRegulation = regulations.first {
+                    // 打开第一个细则
+                    selectedRegulation = RegulationNavigation(
+                        chartID: "ad_\(firstRegulation.id)",
+                        displayName: "\(airport.icao) - \(firstRegulation.nameCn)"
+                    )
+                } else {
+                    // 没有细则，显示错误
+                    errorMessage = "\(airport.icao) 暂无AD细则"
+                }
+                isLoadingRegulation = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "加载AD细则失败: \(error.localizedDescription)"
+                isLoadingRegulation = false
+            }
+        }
     }
 }
 

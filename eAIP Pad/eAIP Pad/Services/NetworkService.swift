@@ -139,6 +139,7 @@ struct AirportResponse: Codable {
     let nameCn: String
     let hasTerminalCharts: Bool
     let createdAt: String
+    let isModified: Bool?
     
     enum CodingKeys: String, CodingKey {
         case icao
@@ -146,6 +147,7 @@ struct AirportResponse: Codable {
         case nameCn = "name_cn"
         case hasTerminalCharts = "has_terminal_charts"
         case createdAt = "created_at"
+        case isModified = "is_modified"
     }
 }
 

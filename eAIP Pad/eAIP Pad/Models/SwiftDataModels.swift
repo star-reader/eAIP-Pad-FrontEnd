@@ -130,17 +130,19 @@ final class Airport {
     var nameEn: String
     var nameCn: String
     var hasTerminalCharts: Bool = true
+    var isModified: Bool = false
     var createdAt: Date = Date()
     
     // 关联的航图
     @Relationship(deleteRule: .cascade, inverse: \LocalChart.airport)
     var charts: [LocalChart] = []
     
-    init(icao: String, nameEn: String, nameCn: String, hasTerminalCharts: Bool = true) {
+    init(icao: String, nameEn: String, nameCn: String, hasTerminalCharts: Bool = true, isModified: Bool = false) {
         self.icao = icao
         self.nameEn = nameEn
         self.nameCn = nameCn
         self.hasTerminalCharts = hasTerminalCharts
+        self.isModified = isModified
     }
 }
 

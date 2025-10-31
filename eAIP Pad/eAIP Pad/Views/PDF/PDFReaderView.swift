@@ -153,14 +153,11 @@ struct PDFReaderView: View {
             case .chart:
                 let actualID = Int(chartID.replacingOccurrences(of: "chart_", with: "")) ?? 0
                 signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: actualID)
-            case .ad:
-                // AD细则使用Terminal目录，走chart的签名URL，但ID提取方式不同
-                let actualID = Int(chartID.replacingOccurrences(of: "ad_", with: "")) ?? 0
-                signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: actualID)
             case .enroute:
                 let actualID = Int(chartID.replacingOccurrences(of: "enroute_", with: "")) ?? 0
                 signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: actualID)
-            case .aip, .sup, .amdt, .notam:
+            case .ad, .aip, .sup, .amdt, .notam:
+                // AD、AIP、SUP、AMDT、NOTAM 都使用 documents API
                 let actualID = Int(chartID.replacingOccurrences(of: "\(documentType.rawValue)_", with: "")) ?? 0
                 signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: documentType.rawValue, id: actualID)
             }

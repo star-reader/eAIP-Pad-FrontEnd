@@ -115,7 +115,8 @@ struct AirportListView: View {
                     icao: airportResponse.icao,
                     nameEn: airportResponse.nameEn,
                     nameCn: airportResponse.nameCn,
-                    hasTerminalCharts: airportResponse.hasTerminalCharts
+                    hasTerminalCharts: airportResponse.hasTerminalCharts,
+                    isModified: airportResponse.isModified ?? false
                 )
                 modelContext.insert(airport)
             }
@@ -143,9 +144,18 @@ struct AirportRowView: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(airport.icao)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                HStack(spacing: 6) {
+                    Text(airport.icao)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    // 更新提示图标
+                    if airport.isModified == true {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
                 
                 Text(airport.nameCn)
                     .font(.subheadline)
