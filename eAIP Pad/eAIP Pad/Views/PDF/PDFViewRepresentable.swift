@@ -12,6 +12,8 @@ struct PDFViewRepresentable: UIViewRepresentable {
     @Binding var currentPage: Int
     @Binding var totalPages: Int
     let isDarkMode: Bool
+    let isAnnotationMode: Bool  // 是否处于标注模式
+    let rotation: Int  // 旋转角度（0, 90, 180, 270）
     let onAnnotationAdded: (AnnotationData) -> Void
     
     func makeUIView(context: Context) -> PDFView {
@@ -40,6 +42,9 @@ struct PDFViewRepresentable: UIViewRepresentable {
             target: context.coordinator,
             action: #selector(Coordinator.handleDrawing(_:))
         )
+        drawingGestureRecognizer.delegate = context.coordinator
+        drawingGestureRecognizer.maximumNumberOfTouches = 1 // 只支持单指绘制
+        context.coordinator.drawingGesture = drawingGestureRecognizer
         pdfView.addGestureRecognizer(drawingGestureRecognizer)
         
         // 监听页面变化
@@ -89,6 +94,26 @@ struct PDFViewRepresentable: UIViewRepresentable {
             totalPages = document.pageCount
         }
         
+        // 更新标注模式
+        context.coordinator.isAnnotationMode = isAnnotationMode
+        
+        // 根据标注模式启用/禁用绘制手势
+        context.coordinator.drawingGesture?.isEnabled = isAnnotationMode
+        
+        // 更新旋转
+        if context.coordinator.currentRotation != rotation {
+            context.coordinator.currentRotation = rotation
+            applyRotation(to: pdfView, rotation: rotation)
+        }
+        
+        // 更新当前页面（支持外部跳转）
+        if let document = pdfView.document,
+           currentPage >= 0 && currentPage < document.pageCount,
+           let targetPage = document.page(at: currentPage),
+           pdfView.currentPage != targetPage {
+            pdfView.go(to: targetPage)
+        }
+        
         // 更新标注
         context.coordinator.updateAnnotations(annotations)
         
@@ -105,19 +130,76 @@ struct PDFViewRepresentable: UIViewRepresentable {
         }
     }
     
+    private func applyRotation(to pdfView: PDFView, rotation: Int) {
+        // 获取所有页面并设置旋转
+        guard let document = pdfView.document else { return }
+        
+        // 保存当前页面索引
+        let currentPageIndex = pdfView.currentPage.flatMap { document.index(for: $0) } ?? 0
+        
+        // 设置所有页面的旋转
+        for pageIndex in 0..<document.pageCount {
+            if let page = document.page(at: pageIndex) {
+                page.rotation = rotation
+            }
+        }
+        
+        // 强制 PDFView 重新布局和渲染
+        pdfView.layoutDocumentView()
+        
+        // 需要重新设置文档以触发完整的重绘
+        let tempDoc = pdfView.document
+        pdfView.document = nil
+        pdfView.document = tempDoc
+        
+        // 恢复到之前的页面
+        if let page = document.page(at: currentPageIndex) {
+            pdfView.go(to: page)
+        }
+        
+        // 确保自动缩放重新应用
+        pdfView.autoScales = true
+        
+        // 强制视图刷新
+        pdfView.setNeedsLayout()
+        pdfView.layoutIfNeeded()
+    }
+    
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
     
     // MARK: - Coordinator
-    class Coordinator: NSObject, PDFViewDelegate {
+    class Coordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDelegate {
         let parent: PDFViewRepresentable
+        var isAnnotationMode = false
+        var currentRotation = 0
+        var drawingGesture: UIPanGestureRecognizer?
         private var currentDrawingPath: UIBezierPath?
         private var currentAnnotationLayer: CAShapeLayer?
         private var isDrawing = false
         
         init(_ parent: PDFViewRepresentable) {
             self.parent = parent
+        }
+        
+        // MARK: - UIGestureRecognizerDelegate
+        // 当标注模式开启时，绘制手势应该拦截其他手势
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            // 标注模式下，不允许同时识别其他手势（如滚动、缩放）
+            if isAnnotationMode && gestureRecognizer == drawingGesture {
+                return false
+            }
+            return true
+        }
+        
+        // 确保在标注模式下，绘制手势优先
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            // 只有在标注模式开启时才允许绘制手势
+            if gestureRecognizer == drawingGesture {
+                return isAnnotationMode
+            }
+            return true
         }
         
         // MARK: - 页面变化处理

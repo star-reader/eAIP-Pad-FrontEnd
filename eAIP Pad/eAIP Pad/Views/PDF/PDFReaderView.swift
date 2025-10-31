@@ -24,6 +24,10 @@ struct PDFReaderView: View {
     @State private var showingAnnotationTools = false
     @State private var currentPage = 0
     @State private var totalPages = 0
+    @State private var pdfRotation: Int = 0  // PDF 旋转角度（0, 90, 180, 270）
+    @State private var showingThumbnails = false  // 显示缩略图目录
+    @State private var showingShareSheet = false  // 显示分享菜单
+    @State private var pdfFileToShare: URL?  // 要分享的 PDF 文件 URL
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -78,6 +82,8 @@ struct PDFReaderView: View {
                         currentPage: $currentPage,
                         totalPages: $totalPages,
                         isDarkMode: shouldUseDarkMode,
+                        isAnnotationMode: showingAnnotationTools,
+                        rotation: pdfRotation,
                         onAnnotationAdded: { annotation in
                             saveAnnotation(annotation)
                         }
@@ -104,14 +110,16 @@ struct PDFReaderView: View {
             .navigationTitle(displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // ToolbarItemGroup(placement: .navigationBarLeading) {
-                //     Button("关闭") {
-                //         dismiss()
-                //     }
-                // }
-                
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    // 收藏按钮
+                    // 页面信息
+                    if totalPages > 0 {
+                        Text("\(currentPage + 1)/\(totalPages)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.trailing, 8)
+                    }
+                    
+                    // Pinboard 按钮
                     Button {
                         togglePin()
                     } label: {
@@ -119,20 +127,96 @@ struct PDFReaderView: View {
                             .foregroundColor(isPinned ? .orange : .primary)
                     }
                     
-                    // 标注工具按钮
-                    Button {
-                        showingAnnotationTools.toggle()
+                    // 更多操作菜单
+                    Menu {
+                        
+                        // 视图操作
+                        Section {
+                            Button {
+                                // 左旋转
+                                pdfRotation = (pdfRotation - 90 + 360) % 360
+                            } label: {
+                                Label("向左旋转", systemImage: "rotate.left")
+                            }
+                            
+                            Button {
+                                // 右旋转
+                                pdfRotation = (pdfRotation + 90) % 360
+                            } label: {
+                                Label("向右旋转", systemImage: "rotate.right")
+                            }
+                            
+                            Button {
+                                showingThumbnails = true
+                            } label: {
+                                Label("查看缩略图", systemImage: "square.grid.3x3")
+                            }
+                        }
+
+                        Section {
+                            Button {
+                                sharePDF()
+                            } label: {
+                                Label("分享", systemImage: "square.and.arrow.up")
+                            }
+                            
+                            Button {
+                                downloadPDF()
+                            } label: {
+                                Label("下载到文件", systemImage: "arrow.down.doc")
+                            }
+                            
+                            Button {
+                                printPDF()
+                            } label: {
+                                Label("打印", systemImage: "printer")
+                            }
+                        }
+                        
+                        // 搜索和标注
+                        // Section {
+                            // Button {
+                            //     // TODO: 搜索文本；这个v2升级做
+                            // } label: {
+                            //     Label("搜索", systemImage: "magnifyingglass")
+                            // }
+                            
+                            // 标注工具按钮 - 暂时隐藏
+                            // Button {
+                            //     showingAnnotationTools.toggle()
+                            // } label: {
+                            //     Label("标注工具", systemImage: "pencil.tip.crop.circle")
+                            // }
+                        // }
+                        
+                        // 页面导航
+                        Section {
+                            Button {
+                                goToFirstPage()
+                            } label: {
+                                Label("跳转到首页", systemImage: "arrow.up.to.line")
+                            }
+                            
+                            Button {
+                                goToLastPage()
+                            } label: {
+                                Label("跳转到末页", systemImage: "arrow.down.to.line")
+                            }
+                        }
+                        
                     } label: {
-                        Image(systemName: "pencil.tip.crop.circle")
-                            .foregroundColor(showingAnnotationTools ? .orange : .primary)
+                        Image(systemName: "ellipsis.circle")
                     }
-                    
-                    // 页面信息
-                    if totalPages > 0 {
-                        Text("\(currentPage + 1)/\(totalPages)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                }
+            }
+            .sheet(isPresented: $showingThumbnails) {
+                if let pdfDocument = pdfDocument {
+                    PDFThumbnailView(document: pdfDocument, currentPage: $currentPage)
+                }
+            }
+            .sheet(isPresented: $showingShareSheet) {
+                if let pdfFile = pdfFileToShare {
+                    ShareSheet(items: [pdfFile])
                 }
             }
         }
@@ -241,6 +325,122 @@ struct PDFReaderView: View {
         
         try? modelContext.save()
     }
+    
+    // MARK: - PDF 操作方法
+    
+    // 清理文件名，移除非法字符
+    private func sanitizeFileName(_ name: String) -> String {
+        // 替换文件系统中的非法字符
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|")
+        let components = name.components(separatedBy: invalidCharacters)
+        return components.joined(separator: "-")
+    }
+    
+    private func sharePDF() {
+        guard let pdfDocument = pdfDocument,
+              let pdfData = pdfDocument.dataRepresentation() else {
+            return
+        }
+        
+        // 创建临时文件用于分享，清理文件名
+        let cleanFileName = sanitizeFileName(displayName)
+        let fileName = "\(cleanFileName).pdf"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        
+        do {
+            try pdfData.write(to: tempURL)
+            pdfFileToShare = tempURL
+            showingShareSheet = true
+        } catch {
+            print("创建临时文件失败: \(error)")
+        }
+    }
+    
+    private func downloadPDF() {
+        guard let pdfDocument = pdfDocument,
+              let pdfData = pdfDocument.dataRepresentation() else {
+            return
+        }
+        
+        // 使用文档选择器保存文件，清理文件名
+        let cleanFileName = sanitizeFileName(displayName)
+        let fileName = "\(cleanFileName).pdf"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        
+        do {
+            try pdfData.write(to: tempURL)
+            
+            // 使用文档选择器保存
+            let documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
+            documentPicker.shouldShowFileExtensions = true
+            
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+                rootViewController.present(documentPicker, animated: true)
+            }
+        } catch {
+            print("保存PDF失败: \(error)")
+        }
+    }
+    
+    private func printPDF() {
+        guard let pdfDocument = pdfDocument else {
+            return
+        }
+        
+        // 清理文件名用于打印作业名称
+        let cleanJobName = sanitizeFileName(displayName)
+        
+        let printController = UIPrintInteractionController.shared
+        let printInfo = UIPrintInfo.printInfo()
+        printInfo.outputType = .general
+        printInfo.jobName = cleanJobName
+        
+        printController.printInfo = printInfo
+        
+        // 直接使用 PDFDocument 而不是转换为 Data，避免大文件卡顿
+        printController.printingItem = pdfDocument.dataRepresentation()
+        
+        // 异步呈现打印界面，避免阻塞主线程
+        DispatchQueue.main.async {
+            printController.present(animated: true) { controller, completed, error in
+                if let error = error {
+                    print("打印失败: \(error)")
+                }
+            }
+        }
+    }
+    
+    private func goToFirstPage() {
+        guard let pdfDocument = pdfDocument,
+              pdfDocument.pageCount > 0 else {
+            return
+        }
+        currentPage = 0
+        // PDF 视图会通过 binding 自动更新
+    }
+    
+    private func goToLastPage() {
+        guard let pdfDocument = pdfDocument else {
+            return
+        }
+        let lastPageIndex = pdfDocument.pageCount - 1
+        currentPage = lastPageIndex
+        // PDF 视图会通过 binding 自动更新
+    }
+}
+
+// MARK: - 分享 Sheet
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - 标注数据结构
@@ -351,6 +551,101 @@ enum AnnotationTool: CaseIterable {
         case .highlighter: return "荧光笔"
         case .eraser: return "橡皮擦"
         }
+    }
+}
+
+// MARK: - PDF 缩略图视图
+struct PDFThumbnailView: View {
+    let document: PDFDocument
+    @Binding var currentPage: Int
+    @Environment(\.dismiss) private var dismiss
+    
+    // 使用固定列数，让每个缩略图有足够空间显示完整比例
+    private let columns = [
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
+    ]
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 24) {
+                    ForEach(0..<document.pageCount, id: \.self) { pageIndex in
+                        if let page = document.page(at: pageIndex) {
+                            Button {
+                                // 跳转到该页并关闭缩略图视图
+                                currentPage = pageIndex
+                                dismiss()
+                            } label: {
+                                VStack(spacing: 8) {
+                                    // 使用 aspectRatio 保持页面原始比例
+                                    PDFPageThumbnail(page: page)
+                                        .aspectRatio(page.bounds(for: .mediaBox).width / page.bounds(for: .mediaBox).height, contentMode: .fit)
+                                        .background(Color.white)
+                                        .cornerRadius(6)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(currentPage == pageIndex ? Color.blue : Color.gray.opacity(0.3), lineWidth: currentPage == pageIndex ? 3 : 1)
+                                        )
+                                        .shadow(color: .black.opacity(0.15), radius: 3, x: 0, y: 2)
+                                    
+                                    Text("第 \(pageIndex + 1) 页")
+                                        .font(.caption2)
+                                        .foregroundColor(currentPage == pageIndex ? .blue : .secondary)
+                                        .fontWeight(currentPage == pageIndex ? .semibold : .regular)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle("缩略图")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - PDF 页面缩略图
+struct PDFPageThumbnail: UIViewRepresentable {
+    let page: PDFPage
+    
+    func makeUIView(context: Context) -> UIImageView {
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        return imageView
+    }
+    
+    func updateUIView(_ imageView: UIImageView, context: Context) {
+        let pageRect = page.bounds(for: .mediaBox)
+        let scale: CGFloat = 300 / max(pageRect.width, pageRect.height)
+        let scaledSize = CGSize(width: pageRect.width * scale, height: pageRect.height * scale)
+        
+        UIGraphicsBeginImageContextWithOptions(scaledSize, false, 0)
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        
+        context.setFillColor(UIColor.white.cgColor)
+        context.fill(CGRect(origin: .zero, size: scaledSize))
+        
+        context.saveGState()
+        context.translateBy(x: 0, y: scaledSize.height)
+        context.scaleBy(x: scale, y: -scale)
+        page.draw(with: .mediaBox, to: context)
+        context.restoreGState()
+        
+        let thumbnail = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        imageView.image = thumbnail
     }
 }
 
