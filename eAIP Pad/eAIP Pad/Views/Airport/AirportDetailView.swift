@@ -317,9 +317,9 @@ enum ChartType: String, CaseIterable {
         case .all: return "全部"
         case .sid: return "SID"
         case .star: return "STAR"
-        case .app: return "进近"
-        case .apt: return "机场"
-        case .others: return "其他"
+        case .app: return "APP"
+        case .apt: return "APT"
+        case .others: return "OTHER"
         }
     }
     
