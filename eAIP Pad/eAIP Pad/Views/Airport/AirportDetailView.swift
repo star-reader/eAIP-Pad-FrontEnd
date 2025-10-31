@@ -87,7 +87,8 @@ struct AirportDetailView: View {
                 }
             }
         }
-        .navigationBarHidden(true)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
