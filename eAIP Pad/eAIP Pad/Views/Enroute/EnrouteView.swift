@@ -66,12 +66,12 @@ struct EnrouteView: View {
                                 if let binding = selectedChartBinding {
                                     // iPad 模式
                                     Button {
-                                        print("🟢 EnrouteView - 点击航路图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
                                         binding.wrappedValue = chart
                                     } label: {
                                         EnrouteChartRowView(chart: chart)
                                     }
                                     .buttonStyle(.plain)
+                                    .contentShape(Rectangle())  // 扩展点击区域到整行
                                 } else {
                                     // iPhone 模式
                                     NavigationLink {

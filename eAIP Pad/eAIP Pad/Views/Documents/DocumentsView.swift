@@ -140,6 +140,7 @@ struct AIPDocumentsView: View {
                             AIPDocumentRowView(document: document)
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {
@@ -266,6 +267,7 @@ struct SUPDocumentsView: View {
                             SUPDocumentRowView(document: document)
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {
@@ -387,6 +389,7 @@ struct AMDTDocumentsView: View {
                             AMDTDocumentRowView(document: document)
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {
@@ -508,6 +511,7 @@ struct NOTAMDocumentsView: View {
                             NOTAMDocumentRowView(document: document)
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {

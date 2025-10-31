@@ -276,6 +276,7 @@ struct ChartRowView: View {
                     chartRowContent
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())  // 扩展点击区域到整行
             } else {
                 // iPhone 模式：使用 NavigationLink
                 NavigationLink {
