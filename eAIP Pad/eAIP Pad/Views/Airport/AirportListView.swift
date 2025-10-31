@@ -54,9 +54,6 @@ struct AirportListView: View {
                         }
                     }
                     .searchable(text: $searchText, prompt: "搜索机场 ICAO 或名称")
-                    .refreshable {
-                        await loadAirports()
-                    }
                 }
             }
             .navigationTitle("机场")

@@ -99,9 +99,6 @@ struct EnrouteView: View {
                             }
                         }
                         .listStyle(.insetGrouped)
-                        .refreshable {
-                            await loadEnrouteCharts()
-                        }
                     }
                 }
             }

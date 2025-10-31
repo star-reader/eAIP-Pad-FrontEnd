@@ -106,9 +106,6 @@ struct AIPDocumentsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
-                .refreshable {
-                    await loadAIPDocuments()
-                }
             }
         }
         .task {
@@ -176,9 +173,6 @@ struct SUPDocumentsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
-                .refreshable {
-                    await loadSUPDocuments()
-                }
             }
         }
         .task {
@@ -245,9 +239,6 @@ struct AMDTDocumentsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
-                .refreshable {
-                    await loadAMDTDocuments()
-                }
             }
         }
         .task {
@@ -314,9 +305,6 @@ struct NOTAMDocumentsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
-                .refreshable {
-                    await loadNOTAMDocuments()
-                }
             }
         }
         .task {

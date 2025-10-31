@@ -16,21 +16,21 @@ struct PinboardToolbarButton: View {
             Button {
                 showingPinboard = true
             } label: {
-                ZStack(alignment: .topTrailing) {
-                    Image(systemName: "pin.fill")
-                        .foregroundColor(.orange)
-                    
-                    // 数量角标
-                    if pinnedCharts.count > 0 {
-                        Text("\(pinnedCharts.count)")
-                            .font(.system(size: 8))
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                            .padding(2)
-                            .background(Circle().fill(.red))
-                            .offset(x: 6, y: -6)
+                // 使用 overlay 而不是 ZStack，确保角标不被裁剪
+                Image(systemName: "pin.fill")
+                    .foregroundColor(.orange)
+                    .imageScale(.medium)
+                    .overlay(alignment: .topTrailing) {
+                        if pinnedCharts.count > 0 {
+                            Text("\(min(pinnedCharts.count, 99))")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .background(Circle().fill(.red))
+                                .offset(x: 6, y: -6)
+                        }
                     }
-                }
+                    .padding(8) // 增加内边距，给角标留出空间
             }
             .sheet(isPresented: $showingPinboard) {
                 PinboardCompactView()
@@ -39,52 +39,142 @@ struct PinboardToolbarButton: View {
     }
 }
 
-// MARK: - Pinboard 紧凑模式视图（紧凑列表）
+// MARK: - Pinboard 紧凑模式视图（可切换显示模式）
 struct PinboardCompactView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
+    @AppStorage("pinboardStyle") private var selectedStyle: PinboardStyle = .compact
     
     var body: some View {
         NavigationStack {
-            if pinnedCharts.isEmpty {
-                ContentUnavailableView(
-                    "暂无收藏",
-                    systemImage: "pin.slash",
-                    description: Text("收藏的航图会显示在这里")
-                )
-            } else {
-                List {
-                    ForEach(pinnedCharts) { pin in
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: pin.chartID,
-                                displayName: pin.displayName,
-                                documentType: DocumentType(rawValue: pin.documentType) ?? .chart
-                            )
-                        } label: {
-                            PinCompactListRow(pin: pin)
+            Group {
+                if pinnedCharts.isEmpty {
+                    ContentUnavailableView(
+                        "暂无收藏",
+                        systemImage: "pin.slash",
+                        description: Text("收藏的航图会显示在这里")
+                    )
+                } else {
+                    // 根据选择的样式显示不同内容
+                    switch selectedStyle {
+                    case .compact:
+                        compactListView
+                    case .preview:
+                        previewGridView
+                    case .grid:
+                        taskGridView
+                    }
+                }
+            }
+            .navigationTitle("快速访问")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Picker("显示方式", selection: $selectedStyle) {
+                            Label("紧凑列表", systemImage: "list.bullet")
+                                .tag(PinboardStyle.compact)
+                            Label("预览模式", systemImage: "square.grid.2x2")
+                                .tag(PinboardStyle.preview)
+                            Label("平铺模式", systemImage: "square.grid.3x3")
+                                .tag(PinboardStyle.grid)
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("删除", systemImage: "trash") {
-                                modelContext.delete(pin)
-                                try? modelContext.save()
-                            }
-                            .tint(.red)
+                    } label: {
+                        Image(systemName: "square.grid.2x2")
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - 紧凑列表视图
+    private var compactListView: some View {
+        List {
+            ForEach(pinnedCharts) { pin in
+                NavigationLink {
+                    PDFReaderView(
+                        chartID: pin.chartID,
+                        displayName: pin.displayName,
+                        documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                    )
+                } label: {
+                    PinCompactListRow(pin: pin)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button("删除", systemImage: "trash") {
+                        modelContext.delete(pin)
+                        try? modelContext.save()
+                    }
+                    .tint(.red)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+    
+    // MARK: - 预览网格视图
+    private var previewGridView: some View {
+        ScrollView {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 16),
+                GridItem(.flexible(), spacing: 16)
+            ], spacing: 16) {
+                ForEach(pinnedCharts) { pin in
+                    NavigationLink {
+                        PDFReaderView(
+                            chartID: pin.chartID,
+                            displayName: pin.displayName,
+                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                        )
+                    } label: {
+                        PinPreviewCard(pin: pin)
+                    }
+                    .contextMenu {
+                        Button("删除", systemImage: "trash", role: .destructive) {
+                            modelContext.delete(pin)
+                            try? modelContext.save()
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
             }
+            .padding()
         }
-        .navigationTitle("快速访问")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("关闭") {
-                    dismiss()
+    }
+    
+    // MARK: - 任务平铺视图
+    private var taskGridView: some View {
+        ScrollView {
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ], spacing: 12) {
+                ForEach(pinnedCharts) { pin in
+                    NavigationLink {
+                        PDFReaderView(
+                            chartID: pin.chartID,
+                            displayName: pin.displayName,
+                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                        )
+                    } label: {
+                        PinGridCard(pin: pin)
+                    }
+                    .contextMenu {
+                        Button("删除", systemImage: "trash", role: .destructive) {
+                            modelContext.delete(pin)
+                            try? modelContext.save()
+                        }
+                    }
                 }
             }
+            .padding()
         }
     }
 }
@@ -400,63 +490,61 @@ struct PinPreviewCard: View {
                 .fill(chartTypeColor)
                 .frame(width: 4)
             
-            HStack {
-                // 缩略图区域
+            HStack(spacing: 12) {
+                // 小图标
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(chartTypeColor.opacity(0.1))
-                        .frame(width: 80, height: 100)
+                        .frame(width: 44, height: 44)
                     
                     if let thumbnailData = pin.thumbnailData,
                        let uiImage = UIImage(data: thumbnailData) {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 100)
+                            .frame(width: 44, height: 44)
                             .clipped()
-                            .cornerRadius(12)
+                            .cornerRadius(8)
                     } else {
                         Image(systemName: iconForDocumentType(pin.documentType))
                             .foregroundColor(chartTypeColor)
-                            .font(.largeTitle)
+                            .font(.title3)
                     }
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(pin.displayName)
-                        .font(.headline)
-                        .fontWeight(.medium)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                         .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    HStack {
+                    HStack(spacing: 6) {
                         if !pin.icao.isEmpty {
                             Text(pin.icao)
                                 .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(chartTypeColor.opacity(0.2), in: Capsule())
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(chartTypeColor.opacity(0.15), in: Capsule())
                                 .foregroundColor(chartTypeColor)
                         }
                         
                         Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
-                        Spacer()
                     }
                     
-                    Text("收藏于 \(pin.pinnedAt.formatted(.dateTime.month().day()))")
+                    Text(pin.pinnedAt.formatted(.relative(presentation: .named)))
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                    
-                    Spacer()
                 }
                 
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .padding()
+            .padding(12)
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .frame(height: 90)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     private func iconForDocumentType(_ type: String) -> String {
@@ -487,49 +575,51 @@ struct PinGridCard: View {
                 .fill(chartTypeColor)
                 .frame(height: 4)
             
-            VStack(spacing: 12) {
-                // 缩略图区域
+            VStack(spacing: 10) {
+                // 小图标区域
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12)
+                    Circle()
                         .fill(chartTypeColor.opacity(0.1))
-                        .frame(height: 120)
+                        .frame(width: 50, height: 50)
                     
                     if let thumbnailData = pin.thumbnailData,
                        let uiImage = UIImage(data: thumbnailData) {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(height: 120)
-                            .clipped()
-                            .cornerRadius(12)
+                            .frame(width: 50, height: 50)
+                            .clipShape(Circle())
                     } else {
                         Image(systemName: iconForDocumentType(pin.documentType))
                             .foregroundColor(chartTypeColor)
-                            .font(.largeTitle)
+                            .font(.title2)
                     }
                 }
+                .padding(.top, 8)
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .center, spacing: 6) {
                     Text(pin.displayName)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                     
                     if !pin.icao.isEmpty {
                         Text(pin.icao)
-                            .font(.caption)
+                            .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(chartTypeColor.opacity(0.2), in: Capsule())
+                            .background(chartTypeColor.opacity(0.15), in: Capsule())
                             .foregroundColor(chartTypeColor)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
-            .padding()
+            .padding(12)
         }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .frame(height: 140)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
     
     private func iconForDocumentType(_ type: String) -> String {

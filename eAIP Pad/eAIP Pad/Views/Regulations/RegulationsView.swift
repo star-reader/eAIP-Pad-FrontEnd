@@ -72,9 +72,6 @@ struct RegulationsView: View {
                     PinboardToolbarButton()
                 }
             }
-            .refreshable {
-                await loadAirports()
-            }
         }
         .task {
             await loadAirports()
