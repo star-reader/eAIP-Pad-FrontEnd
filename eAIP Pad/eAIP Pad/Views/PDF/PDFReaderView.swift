@@ -230,19 +230,71 @@ struct PDFReaderView: View {
         errorMessage = nil
         
         do {
+            // 提取实际的 ID
+            let actualID = chartID.replacingOccurrences(of: "\(documentType.rawValue)_", with: "")
+            
+            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
+            
+            // 如果本地没有 AIRAC 版本，尝试从 API 获取
+            if currentAIRAC == nil {
+                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                do {
+                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
+                    currentAIRAC = airacResponse.version
+                    
+                    // 保存到本地数据库
+                    let newVersion = AIRACVersion(
+                        version: airacResponse.version,
+                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        isCurrent: true
+                    )
+                    modelContext.insert(newVersion)
+                    try? modelContext.save()
+                    
+                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                } catch {
+                    print("⚠️ 无法从 API 获取 AIRAC 版本，使用默认值")
+                    // 使用一个默认的 AIRAC 版本（用于降级处理）
+                    currentAIRAC = "unknown"
+                }
+            }
+            
+            guard let airacVersion = currentAIRAC else {
+                throw NSError(domain: "PDFReader", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedDocument = PDFCacheService.shared.loadFromCache(
+                airacVersion: airacVersion,
+                documentType: documentType.rawValue,
+                id: actualID
+            ) {
+                print("✅ 从缓存加载 PDF: \(documentType.rawValue)_\(actualID)")
+                await MainActor.run {
+                    self.pdfDocument = cachedDocument
+                    self.totalPages = cachedDocument.pageCount
+                }
+                isLoading = false
+                return
+            }
+            
+            print("⬇️ 从网络下载 PDF: \(documentType.rawValue)_\(actualID)")
+            
+            // 2. 缓存未命中，从网络下载
             // 根据文档类型获取签名URL
             let signedURLResponse: SignedURLResponse
             switch documentType {
             case .chart:
-                let actualID = Int(chartID.replacingOccurrences(of: "chart_", with: "")) ?? 0
-                signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: actualID)
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: id)
             case .enroute:
-                let actualID = Int(chartID.replacingOccurrences(of: "enroute_", with: "")) ?? 0
-                signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: actualID)
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: id)
             case .ad, .aip, .sup, .amdt, .notam:
                 // AD、AIP、SUP、AMDT、NOTAM 都使用 documents API
-                let actualID = Int(chartID.replacingOccurrences(of: "\(documentType.rawValue)_", with: "")) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: documentType.rawValue, id: actualID)
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: documentType.rawValue, id: id)
             }
             
             // 构建完整URL - 将 /api/v1/ 替换为 /eaip/v1/
@@ -258,6 +310,16 @@ struct PDFReaderView: View {
             }
             
             let (data, _) = try await URLSession.shared.data(for: pdfRequest)
+            
+            // 3. 保存到缓存（只在有有效 AIRAC 版本时才缓存）
+            if airacVersion != "unknown" {
+                try? PDFCacheService.shared.saveToCache(
+                    pdfData: data,
+                    airacVersion: airacVersion,
+                    documentType: documentType.rawValue,
+                    id: actualID
+                )
+            }
             
             await MainActor.run {
                 if let document = PDFDocument(data: data) {

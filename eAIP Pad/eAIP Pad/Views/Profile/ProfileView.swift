@@ -168,8 +168,8 @@ struct ProfileView: View {
             modelContext.delete(version)
         }
         
-        // 清理相关的本地航图缓存
-        // TODO: 实现文件缓存清理
+        // 清理 PDF 缓存
+        PDFCacheService.shared.clearOldVersionCaches(modelContext: modelContext)
         
         try? modelContext.save()
     }
