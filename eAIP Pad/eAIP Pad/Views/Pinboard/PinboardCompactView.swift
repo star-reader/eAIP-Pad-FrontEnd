@@ -6,127 +6,130 @@ import Foundation
 import UIKit
 #endif
 
-// MARK: - Pinboard 紧凑模式视图（iPhone 底部悬浮条）
-struct PinboardCompactView: View {
-    @Environment(\.modelContext) private var modelContext
+// MARK: - Pinboard 导航栏按钮
+struct PinboardToolbarButton: View {
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
-    @State private var showingFullPinboard = false
+    @State private var showingPinboard = false
     
     var body: some View {
         if !pinnedCharts.isEmpty {
-            VStack {
-                Spacer()
-                
-                HStack {
-                    // 左侧快速访问按钮
-                    Button {
-                        showingFullPinboard = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "pin.fill")
-                                .foregroundColor(.orange)
-                            Text("快速访问")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                            Text("(\(pinnedCharts.count))")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.regularMaterial, in: Capsule())
-                    }
+            Button {
+                showingPinboard = true
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "pin.fill")
+                        .foregroundColor(.orange)
                     
-                    // 右侧横向滚动的收藏项目
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(pinnedCharts.prefix(5)) { pin in
-                                NavigationLink {
-                                    PDFReaderView(
-                                        chartID: pin.chartID,
-                                        displayName: pin.displayName,
-                                        documentType: DocumentType(rawValue: pin.documentType) ?? .chart
-                                    )
-                                } label: {
-                                    PinCompactCard(pin: pin)
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
+                    // 数量角标
+                    if pinnedCharts.count > 0 {
+                        Text("\(pinnedCharts.count)")
+                            .font(.system(size: 8))
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(2)
+                            .background(Circle().fill(.red))
+                            .offset(x: 6, y: -6)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
             }
-            .sheet(isPresented: $showingFullPinboard) {
-                PinboardFullView()
+            .sheet(isPresented: $showingPinboard) {
+                PinboardCompactView()
             }
         }
     }
 }
 
-// MARK: - 紧凑模式收藏卡片
-struct PinCompactCard: View {
-    let pin: PinnedChart
+// MARK: - Pinboard 紧凑模式视图（紧凑列表）
+struct PinboardCompactView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
+    
+    var body: some View {
+        NavigationStack {
+            if pinnedCharts.isEmpty {
+                ContentUnavailableView(
+                    "暂无收藏",
+                    systemImage: "pin.slash",
+                    description: Text("收藏的航图会显示在这里")
+                )
+            } else {
+                List {
+                    ForEach(pinnedCharts) { pin in
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: pin.chartID,
+                                displayName: pin.displayName,
+                                documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                            )
+                        } label: {
+                            PinCompactListRow(pin: pin)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button("删除", systemImage: "trash") {
+                                modelContext.delete(pin)
+                                try? modelContext.save()
+                            }
+                            .tint(.red)
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+        }
+        .navigationTitle("快速访问")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("关闭") {
+                    dismiss()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 紧凑列表行
+struct PinCompactListRow: View {
+    let pin: PinnedChart
     
     private var chartTypeColor: Color {
         ChartType(rawValue: pin.type)?.color ?? .gray
     }
     
     var body: some View {
-        VStack(spacing: 4) {
-            // 文档类型图标
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(chartTypeColor.opacity(0.1))
-                    .frame(width: 40, height: 40)
+        HStack(spacing: 0) {
+            // 左侧颜色边框
+            Rectangle()
+                .fill(chartTypeColor)
+                .frame(width: 4)
+            
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pin.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 8) {
+                        if !pin.icao.isEmpty {
+                            Text(pin.icao)
+                                .font(.caption)
+                                .foregroundColor(chartTypeColor)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(chartTypeColor.opacity(0.15), in: Capsule())
+                        }
+                        
+                        Text(pin.type)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.leading, 12)
                 
-                Image(systemName: iconForDocumentType(pin.documentType))
-                    .foregroundColor(chartTypeColor)
-                    .font(.title3)
+                Spacer()
             }
-            .overlay(
-                // 顶部颜色边框
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(chartTypeColor, lineWidth: 2)
-            )
-            
-            // 显示名称
-            Text(pin.displayName)
-                .font(.caption2)
-                .fontWeight(.medium)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(width: 60)
-            
-            // ICAO 代码
-            if !pin.icao.isEmpty {
-                Text(pin.icao)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(width: 70)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .contextMenu {
-            Button("移除收藏", systemImage: "pin.slash") {
-                modelContext.delete(pin)
-                try? modelContext.save()
-            }
-        }
-    }
-    
-    private func iconForDocumentType(_ type: String) -> String {
-        switch type {
-        case "chart": return "airplane"
-        case "enroute": return "map"
-        case "aip": return "doc.text"
-        case "sup": return "exclamationmark.triangle"
-        case "amdt": return "pencil.and.outline"
-        case "notam": return "bell"
-        default: return "doc"
         }
     }
 }

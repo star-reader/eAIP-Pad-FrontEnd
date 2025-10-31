@@ -176,6 +176,80 @@ class SubscriptionService: ObservableObject {
         }
     }
     
+    // MARK: - 开始试用
+    func startTrial() async -> Bool {
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
+        
+        do {
+            // 确保用户已登录
+            guard AuthenticationService.shared.currentUser != nil else {
+                await MainActor.run {
+                    self.errorMessage = "用户未登录"
+                    self.isLoading = false
+                }
+                return false
+            }
+            
+            // 调用后端开始试用（使用空字符串作为 userId，后端会从 token 中提取）
+            let response = try await NetworkService.shared.startTrial(userId: "")
+            print("✅ 试用开始成功: \(response)")
+            
+            // 更新订阅状态
+            await updateSubscriptionStatus()
+            
+            await MainActor.run {
+                self.isLoading = false
+            }
+            
+            return true
+        } catch let error as DecodingError {
+            print("❌ JSON 解析错误: \(error)")
+            switch error {
+            case .keyNotFound(let key, let context):
+                print("缺少键: \(key.stringValue), context: \(context)")
+            case .typeMismatch(let type, let context):
+                print("类型不匹配: \(type), context: \(context)")
+            case .valueNotFound(let type, let context):
+                print("值未找到: \(type), context: \(context)")
+            case .dataCorrupted(let context):
+                print("数据损坏: \(context)")
+            @unknown default:
+                print("未知解析错误")
+            }
+            
+            // 即使解析失败，也更新订阅状态（因为后端可能已经成功）
+            await updateSubscriptionStatus()
+            
+            await MainActor.run {
+                self.isLoading = false
+            }
+            
+            // 如果后端已经成功，返回 true
+            if subscriptionStatus == .trial {
+                return true
+            }
+            
+            await MainActor.run {
+                self.errorMessage = "响应格式错误，但试用可能已开启，请刷新查看"
+            }
+            return false
+        } catch {
+            print("❌ 开启试用失败: \(error)")
+            await MainActor.run {
+                if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
+                    self.errorMessage = "网络连接失败，请检查网络后重试"
+                } else {
+                    self.errorMessage = "开启试用失败: \(error.localizedDescription)"
+                }
+                self.isLoading = false
+            }
+            return false
+        }
+    }
+    
     // MARK: - 更新订阅状态
     @MainActor
     func updateSubscriptionStatus() async {

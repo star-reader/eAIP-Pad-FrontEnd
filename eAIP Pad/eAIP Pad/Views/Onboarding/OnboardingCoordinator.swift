@@ -182,18 +182,24 @@ class OnboardingCoordinator: ObservableObject {
 
             let response = try await NetworkService.shared.startTrial(userId: userId)
             
+            // 安全地解包可选值
+            guard let data = response.data, let status = data.status else {
+                print("⚠️ 响应数据不完整")
+                currentState = .needsSubscription
+                return
+            }
             
-            switch response.data.status {
+            switch status {
             case "trial_started":
                 print("✅ 试用期开启成功")
                 // 直接使用试用API响应更新订阅状态
                 await MainActor.run {
                     subscriptionService.subscriptionStatus = .trial
                     subscriptionService.isTrialActive = true
-                    subscriptionService.daysLeft = response.data.daysLeft
+                    subscriptionService.daysLeft = data.daysLeft ?? 30
                     
                     // 解析试用结束日期
-                    if let trialEndString = response.data.trialEndDate {
+                    if let trialEndString = data.trialEndDate {
                         subscriptionService.trialEndDate = ISO8601DateFormatter().date(from: trialEndString)
                     }
                     
@@ -208,7 +214,7 @@ class OnboardingCoordinator: ObservableObject {
                 currentState = .needsSubscription
                 
             default:
-                print("⚠️ 未知状态: \(response.data.status)")
+                print("⚠️ 未知状态: \(status)")
                 currentState = .needsSubscription
             }
         } catch {

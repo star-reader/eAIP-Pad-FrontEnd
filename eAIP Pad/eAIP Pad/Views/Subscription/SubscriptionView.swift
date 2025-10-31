@@ -1,11 +1,58 @@
 import SwiftUI
 import StoreKit
 
-// MARK: - 订阅视图
+// MARK: - 订阅视图（根据状态显示不同内容）
 struct SubscriptionView: View {
     @StateObject private var subscriptionService = SubscriptionService.shared
     @State private var showingError = false
     @State private var errorMessage = ""
+    
+    var body: some View {
+        Group {
+            // 根据订阅状态显示不同视图
+            if subscriptionService.subscriptionStatus == .inactive {
+                // 未订阅状态：使用 LoginView 中的 WelcomeView
+                WelcomeView {
+                    Task {
+                        await startTrial()
+                    }
+                }
+            } else {
+                // 过期状态：显示升级页面
+                SubscriptionUpgradeView(
+                    subscriptionService: subscriptionService,
+                    showingError: $showingError,
+                    errorMessage: $errorMessage
+                )
+            }
+        }
+        .alert("提示", isPresented: $showingError) {
+            Button("确定", role: .cancel) {
+                showingError = false
+            }
+        } message: {
+            Text(errorMessage)
+        }
+    }
+    
+    // MARK: - 开始试用
+    private func startTrial() async {
+        let success = await subscriptionService.startTrial()
+        
+        if !success {
+            await MainActor.run {
+                errorMessage = subscriptionService.errorMessage ?? "开启试用失败，请稍后重试"
+                showingError = true
+            }
+        }
+    }
+}
+
+// MARK: - 订阅升级视图
+struct SubscriptionUpgradeView: View {
+    @ObservedObject var subscriptionService: SubscriptionService
+    @Binding var showingError: Bool
+    @Binding var errorMessage: String
     
     var body: some View {
         ZStack {
@@ -120,7 +167,7 @@ struct SubscriptionView: View {
     }
     
     // MARK: - 购买订阅
-    private func purchaseSubscription() async {
+    func purchaseSubscription() async {
         let success = await subscriptionService.purchaseMonthlySubscription()
         
         if !success {
@@ -132,7 +179,7 @@ struct SubscriptionView: View {
     }
     
     // MARK: - 恢复购买
-    private func restorePurchases() async {
+    func restorePurchases() async {
         await subscriptionService.restorePurchases()
         
         if let error = subscriptionService.errorMessage {

@@ -26,6 +26,11 @@ struct DocumentsView: View {
             }
             .navigationTitle("文档")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    PinboardToolbarButton()
+                }
+            }
         }
     }
 }

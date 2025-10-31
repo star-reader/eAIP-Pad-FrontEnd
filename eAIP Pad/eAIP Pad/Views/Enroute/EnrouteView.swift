@@ -109,23 +109,27 @@ struct EnrouteView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        ForEach(EnrouteChartType.allCases, id: \.self) { type in
-                            Button {
-                                selectedChartType = type
-                            } label: {
-                                HStack {
-                                    Text(type.displayName)
-                                    if selectedChartType == type {
-                                        Image(systemName: "checkmark")
+                    HStack(spacing: 16) {
+                        PinboardToolbarButton()
+                        
+                        Menu {
+                            ForEach(EnrouteChartType.allCases, id: \.self) { type in
+                                Button {
+                                    selectedChartType = type
+                                } label: {
+                                    HStack {
+                                        Text(type.displayName)
+                                        if selectedChartType == type {
+                                            Image(systemName: "checkmark")
+                                        }
                                     }
                                 }
                             }
+                        } label: {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
                         }
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        .disabled(isLoading)
                     }
-                    .disabled(isLoading)
                 }
             }
         }

@@ -91,14 +91,18 @@ struct AirportDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    Task {
-                        await loadCharts()
+                HStack(spacing: 16) {
+                    PinboardToolbarButton()
+                    
+                    Button {
+                        Task {
+                            await loadCharts()
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
                     }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
+                    .disabled(isLoading)
                 }
-                .disabled(isLoading)
             }
         }
         .task {

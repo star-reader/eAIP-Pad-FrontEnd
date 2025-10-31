@@ -67,6 +67,11 @@ struct RegulationsView: View {
             }
             .navigationTitle("机场细则")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    PinboardToolbarButton()
+                }
+            }
             .refreshable {
                 await loadAirports()
             }

@@ -26,6 +26,9 @@ struct PDFViewRepresentable: UIViewRepresentable {
         
         // 夜间模式配置
         if isDarkMode {
+            pdfView.backgroundColor = UIColor.black
+            applyDarkModeFilter(to: pdfView)
+        } else {
             pdfView.backgroundColor = UIColor.systemBackground
         }
         
@@ -50,6 +53,35 @@ struct PDFViewRepresentable: UIViewRepresentable {
         return pdfView
     }
     
+    private func applyDarkModeFilter(to view: UIView) {
+        // 为PDF内容页面应用滤镜，而不是整个PDFView
+        // 这样可以保持背景为黑色
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // 遍历PDFView的子视图，找到实际显示PDF内容的视图
+            for subview in view.subviews {
+                if String(describing: type(of: subview)).contains("PDFPage") || 
+                   String(describing: type(of: subview)).contains("TiledLayer") {
+                    // 只对PDF内容应用滤镜
+                    let filterLayer = CALayer()
+                    filterLayer.name = "darkModeFilter"
+                    
+                    // 使用Core Image滤镜
+                    if #available(iOS 13.0, *) {
+                        subview.layer.filters = [
+                            CIFilter(name: "CIColorInvert"),
+                            CIFilter(name: "CIHueAdjust", parameters: ["inputAngle": Float.pi]),
+                            CIFilter(name: "CIColorControls", parameters: [
+                                "inputBrightness": -0.1,
+                                "inputContrast": 1.3,
+                                "inputSaturation": 0.9
+                            ])
+                        ].compactMap { $0 }
+                    }
+                }
+            }
+        }
+    }
+    
     func updateUIView(_ pdfView: PDFView, context: Context) {
         // 更新文档
         if pdfView.document != document {
@@ -62,9 +94,14 @@ struct PDFViewRepresentable: UIViewRepresentable {
         
         // 更新夜间模式
         if isDarkMode {
-            pdfView.backgroundColor = UIColor.systemBackground
+            pdfView.backgroundColor = UIColor.black
+            applyDarkModeFilter(to: pdfView)
         } else {
             pdfView.backgroundColor = UIColor.systemBackground
+            // 移除滤镜
+            for subview in pdfView.subviews {
+                subview.layer.filters = nil
+            }
         }
     }
     

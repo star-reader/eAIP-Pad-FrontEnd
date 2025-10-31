@@ -5,7 +5,6 @@ import Foundation
 // MARK: - iPhone 主导航 TabView
 struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var pinnedCharts: [PinnedChart]
     @State private var selectedTab = 0
     
     var body: some View {
@@ -53,13 +52,6 @@ struct MainTabView: View {
             }
             .tint(.primaryBlue) // 蓝色主题
             .tabBarMinimizeBehavior(.onScrollDown)
-            .overlay(alignment: .bottom) {
-                // Pinboard 紧凑模式悬浮条
-                if !pinnedCharts.isEmpty {
-                    PinboardCompactView()
-                        .padding(.bottom, 90) // 避免遮挡 TabBar
-                }
-            }
         } else {
             TabView(selection: $selectedTab) {
                 // 机场模块
@@ -103,13 +95,6 @@ struct MainTabView: View {
                     .tag(4)
             }
             .tint(.primaryBlue) // 蓝色主题
-            .overlay(alignment: .bottom) {
-                // Pinboard 紧凑模式悬浮条
-                if !pinnedCharts.isEmpty {
-                    PinboardCompactView()
-                        .padding(.bottom, 90) // 避免遮挡 TabBar
-                }
-            }
         }
     }
 }

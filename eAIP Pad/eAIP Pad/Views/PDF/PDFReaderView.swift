@@ -72,19 +72,16 @@ struct PDFReaderView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let pdfDocument = pdfDocument {
-                    ZStack {
-                        PDFViewRepresentable(
-                            document: pdfDocument,
-                            annotations: chartAnnotations,
-                            currentPage: $currentPage,
-                            totalPages: $totalPages,
-                            isDarkMode: shouldUseDarkMode,
-                            onAnnotationAdded: { annotation in
-                                saveAnnotation(annotation)
-                            }
-                        )
-                        .applyDarkModeFilter(shouldUseDarkMode)
-                    }
+                    PDFViewRepresentable(
+                        document: pdfDocument,
+                        annotations: chartAnnotations,
+                        currentPage: $currentPage,
+                        totalPages: $totalPages,
+                        isDarkMode: shouldUseDarkMode,
+                        onAnnotationAdded: { annotation in
+                            saveAnnotation(annotation)
+                        }
+                    )
                     .ignoresSafeArea(.all, edges: .bottom)
                 } else {
                     Text("无法加载PDF")
@@ -360,30 +357,6 @@ enum AnnotationTool: CaseIterable {
         case .pen: return "画笔"
         case .highlighter: return "荧光笔"
         case .eraser: return "橡皮擦"
-        }
-    }
-}
-
-// MARK: - 夜间模式滤镜扩展
-extension View {
-    func applyDarkModeFilter(_ isDarkMode: Bool) -> some View {
-        self.modifier(DarkModeFilterModifier(isDarkMode: isDarkMode))
-    }
-}
-
-struct DarkModeFilterModifier: ViewModifier {
-    let isDarkMode: Bool
-    
-    func body(content: Content) -> some View {
-        if isDarkMode {
-            content
-                .colorInvert()
-                .hueRotation(.degrees(180))
-                .brightness(-0.2)  // 显著降低亮度
-                .contrast(1.4)     // 增加对比度以补偿亮度降低
-                .saturation(0.9)   // 稍微降低饱和度
-        } else {
-            content
         }
     }
 }

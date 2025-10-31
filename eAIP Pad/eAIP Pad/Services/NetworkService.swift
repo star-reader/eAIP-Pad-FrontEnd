@@ -214,14 +214,15 @@ struct SubscriptionStatusResponse: Codable {
 
 // MARK: - 试用期响应
 struct TrialStartResponse: Codable {
-    let message: String
-    let data: TrialData
+    let message: String?
+    let data: TrialData?
+    let status: String? // 有些接口可能直接返回 status
     
     struct TrialData: Codable {
-        let status: String // trial_started, trial_used, trial_expired
+        let status: String? // trial_started, trial_used, trial_expired
         let trialEndDate: String?
-        let daysLeft: Int
-        let message: String
+        let daysLeft: Int?
+        let message: String?
         
         enum CodingKeys: String, CodingKey {
             case status
@@ -563,12 +564,44 @@ class NetworkService: ObservableObject {
         let body = ["user_id": userId]
         let bodyData = try JSONEncoder().encode(body)
         
-        let response: TrialStartResponse = try await makeRequest(
-            endpoint: .trialStart,
-            method: .POST,
-            body: bodyData
-        )
-        return response
+        var request = URLRequest(url: APIEndpoint.trialStart.url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        request.httpBody = bodyData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse
+        }
+        
+        // 打印原始响应用于调试
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("📦 试用开始原始响应: \(jsonString)")
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw NetworkError.serverError(httpResponse.statusCode)
+        }
+        
+        // 尝试直接解析为 TrialStartResponse
+        do {
+            let response = try JSONDecoder().decode(TrialStartResponse.self, from: data)
+            return response
+        } catch {
+            print("❌ 直接解析失败，尝试从 APIResponse 中提取")
+            // 尝试从 APIResponse 包装中提取
+            let apiResponse = try JSONDecoder().decode(APIResponse<TrialStartResponse>.self, from: data)
+            guard let responseData = apiResponse.data else {
+                throw NetworkError.noData
+            }
+            return responseData
+        }
     }
     
     // MARK: - 航路图相关
