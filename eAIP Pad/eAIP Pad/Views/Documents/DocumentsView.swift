@@ -120,7 +120,7 @@ struct AIPDocumentsView: View {
                         // iPad 模式
                         Button {
                             print("📄 AIPDocumentsView - 点击文档: ID=\(document.id), Name=\(document.nameCn)")
-                            // 转换为 ChartResponse
+                            // 转换为 ChartResponse，使用 "AIP" 作为 chartType
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
                                 documentId: document.documentId,
@@ -128,7 +128,7 @@ struct AIPDocumentsView: View {
                                 icao: document.airportIcao,
                                 nameEn: document.name,
                                 nameCn: document.nameCn,
-                                chartType: document.category,
+                                chartType: "AIP",  // 统一使用 "AIP" 而不是 category
                                 pdfPath: document.pdfPath,
                                 htmlPath: document.htmlPath,
                                 htmlEnPath: document.htmlEnPath,
@@ -242,14 +242,41 @@ struct SUPDocumentsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(documents, id: \.id) { document in
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "sup_\(document.id)",
-                            displayName: document.localSubject,
-                            documentType: .sup
-                        )
-                    } label: {
-                        SUPDocumentRowView(document: document)
+                    if let binding = selectedChartBinding {
+                        // iPad 模式
+                        Button {
+                            print("📋 SUPDocumentsView - 点击文档: ID=\(document.id), Subject=\(document.localSubject)")
+                            // 创建简化的 ChartResponse
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: document.documentId,
+                                parentId: nil,
+                                icao: nil,
+                                nameEn: document.subject,
+                                nameCn: document.localSubject,
+                                chartType: "SUP",
+                                pdfPath: document.pdfPath,
+                                htmlPath: nil,
+                                htmlEnPath: nil,
+                                airacVersion: document.airacVersion,
+                                isModified: document.isModified ?? false,
+                                isOpened: nil
+                            )
+                        } label: {
+                            SUPDocumentRowView(document: document)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // iPhone 模式
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "sup_\(document.id)",
+                                displayName: document.localSubject,
+                                documentType: .sup
+                            )
+                        } label: {
+                            SUPDocumentRowView(document: document)
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -309,6 +336,7 @@ struct SUPDocumentsView: View {
 // MARK: - AMDT文档视图
 struct AMDTDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [AMDTDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -335,14 +363,41 @@ struct AMDTDocumentsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(documents, id: \.id) { document in
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "amdt_\(document.id)",
-                            displayName: document.localSubject,
-                            documentType: .amdt
-                        )
-                    } label: {
-                        AMDTDocumentRowView(document: document)
+                    if let binding = selectedChartBinding {
+                        // iPad 模式
+                        Button {
+                            print("📝 AMDTDocumentsView - 点击文档: ID=\(document.id), Subject=\(document.localSubject)")
+                            // 创建简化的 ChartResponse
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: "\(document.id)",
+                                parentId: nil,
+                                icao: nil,
+                                nameEn: document.subject,
+                                nameCn: document.localSubject,
+                                chartType: "AMDT",
+                                pdfPath: document.pdfPath,
+                                htmlPath: nil,
+                                htmlEnPath: nil,
+                                airacVersion: document.airacVersion,
+                                isModified: document.isModified ?? false,
+                                isOpened: nil
+                            )
+                        } label: {
+                            AMDTDocumentRowView(document: document)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // iPhone 模式
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "amdt_\(document.id)",
+                                displayName: document.localSubject,
+                                documentType: .amdt
+                            )
+                        } label: {
+                            AMDTDocumentRowView(document: document)
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -402,6 +457,7 @@ struct AMDTDocumentsView: View {
 // MARK: - NOTAM文档视图
 struct NOTAMDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [NOTAMDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -428,14 +484,41 @@ struct NOTAMDocumentsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(documents, id: \.id) { document in
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "notam_\(document.id)",
-                            displayName: "NOTAM \(document.seriesName)",
-                            documentType: .notam
-                        )
-                    } label: {
-                        NOTAMDocumentRowView(document: document)
+                    if let binding = selectedChartBinding {
+                        // iPad 模式
+                        Button {
+                            print("🔔 NOTAMDocumentsView - 点击文档: ID=\(document.id), Series=\(document.seriesName)")
+                            // 创建简化的 ChartResponse
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: "\(document.id)",
+                                parentId: nil,
+                                icao: nil,
+                                nameEn: "NOTAM \(document.seriesName)",
+                                nameCn: "NOTAM \(document.seriesName)",
+                                chartType: "NOTAM",
+                                pdfPath: nil,
+                                htmlPath: nil,
+                                htmlEnPath: nil,
+                                airacVersion: document.airacVersion,
+                                isModified: false,
+                                isOpened: nil
+                            )
+                        } label: {
+                            NOTAMDocumentRowView(document: document)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        // iPhone 模式
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "notam_\(document.id)",
+                                displayName: "NOTAM \(document.seriesName)",
+                                documentType: .notam
+                            )
+                        } label: {
+                            NOTAMDocumentRowView(document: document)
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)

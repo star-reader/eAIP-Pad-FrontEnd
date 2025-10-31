@@ -112,7 +112,7 @@ struct SidebarView: View {
     
     var body: some View {
         List(selection: $selectedItem) {
-            Section("主要功能") {
+            Section("") {
                 Label("机场", systemImage: "airplane.circle.fill")
                     .tag(SidebarItem.airports)
                 
@@ -184,19 +184,27 @@ struct DetailView: View {
     
     var body: some View {
         Group {
-            // 个人中心页面直接显示 ProfileView
+            // 个人中心页面不在右侧显示，留空
             if selectedItem == .profile {
-                ProfileView()
+                placeholderView
             } else if let chart = selectedChart {
                 // 显示选中的 PDF
                 let documentType: DocumentType = {
                     switch chart.chartType {
                     case "AD":
-                        return .ad
-                    case "ENROUTE", "AREA", "OTHERS":
-                        return .enroute
+                        return .ad  // AD 细则（来自 RegulationsView）
+                    case "AIP":
+                        return .aip  // AIP 文档
+                    case "ENROUTE", "AREA":
+                        return .enroute  // 航路图
+                    case "SUP":
+                        return .sup
+                    case "AMDT":
+                        return .amdt
+                    case "NOTAM":
+                        return .notam
                     default:
-                        return .chart
+                        return .chart  // 机场航图（SID、STAR、APP 等）
                     }
                 }()
                 

@@ -308,10 +308,26 @@ struct PDFReaderView: View {
             case .enroute:
                 let id = Int(actualID) ?? 0
                 signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: id)
-            case .ad, .aip, .sup, .amdt, .notam:
-                // AD、AIP、SUP、AMDT、NOTAM 都使用 documents API
+            case .ad:
+                // AD 细则使用 documents/ad API
                 let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: documentType.rawValue, id: id)
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: "ad", id: id)
+            case .aip:
+                // AIP 使用 documents/aip API
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: "aip", id: id)
+            case .sup:
+                // SUP 使用 documents/sup API
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: "sup", id: id)
+            case .amdt:
+                // AMDT 使用 documents/amdt API
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: "amdt", id: id)
+            case .notam:
+                // NOTAM 使用 documents/notam API
+                let id = Int(actualID) ?? 0
+                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(type: "notam", id: id)
             }
             
             // 构建完整URL - 将 /api/v1/ 替换为 /eaip/v1/
