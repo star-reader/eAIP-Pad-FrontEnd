@@ -19,8 +19,6 @@ struct DocumentsView: View {
                         AIPDocumentsView()
                     case .sup:
                         SUPDocumentsView()
-                    case .amdt:
-                        AMDTDocumentsView()
                     case .notam:
                         NOTAMDocumentsView()
                     }
@@ -532,14 +530,12 @@ struct AIPCategorySelector: View {
 enum DocumentCategory: String, CaseIterable {
     case aip = "aip"
     case sup = "sup"
-    case amdt = "amdt"
     case notam = "notam"
     
     var displayName: String {
         switch self {
         case .aip: return "AIP"
         case .sup: return "SUP"
-        case .amdt: return "AMDT"
         case .notam: return "NOTAM"
         }
     }
@@ -549,14 +545,12 @@ enum AIPCategory: String, CaseIterable {
     case all = "ALL"
     case gen = "GEN"
     case enr = "ENR"
-    case adOther = "AD_OTHER"
     
     var displayName: String {
         switch self {
         case .all: return "全部"
         case .gen: return "GEN"
         case .enr: return "ENR"
-        case .adOther: return "AD其他"
         }
     }
 }

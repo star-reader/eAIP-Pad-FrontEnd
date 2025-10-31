@@ -26,6 +26,7 @@ enum APIEndpoint {
     case enrouteChart(id: Int)
     case enrouteSignedURL(id: Int)
     case aipDocuments
+    case aipDocumentsByICAO(icao: String)
     case supDocuments
     case amdtDocuments
     case notamDocuments
@@ -68,6 +69,8 @@ enum APIEndpoint {
             return "/enroute/\(id)/signed-url"
         case .aipDocuments:
             return "/documents/aip"
+        case .aipDocumentsByICAO(let icao):
+            return "/documents/aip/ad/\(icao)"
         case .supDocuments:
             return "/documents/sup"
         case .amdtDocuments:
@@ -597,6 +600,12 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "category", value: category)]
         }
+        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
+        return response
+    }
+    
+    func getAIPDocumentsByICAO(icao: String) async throws -> [AIPDocumentResponse] {
+        let endpoint = APIEndpoint.aipDocumentsByICAO(icao: icao)
         let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
