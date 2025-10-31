@@ -108,11 +108,16 @@ class OnboardingCoordinator: ObservableObject {
                 
             case .expired, .inactive:
                 // 订阅过期或未订阅，都显示升级页面
+                // 无论是否为新用户，只要订阅状态为inactive就显示试用页面
                 currentState = .needsSubscription
             }
         } catch {
-            // 如果订阅检查失败，也允许用户进入应用（降级方案）
-            currentState = .completed
+            // 如果订阅检查失败，检查是否为inactive状态，如果是则显示订阅页面
+            if subscriptionService.subscriptionStatus == .inactive {
+                currentState = .needsSubscription
+            } else {
+                currentState = .completed
+            }
         }
         
         isLoading = false

@@ -132,11 +132,13 @@ struct PDFReaderView: View {
             // 根据文档类型获取签名URL
             let signedURLResponse: SignedURLResponse
             
-            // 从chartID中提取实际的ID
-            let actualID = Int(chartID.replacingOccurrences(of: "chart_", with: "")) ?? 0
-            
             switch documentType {
             case .chart:
+                let actualID = Int(chartID.replacingOccurrences(of: "chart_", with: "")) ?? 0
+                signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: actualID)
+            case .ad:
+                // AD细则使用Terminal目录，走chart的签名URL，但ID提取方式不同
+                let actualID = Int(chartID.replacingOccurrences(of: "ad_", with: "")) ?? 0
                 signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: actualID)
             case .enroute:
                 let actualID = Int(chartID.replacingOccurrences(of: "enroute_", with: "")) ?? 0

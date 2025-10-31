@@ -53,9 +53,15 @@ struct AirportDetailView: View {
                     AirportInfoCard(airport: airport)
                         .padding()
                     
-                    // 航图类型选择器
-                    ChartTypeSelector(selectedType: $selectedChartType)
-                        .padding(.horizontal)
+                    // 使用原生 Picker 作为分段控制器
+                    Picker("航图类型", selection: $selectedChartType) {
+                        ForEach(ChartType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
                     
                     // 航图列表
                     List {
@@ -81,8 +87,7 @@ struct AirportDetailView: View {
                 }
             }
         }
-        .navigationTitle(airport.icao)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -180,12 +185,6 @@ struct AirportInfoCard: View {
                 Spacer()
                 
                 VStack(spacing: 8) {
-                    if airport.hasTerminalCharts {
-                        Label("有航图", systemImage: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    }
-                    
                     // TODO: 添加 METAR 天气信息
                     Button("天气") {
                         // 获取 METAR 信息
@@ -200,38 +199,6 @@ struct AirportInfoCard: View {
     }
 }
 
-// MARK: - 航图类型选择器
-struct ChartTypeSelector: View {
-    @Binding var selectedType: ChartType
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(ChartType.allCases, id: \.self) { type in
-                    Button {
-                        selectedType = type
-                    } label: {
-                        Text(type.displayName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                selectedType == type ? .orange : .clear,
-                                in: Capsule()
-                            )
-                            .foregroundColor(selectedType == type ? .white : .primary)
-                            .overlay(
-                                Capsule()
-                                    .stroke(.orange, lineWidth: selectedType == type ? 0 : 1)
-                            )
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-}
 
 // MARK: - 航图行视图
 struct ChartRowView: View {
@@ -243,6 +210,10 @@ struct ChartRowView: View {
         pinnedCharts.contains { $0.chartID == "chart_\(chart.id)" }
     }
     
+    private var chartTypeColor: Color {
+        ChartType(rawValue: chart.chartType)?.color ?? .gray
+    }
+    
     var body: some View {
         NavigationLink {
             PDFReaderView(
@@ -251,50 +222,59 @@ struct ChartRowView: View {
                 documentType: .chart
             )
         } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(chart.nameCn)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(2)
+            HStack(spacing: 0) {
+                // 左侧颜色边框
+                Rectangle()
+                    .fill(chartTypeColor)
+                    .frame(width: 4)
+                
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(chart.nameCn)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(2)
+                            
+                            if chart.isModified {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                            }
+                        }
                         
-                        if chart.isModified {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(.orange)
-                                .font(.caption)
+                        Text(chart.nameEn)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        
+                        HStack {
+                            Text(chart.chartType)
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(chartTypeColor.opacity(0.2), in: Capsule())
+                                .foregroundColor(chartTypeColor)
+                            
+                            Text("AIRAC \(chart.airacVersion)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
                         }
                     }
+                    .padding(.leading, 12)
                     
-                    Text(chart.nameEn)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    Spacer()
                     
-                    HStack {
-                        Text(chart.chartType)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.orange.opacity(0.2), in: Capsule())
-                        
-                        Text("AIRAC \(chart.airacVersion)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
+                    Button {
+                        togglePin()
+                    } label: {
+                        Image(systemName: isPinned ? "pin.fill" : "pin")
+                            .foregroundColor(isPinned ? .orange : .secondary)
                     }
+                    .buttonStyle(.plain)
                 }
-                
-                Spacer()
-                
-                Button {
-                    togglePin()
-                } label: {
-                    Image(systemName: isPinned ? "pin.fill" : "pin")
-                        .foregroundColor(isPinned ? .orange : .secondary)
-                }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -340,6 +320,21 @@ enum ChartType: String, CaseIterable {
         case .apt: return "机场"
         case .others: return "其他"
         }
+    }
+    
+    var color: Color {
+        switch self {
+        case .all: return .gray
+        case .sid: return .blue
+        case .star: return .green
+        case .app: return .orange
+        case .apt: return .purple
+        case .others: return .brown
+        }
+    }
+    
+    var lightColor: Color {
+        return color.opacity(0.2)
     }
 }
 

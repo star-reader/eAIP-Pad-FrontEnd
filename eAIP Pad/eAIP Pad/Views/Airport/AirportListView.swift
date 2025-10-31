@@ -142,17 +142,9 @@ struct AirportRowView: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(airport.icao)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    if airport.hasTerminalCharts {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .font(.caption)
-                    }
-                }
+                Text(airport.icao)
+                    .font(.headline)
+                    .fontWeight(.semibold)
                 
                 Text(airport.nameCn)
                     .font(.subheadline)

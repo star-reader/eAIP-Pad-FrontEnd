@@ -70,18 +70,27 @@ struct PinCompactCard: View {
     let pin: PinnedChart
     @Environment(\.modelContext) private var modelContext
     
+    private var chartTypeColor: Color {
+        ChartType(rawValue: pin.type)?.color ?? .gray
+    }
+    
     var body: some View {
         VStack(spacing: 4) {
             // 文档类型图标
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(.orange.opacity(0.1))
+                    .fill(chartTypeColor.opacity(0.1))
                     .frame(width: 40, height: 40)
                 
                 Image(systemName: iconForDocumentType(pin.documentType))
-                    .foregroundColor(.orange)
+                    .foregroundColor(chartTypeColor)
                     .font(.title3)
             }
+            .overlay(
+                // 顶部颜色边框
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(chartTypeColor, lineWidth: 2)
+            )
             
             // 显示名称
             Text(pin.displayName)
@@ -302,47 +311,60 @@ struct PinboardGridView: View {
 struct PinListRow: View {
     let pin: PinnedChart
     
+    private var chartTypeColor: Color {
+        ChartType(rawValue: pin.type)?.color ?? .gray
+    }
+    
     var body: some View {
-        HStack {
-            // 文档类型图标
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.orange.opacity(0.1))
-                    .frame(width: 40, height: 40)
-                
-                Image(systemName: iconForDocumentType(pin.documentType))
-                    .foregroundColor(.orange)
-                    .font(.title3)
-            }
+        HStack(spacing: 0) {
+            // 左侧颜色边框
+            Rectangle()
+                .fill(chartTypeColor)
+                .frame(width: 4)
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(pin.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                
-                HStack {
-                    if !pin.icao.isEmpty {
-                        Text(pin.icao)
-                            .font(.caption)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.orange.opacity(0.2), in: Capsule())
-                    }
+            HStack {
+                // 文档类型图标
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(chartTypeColor.opacity(0.1))
+                        .frame(width: 40, height: 40)
                     
-                    Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text(pin.pinnedAt.formatted(.relative(presentation: .named)))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    Image(systemName: iconForDocumentType(pin.documentType))
+                        .foregroundColor(chartTypeColor)
+                        .font(.title3)
                 }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pin.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                    
+                    HStack {
+                        if !pin.icao.isEmpty {
+                            Text(pin.icao)
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(chartTypeColor.opacity(0.2), in: Capsule())
+                                .foregroundColor(chartTypeColor)
+                        }
+                        
+                        Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text(pin.pinnedAt.formatted(.relative(presentation: .named)))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
             }
-            
-            Spacer()
+            .padding(.leading, 12)
         }
         .padding(.vertical, 4)
     }
@@ -364,61 +386,73 @@ struct PinListRow: View {
 struct PinPreviewCard: View {
     let pin: PinnedChart
     
+    private var chartTypeColor: Color {
+        ChartType(rawValue: pin.type)?.color ?? .gray
+    }
+    
     var body: some View {
-        HStack {
-            // 缩略图区域
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.orange.opacity(0.1))
-                    .frame(width: 80, height: 100)
-                
-                if let thumbnailData = pin.thumbnailData,
-                   let uiImage = UIImage(data: thumbnailData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 80, height: 100)
-                        .clipped()
-                        .cornerRadius(12)
-                } else {
-                    Image(systemName: iconForDocumentType(pin.documentType))
-                        .foregroundColor(.orange)
-                        .font(.largeTitle)
-                }
-            }
+        HStack(spacing: 0) {
+            // 左侧颜色边框
+            Rectangle()
+                .fill(chartTypeColor)
+                .frame(width: 4)
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text(pin.displayName)
-                    .font(.headline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
+            HStack {
+                // 缩略图区域
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(chartTypeColor.opacity(0.1))
+                        .frame(width: 80, height: 100)
+                    
+                    if let thumbnailData = pin.thumbnailData,
+                       let uiImage = UIImage(data: thumbnailData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 80, height: 100)
+                            .clipped()
+                            .cornerRadius(12)
+                    } else {
+                        Image(systemName: iconForDocumentType(pin.documentType))
+                            .foregroundColor(chartTypeColor)
+                            .font(.largeTitle)
+                    }
+                }
                 
-                HStack {
-                    if !pin.icao.isEmpty {
-                        Text(pin.icao)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(pin.displayName)
+                        .font(.headline)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                    
+                    HStack {
+                        if !pin.icao.isEmpty {
+                            Text(pin.icao)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(chartTypeColor.opacity(0.2), in: Capsule())
+                                .foregroundColor(chartTypeColor)
+                        }
+                        
+                        Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
                             .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.orange.opacity(0.2), in: Capsule())
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
                     }
                     
-                    Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
-                        .font(.caption)
+                    Text("收藏于 \(pin.pinnedAt.formatted(.dateTime.month().day()))")
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                     
                     Spacer()
                 }
                 
-                Text("收藏于 \(pin.pinnedAt.formatted(.dateTime.month().day()))")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                
                 Spacer()
             }
-            
-            Spacer()
+            .padding()
         }
-        .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
     
@@ -439,47 +473,59 @@ struct PinPreviewCard: View {
 struct PinGridCard: View {
     let pin: PinnedChart
     
+    private var chartTypeColor: Color {
+        ChartType(rawValue: pin.type)?.color ?? .gray
+    }
+    
     var body: some View {
-        VStack(spacing: 12) {
-            // 缩略图区域
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.orange.opacity(0.1))
-                    .frame(height: 120)
-                
-                if let thumbnailData = pin.thumbnailData,
-                   let uiImage = UIImage(data: thumbnailData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 120)
-                        .clipped()
-                        .cornerRadius(12)
-                } else {
-                    Image(systemName: iconForDocumentType(pin.documentType))
-                        .foregroundColor(.orange)
-                        .font(.largeTitle)
-                }
-            }
+        VStack(spacing: 0) {
+            // 顶部颜色边框
+            Rectangle()
+                .fill(chartTypeColor)
+                .frame(height: 4)
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(pin.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                
-                if !pin.icao.isEmpty {
-                    Text(pin.icao)
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.orange.opacity(0.2), in: Capsule())
+            VStack(spacing: 12) {
+                // 缩略图区域
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(chartTypeColor.opacity(0.1))
+                        .frame(height: 120)
+                    
+                    if let thumbnailData = pin.thumbnailData,
+                       let uiImage = UIImage(data: thumbnailData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 120)
+                            .clipped()
+                            .cornerRadius(12)
+                    } else {
+                        Image(systemName: iconForDocumentType(pin.documentType))
+                            .foregroundColor(chartTypeColor)
+                            .font(.largeTitle)
+                    }
                 }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pin.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    
+                    if !pin.icao.isEmpty {
+                        Text(pin.icao)
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(chartTypeColor.opacity(0.2), in: Capsule())
+                            .foregroundColor(chartTypeColor)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
         }
-        .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
     

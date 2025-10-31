@@ -181,9 +181,9 @@ struct AirportRegulationsView: View {
                 List(regulations, id: \.id) { regulation in
                     NavigationLink {
                         PDFReaderView(
-                            chartID: "aip_\(regulation.id)",
+                            chartID: "ad_\(regulation.id)",
                             displayName: regulation.nameCn,
-                            documentType: .aip
+                            documentType: .ad
                         )
                     } label: {
                         RegulationDocumentRowView(regulation: regulation)
