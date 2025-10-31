@@ -10,6 +10,7 @@ struct RegulationNavigation: Identifiable, Hashable {
 
 // MARK: - 细则视图（AD细则）
 struct RegulationsView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var searchText = ""
     @State private var isLoading = false
     @State private var airports: [AirportResponse] = []
@@ -120,7 +121,34 @@ struct RegulationsView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Regulations", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedAirports = PDFCacheService.shared.loadCachedData(
+                [AirportResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.airports
+            ) {
+                await MainActor.run {
+                    self.airports = cachedAirports
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAirports()
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.airports
+            )
+            
             await MainActor.run {
                 self.airports = response
             }
@@ -211,6 +239,7 @@ struct AirportRegulationRowView: View {
 
 // MARK: - 机场细则详情视图
 struct AirportRegulationsView: View {
+    @Environment(\.modelContext) private var modelContext
     let airport: AirportResponse
     @State private var regulations: [AIPDocumentResponse] = []
     @State private var isLoading = false
@@ -270,7 +299,36 @@ struct AirportRegulationsView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Regulations", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 使用机场 ICAO 作为缓存键
+            let cacheKey = "ad_\(airport.icao)"
+            
+            // 1. 先尝试从缓存加载
+            if let cachedRegulations = PDFCacheService.shared.loadCachedData(
+                [AIPDocumentResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: cacheKey
+            ) {
+                await MainActor.run {
+                    self.regulations = cachedRegulations
+                }
+                isLoading = false
+                return
+            }
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAIPDocumentsByICAO(icao: airport.icao)
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: cacheKey
+            )
+            
             await MainActor.run {
                 self.regulations = response
             }

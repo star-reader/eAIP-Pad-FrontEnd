@@ -138,8 +138,39 @@ struct AIPDocumentsView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
             let category = selectedCategory == .all ? nil : selectedCategory.rawValue
+            let cacheKey = category != nil ? "aip_\(category!)" : PDFCacheService.DataType.aipDocuments
+            
+            // 1. 先尝试从缓存加载
+            if let cachedDocuments = PDFCacheService.shared.loadCachedData(
+                [AIPDocumentResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: cacheKey
+            ) {
+                await MainActor.run {
+                    self.documents = cachedDocuments
+                }
+                isLoading = false
+                return
+            }
+            
+            print("⬇️ 从网络下载 AIP 文档列表")
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAIPDocuments(category: category)
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: cacheKey
+            )
+            
             await MainActor.run {
                 self.documents = response
             }
@@ -205,7 +236,34 @@ struct SUPDocumentsView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedDocuments = PDFCacheService.shared.loadCachedData(
+                [SUPDocumentResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.supDocuments
+            ) {
+                await MainActor.run {
+                    self.documents = cachedDocuments
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getSUPDocuments()
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.supDocuments
+            )
+            
             await MainActor.run {
                 self.documents = response
             }
@@ -271,7 +329,34 @@ struct AMDTDocumentsView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedDocuments = PDFCacheService.shared.loadCachedData(
+                [AMDTDocumentResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.amdtDocuments
+            ) {
+                await MainActor.run {
+                    self.documents = cachedDocuments
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAMDTDocuments()
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.amdtDocuments
+            )
+            
             await MainActor.run {
                 self.documents = response
             }
@@ -337,7 +422,34 @@ struct NOTAMDocumentsView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedDocuments = PDFCacheService.shared.loadCachedData(
+                [NOTAMDocumentResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.notamDocuments
+            ) {
+                await MainActor.run {
+                    self.documents = cachedDocuments
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getNOTAMDocuments()
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.notamDocuments
+            )
+            
             await MainActor.run {
                 self.documents = response
             }

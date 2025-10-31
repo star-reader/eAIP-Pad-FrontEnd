@@ -270,7 +270,6 @@ struct PDFReaderView: View {
                 documentType: documentType.rawValue,
                 id: actualID
             ) {
-                print("✅ 从缓存加载 PDF: \(documentType.rawValue)_\(actualID)")
                 await MainActor.run {
                     self.pdfDocument = cachedDocument
                     self.totalPages = cachedDocument.pageCount
@@ -278,8 +277,6 @@ struct PDFReaderView: View {
                 isLoading = false
                 return
             }
-            
-            print("⬇️ 从网络下载 PDF: \(documentType.rawValue)_\(actualID)")
             
             // 2. 缓存未命中，从网络下载
             // 根据文档类型获取签名URL
@@ -624,15 +621,15 @@ struct PDFThumbnailView: View {
     
     // 使用固定列数，让每个缩略图有足够空间显示完整比例
     private let columns = [
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16),
-        GridItem(.flexible(), spacing: 16)
+        GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20),
+        GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20),
+        GridItem(.flexible(minimum: 100, maximum: 200), spacing: 20)
     ]
     
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 24) {
+                LazyVGrid(columns: columns, spacing: 28) {
                     ForEach(0..<document.pageCount, id: \.self) { pageIndex in
                         if let page = document.page(at: pageIndex) {
                             Button {

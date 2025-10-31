@@ -95,8 +95,34 @@ struct EnrouteView: View {
         errorMessage = nil
         
         do {
-            // 加载所有航路图，前端进行过滤
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "Enroute", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedCharts = PDFCacheService.shared.loadCachedData(
+                [ChartResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.enrouteCharts
+            ) {
+                await MainActor.run {
+                    self.enrouteCharts = cachedCharts
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getEnrouteCharts(type: nil)
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.enrouteCharts
+            )
+            
             await MainActor.run {
                 self.enrouteCharts = response
             }

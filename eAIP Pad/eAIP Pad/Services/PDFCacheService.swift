@@ -7,9 +7,24 @@ class PDFCacheService {
     static let shared = PDFCacheService()
     
     private let fileManager = FileManager.default
+    
+    // PDF 缓存目录
     private var cacheDirectory: URL {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         let cachePath = documentsPath.appendingPathComponent("PDFCache")
+        
+        // 确保缓存目录存在
+        if !fileManager.fileExists(atPath: cachePath.path) {
+            try? fileManager.createDirectory(at: cachePath, withIntermediateDirectories: true)
+        }
+        
+        return cachePath
+    }
+    
+    // 数据缓存目录（用于缓存机场列表、航路图列表等 JSON 数据）
+    private var dataCacheDirectory: URL {
+        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let cachePath = documentsPath.appendingPathComponent("DataCache")
         
         // 确保缓存目录存在
         if !fileManager.fileExists(atPath: cachePath.path) {
@@ -59,7 +74,6 @@ class PDFCacheService {
     func saveToCache(pdfData: Data, airacVersion: String, documentType: String, id: String) throws {
         let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
         try pdfData.write(to: filePath)
-        print("✅ PDF 已缓存: \(documentType)_\(id) (AIRAC: \(airacVersion))")
     }
     
     // MARK: - 获取当前 AIRAC 版本
@@ -88,7 +102,6 @@ class PDFCacheService {
         
         do {
             try fileManager.removeItem(at: versionDirectory)
-            print("✅ 已清理 AIRAC \(version) 的缓存")
         } catch {
             print("清理缓存失败: \(error)")
         }
@@ -113,7 +126,7 @@ class PDFCacheService {
                 // 如果不是当前版本，则删除
                 if versionName != currentVersion {
                     try fileManager.removeItem(at: versionDir)
-                    print("✅ 已清理旧版本缓存: \(versionName)")
+                    print("已清理旧版本缓存: \(versionName)")
                 }
             }
         } catch {
@@ -129,7 +142,6 @@ class PDFCacheService {
                 try fileManager.removeItem(at: cacheDirectory)
                 // 重新创建缓存目录
                 try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-                print("✅ 已清理所有 PDF 缓存")
             }
         } catch {
             print("清理所有缓存失败: \(error)")
@@ -217,6 +229,120 @@ class PDFCacheService {
         }
         
         return statistics
+    }
+    
+    // MARK: - 数据缓存（机场列表、航路图列表等）
+    
+    /// 生成数据缓存文件路径
+    private func dataCacheFilePath(airacVersion: String, dataType: String) -> URL {
+        let versionDirectory = dataCacheDirectory.appendingPathComponent(airacVersion)
+        
+        // 确保 AIRAC 版本目录存在
+        if !fileManager.fileExists(atPath: versionDirectory.path) {
+            try? fileManager.createDirectory(at: versionDirectory, withIntermediateDirectories: true)
+        }
+        
+        let fileName = "\(dataType).json"
+        return versionDirectory.appendingPathComponent(fileName)
+    }
+    
+    /// 缓存 Codable 数据（如机场列表、航路图列表）
+    func cacheData<T: Codable>(_ data: T, airacVersion: String, dataType: String) throws {
+        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let jsonData = try encoder.encode(data)
+        try jsonData.write(to: filePath)
+    }
+    
+    /// 从缓存加载 Codable 数据
+    func loadCachedData<T: Codable>(_ type: T.Type, airacVersion: String, dataType: String) -> T? {
+        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
+        
+        guard fileManager.fileExists(atPath: filePath.path) else {
+            return nil
+        }
+        
+        do {
+            let jsonData = try Data(contentsOf: filePath)
+            let decoder = JSONDecoder()
+            return try decoder.decode(type, from: jsonData)
+        } catch {
+            print("加载缓存数据失败: \(error)")
+            return nil
+        }
+    }
+    
+    /// 检查数据缓存是否存在
+    func isDataCached(airacVersion: String, dataType: String) -> Bool {
+        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
+        return fileManager.fileExists(atPath: filePath.path)
+    }
+    
+    /// 清理数据缓存
+    func clearDataCache() {
+        do {
+            if fileManager.fileExists(atPath: dataCacheDirectory.path) {
+                try fileManager.removeItem(at: dataCacheDirectory)
+                // 重新创建缓存目录
+            }
+        } catch {
+            print("清理数据缓存失败: \(error)")
+        }
+    }
+    
+    /// 清理指定版本的数据缓存
+    func clearDataCacheForVersion(_ version: String) {
+        let versionDirectory = dataCacheDirectory.appendingPathComponent(version)
+        
+        guard fileManager.fileExists(atPath: versionDirectory.path) else {
+            return
+        }
+        
+        do {
+            try fileManager.removeItem(at: versionDirectory)
+            print("已清理 AIRAC \(version) 的数据缓存")
+        } catch {
+            print("清理数据缓存失败: \(error)")
+        }
+    }
+    
+    /// 清理旧版本数据缓存
+    func clearOldVersionDataCaches(modelContext: ModelContext) {
+        guard let currentVersion = getCurrentAIRACVersion(modelContext: modelContext) else {
+            return
+        }
+        
+        do {
+            let cacheContents = try fileManager.contentsOfDirectory(
+                at: dataCacheDirectory,
+                includingPropertiesForKeys: nil
+            )
+            
+            for versionDir in cacheContents where versionDir.hasDirectoryPath {
+                let versionName = versionDir.lastPathComponent
+                
+                // 如果不是当前版本，则删除
+                if versionName != currentVersion {
+                    try fileManager.removeItem(at: versionDir)
+                    print("已清理旧版本数据缓存: \(versionName)")
+                }
+            }
+        } catch {
+            print("清理旧版本数据缓存失败: \(error)")
+        }
+    }
+}
+
+// MARK: - 数据类型枚举
+extension PDFCacheService {
+    enum DataType {
+        static let airports = "airports"           // 机场列表
+        static let enrouteCharts = "enroute"      // 航路图列表
+        static let aipDocuments = "aip"           // AIP 文档列表
+        static let supDocuments = "sup"           // SUP 文档列表
+        static let amdtDocuments = "amdt"         // AMDT 文档列表
+        static let notamDocuments = "notam"       // NOTAM 文档列表
     }
 }
 

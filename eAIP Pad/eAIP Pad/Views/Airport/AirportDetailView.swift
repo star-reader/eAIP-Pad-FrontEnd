@@ -13,10 +13,13 @@ struct AirportDetailView: View {
     
     // 过滤后的航图列表
     private var filteredCharts: [ChartResponse] {
+        // 过滤掉 OTHERS 类型
+        let nonOthersCharts = charts.filter { $0.chartType != "OTHERS" }
+        
         if selectedChartType == .all {
-            return charts
+            return nonOthersCharts
         } else {
-            return charts.filter { $0.chartType == selectedChartType.rawValue }
+            return nonOthersCharts.filter { $0.chartType == selectedChartType.rawValue }
         }
     }
     
@@ -115,7 +118,38 @@ struct AirportDetailView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "AirportDetail", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 使用机场 ICAO 作为缓存键
+            let cacheKey = "charts_\(airport.icao)"
+            
+            // 1. 先尝试从缓存加载
+            if let cachedCharts = PDFCacheService.shared.loadCachedData(
+                [ChartResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: cacheKey
+            ) {
+                await MainActor.run {
+                    self.charts = cachedCharts
+                    syncChartsToLocal(cachedCharts)
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAirportCharts(icao: airport.icao)
+            
+            // 3. 保存到缓存
+            try? PDFCacheService.shared.cacheData(
+                response,
+                airacVersion: currentAIRAC,
+                dataType: cacheKey
+            )
+            
             await MainActor.run {
                 self.charts = response
                 
@@ -175,9 +209,13 @@ struct AirportInfoCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text(airport.icao)
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
+                        // Text(airport.icao)
+                        //     .font(.largeTitle)
+                        //     .fontWeight(.bold)
+
+                        Text(airport.nameCn)
+                        .font(.headline)
+                        .foregroundColor(.primary)
                         
                         // 更新提示 - 橙色小圆点
                         if airport.isModified == true {
@@ -186,10 +224,6 @@ struct AirportInfoCard: View {
                                 .frame(width: 8, height: 8)
                         }
                     }
-                    
-                    Text(airport.nameCn)
-                        .font(.headline)
-                        .foregroundColor(.primary)
                     
                     Text(airport.nameEn)
                         .font(.subheadline)

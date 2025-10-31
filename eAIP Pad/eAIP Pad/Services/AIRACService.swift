@@ -65,9 +65,10 @@ class AIRACService: ObservableObject {
                 updateProgress = 1.0
                 updateMessage = "更新完成"
                 
-                // 清理旧版本数据和 PDF 缓存
+                // 清理旧版本数据和缓存
                 await cleanupOldVersions(modelContext: modelContext)
                 PDFCacheService.shared.clearOldVersionCaches(modelContext: modelContext)
+                PDFCacheService.shared.clearOldVersionDataCaches(modelContext: modelContext)
             } else {
                 updateProgress = 1.0
                 updateMessage = "已是最新版本"
@@ -316,9 +317,10 @@ class AIRACService: ObservableObject {
             
             try modelContext.save()
             
-            // 清理文件缓存和 PDF 缓存
+            // 清理文件缓存、PDF 缓存和数据缓存
             await clearFileCache()
             PDFCacheService.shared.clearAllCache()
+            PDFCacheService.shared.clearDataCache()
             
             updateMessage = "缓存清理完成"
             

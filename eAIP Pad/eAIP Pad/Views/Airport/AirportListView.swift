@@ -85,7 +85,37 @@ struct AirportListView: View {
         errorMessage = nil
         
         do {
+            // 获取当前 AIRAC 版本
+            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "AirportList", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            }
+            
+            // 1. 先尝试从缓存加载
+            if let cachedAirports = PDFCacheService.shared.loadCachedData(
+                [AirportResponse].self,
+                airacVersion: currentAIRAC,
+                dataType: PDFCacheService.DataType.airports
+            ) {
+                await MainActor.run {
+                    self.airports = cachedAirports
+                    syncAirportsToLocal(cachedAirports)
+                }
+                isLoading = false
+                return
+            }
+            
+            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAirports(search: searchText.isEmpty ? nil : searchText)
+            
+            // 3. 保存到缓存（只有非搜索状态才缓存完整列表）
+            if searchText.isEmpty {
+                try? PDFCacheService.shared.cacheData(
+                    response,
+                    airacVersion: currentAIRAC,
+                    dataType: PDFCacheService.DataType.airports
+                )
+            }
+            
             await MainActor.run {
                 self.airports = response
                 
