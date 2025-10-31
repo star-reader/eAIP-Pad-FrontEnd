@@ -149,11 +149,11 @@ struct AirportRowView: View {
                         .font(.headline)
                         .fontWeight(.semibold)
                     
-                    // 更新提示图标
+                    // 更新提示 - 橙色小圆点
                     if airport.isModified == true {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.caption)
-                            .foregroundColor(.orange)
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 6, height: 6)
                     }
                 }
                 

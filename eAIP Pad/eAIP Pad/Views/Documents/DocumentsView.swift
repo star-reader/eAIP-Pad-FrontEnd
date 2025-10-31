@@ -71,9 +71,29 @@ struct AIPDocumentsView: View {
     
     var body: some View {
         VStack {
-            // AIP分类选择器
-            AIPCategorySelector(selectedCategory: $selectedCategory)
-                .padding(.horizontal)
+            // AIP 分类选择器 - HStack 按钮样式
+            HStack(spacing: 12) {
+                ForEach(AIPCategory.allCases, id: \.self) { category in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedCategory = category
+                        }
+                    } label: {
+                        Text(category.displayName)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedCategory == category ? .white : .blue)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                selectedCategory == category ? Color.blue : Color.blue.opacity(0.1),
+                                in: Capsule()
+                            )
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
             
             if isLoading {
                 ProgressView("加载AIP文档...")
@@ -483,39 +503,6 @@ struct NOTAMDocumentRowView: View {
                 .foregroundColor(.secondary)
         }
         .padding(.vertical, 4)
-    }
-}
-
-// MARK: - AIP分类选择器
-struct AIPCategorySelector: View {
-    @Binding var selectedCategory: AIPCategory
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(AIPCategory.allCases, id: \.self) { category in
-                    Button {
-                        selectedCategory = category
-                    } label: {
-                        Text(category.displayName)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                selectedCategory == category ? .blue : .clear,
-                                in: Capsule()
-                            )
-                            .foregroundColor(selectedCategory == category ? .white : .primary)
-                            .overlay(
-                                Capsule()
-                                    .stroke(.blue, lineWidth: selectedCategory == category ? 0 : 1)
-                            )
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
     }
 }
 

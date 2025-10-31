@@ -179,11 +179,11 @@ struct AirportInfoCard: View {
                             .font(.largeTitle)
                             .fontWeight(.bold)
                         
-                        // 更新提示图标
+                        // 更新提示 - 橙色小圆点
                         if airport.isModified == true {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.title3)
-                                .foregroundColor(.orange)
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 8, height: 8)
                         }
                     }
                     
@@ -244,16 +244,17 @@ struct ChartRowView: View {
                 
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+                        HStack(spacing: 6) {
                             Text(chart.nameCn)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .lineLimit(2)
                             
+                            // 更新提示 - 橙色小圆点
                             if chart.isModified {
-                                Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
+                                Circle()
+                                    .fill(.orange)
+                                    .frame(width: 6, height: 6)
                             }
                         }
                         
