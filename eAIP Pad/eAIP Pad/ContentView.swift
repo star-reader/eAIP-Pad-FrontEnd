@@ -30,11 +30,19 @@ struct ContentView: View {
     
     var body: some View {
         OnboardingFlow()
-            .preferredColorScheme(currentSettings.isDarkMode ? .dark : .light)
+            .preferredColorScheme(colorScheme)
             .tint(.primaryBlue) // 设置全局主题色为蓝色
             .onAppear {
                 initializeApp()
             }
+    }
+    
+    private var colorScheme: ColorScheme? {
+        if currentSettings.followSystemAppearance {
+            return nil // 跟随系统
+        } else {
+            return currentSettings.isDarkMode ? .dark : .light
+        }
     }
     
     private func initializeApp() {

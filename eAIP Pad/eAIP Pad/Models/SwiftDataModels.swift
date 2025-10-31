@@ -65,6 +65,7 @@ final class AIRACVersion {
 final class UserSettings {
     @Attribute(.unique) var id: String = "singleton"
     var isDarkMode: Bool = true
+    var followSystemAppearance: Bool = false // 是否跟随系统外观
     var pinboardStyle: String = "compact" // compact, preview, grid
     var lastSyncDate: Date?
     var isFirstLaunch: Bool = true

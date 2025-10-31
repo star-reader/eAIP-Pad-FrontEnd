@@ -309,21 +309,45 @@ struct SettingsView: View {
                 // 外观设置
                 Section("外观") {
                     HStack {
-                        Image(systemName: "moon.fill")
-                            .foregroundColor(.indigo)
+                        Image(systemName: "gear")
+                            .foregroundColor(.blue)
                             .frame(width: 24)
                         
-                        Text("深色模式")
+                        Text("跟随系统外观")
                         
                         Spacer()
                         
                         Toggle("", isOn: Binding(
-                            get: { currentSettings.isDarkMode },
+                            get: { currentSettings.followSystemAppearance },
                             set: { newValue in
-                                currentSettings.isDarkMode = newValue
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    currentSettings.followSystemAppearance = newValue
+                                }
                                 try? modelContext.save()
                             }
                         ))
+                    }
+                    
+                    if !currentSettings.followSystemAppearance {
+                        HStack {
+                            Image(systemName: "moon.fill")
+                                .foregroundColor(.indigo)
+                                .frame(width: 24)
+                            
+                            Text("深色模式")
+                            
+                            Spacer()
+                            
+                            Toggle("", isOn: Binding(
+                                get: { currentSettings.isDarkMode },
+                                set: { newValue in
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        currentSettings.isDarkMode = newValue
+                                    }
+                                    try? modelContext.save()
+                                }
+                            ))
+                        }
                     }
                     
                     HStack {

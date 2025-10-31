@@ -2,6 +2,10 @@ import SwiftUI
 import SwiftData
 import PDFKit
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 // MARK: - PDF 阅读器视图
 struct PDFReaderView: View {
     let chartID: String
@@ -33,6 +37,19 @@ struct PDFReaderView: View {
         annotations.filter { $0.chartID == chartID && $0.documentType == documentType.rawValue }
     }
     
+    private var shouldUseDarkMode: Bool {
+        if currentSettings.followSystemAppearance {
+            // 跟随系统时，检查当前的颜色方案
+            #if canImport(UIKit)
+            return UITraitCollection.current.userInterfaceStyle == .dark
+            #else
+            return false
+            #endif
+        } else {
+            return currentSettings.isDarkMode
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -55,16 +72,19 @@ struct PDFReaderView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let pdfDocument = pdfDocument {
-                    PDFViewRepresentable(
-                        document: pdfDocument,
-                        annotations: chartAnnotations,
-                        currentPage: $currentPage,
-                        totalPages: $totalPages,
-                        isDarkMode: currentSettings.isDarkMode,
-                        onAnnotationAdded: { annotation in
-                            saveAnnotation(annotation)
-                        }
-                    )
+                    ZStack {
+                        PDFViewRepresentable(
+                            document: pdfDocument,
+                            annotations: chartAnnotations,
+                            currentPage: $currentPage,
+                            totalPages: $totalPages,
+                            isDarkMode: shouldUseDarkMode,
+                            onAnnotationAdded: { annotation in
+                                saveAnnotation(annotation)
+                            }
+                        )
+                        .applyDarkModeFilter(shouldUseDarkMode)
+                    }
                     .ignoresSafeArea(.all, edges: .bottom)
                 } else {
                     Text("无法加载PDF")
@@ -87,11 +107,11 @@ struct PDFReaderView: View {
             .navigationTitle(displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarLeading) {
-                    Button("关闭") {
-                        dismiss()
-                    }
-                }
+                // ToolbarItemGroup(placement: .navigationBarLeading) {
+                //     Button("关闭") {
+                //         dismiss()
+                //     }
+                // }
                 
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     // 收藏按钮
@@ -340,6 +360,30 @@ enum AnnotationTool: CaseIterable {
         case .pen: return "画笔"
         case .highlighter: return "荧光笔"
         case .eraser: return "橡皮擦"
+        }
+    }
+}
+
+// MARK: - 夜间模式滤镜扩展
+extension View {
+    func applyDarkModeFilter(_ isDarkMode: Bool) -> some View {
+        self.modifier(DarkModeFilterModifier(isDarkMode: isDarkMode))
+    }
+}
+
+struct DarkModeFilterModifier: ViewModifier {
+    let isDarkMode: Bool
+    
+    func body(content: Content) -> some View {
+        if isDarkMode {
+            content
+                .colorInvert()
+                .hueRotation(.degrees(180))
+                .brightness(-0.2)  // 显著降低亮度
+                .contrast(1.4)     // 增加对比度以补偿亮度降低
+                .saturation(0.9)   // 稍微降低饱和度
+        } else {
+            content
         }
     }
 }

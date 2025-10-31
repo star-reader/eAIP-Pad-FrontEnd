@@ -365,8 +365,18 @@ struct MainAppView: View {
                 MainSidebarView()
             }
         }
-        .preferredColorScheme(currentSettings.isDarkMode ? .dark : .light)
+        .preferredColorScheme(colorScheme)
         .tint(.primaryBlue)
+        .animation(.easeInOut(duration: 0.3), value: currentSettings.isDarkMode)
+        .animation(.easeInOut(duration: 0.3), value: currentSettings.followSystemAppearance)
+    }
+    
+    private var colorScheme: ColorScheme? {
+        if currentSettings.followSystemAppearance {
+            return nil // 跟随系统
+        } else {
+            return currentSettings.isDarkMode ? .dark : .light
+        }
     }
 }
 
