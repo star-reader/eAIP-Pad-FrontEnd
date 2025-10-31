@@ -11,6 +11,7 @@ struct RegulationNavigation: Identifiable, Hashable {
 // MARK: - 细则视图（AD细则）
 struct RegulationsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var searchText = ""
     @State private var isLoading = false
     @State private var airports: [AirportResponse] = []
@@ -170,11 +171,30 @@ struct RegulationsView: View {
             
             await MainActor.run {
                 if let firstRegulation = regulations.first {
-                    // 打开第一个细则
-                    selectedRegulation = RegulationNavigation(
-                        chartID: "ad_\(firstRegulation.id)",
-                        displayName: "\(airport.icao) - \(firstRegulation.nameCn)"
-                    )
+                    if let binding = selectedChartBinding {
+                        // iPad 模式：设置选中的航图
+                        binding.wrappedValue = ChartResponse(
+                            id: firstRegulation.id,
+                            documentId: firstRegulation.documentId,
+                            parentId: firstRegulation.parentId,
+                            icao: firstRegulation.airportIcao,
+                            nameEn: firstRegulation.name,
+                            nameCn: firstRegulation.nameCn,
+                            chartType: "AD",
+                            pdfPath: firstRegulation.pdfPath,
+                            htmlPath: firstRegulation.htmlPath,
+                            htmlEnPath: firstRegulation.htmlEnPath,
+                            airacVersion: firstRegulation.airacVersion,
+                            isModified: firstRegulation.isModified ?? false,
+                            isOpened: firstRegulation.isOpened
+                        )
+                    } else {
+                        // iPhone 模式：使用 navigationDestination
+                        selectedRegulation = RegulationNavigation(
+                            chartID: "ad_\(firstRegulation.id)",
+                            displayName: "\(airport.icao) - \(firstRegulation.nameCn)"
+                        )
+                    }
                 } else {
                     // 没有细则，显示错误
                     errorMessage = "\(airport.icao) 暂无AD细则"

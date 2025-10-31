@@ -4,6 +4,7 @@ import SwiftData
 // MARK: - 航路图视图
 struct EnrouteView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var enrouteCharts: [ChartResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -62,14 +63,26 @@ struct EnrouteView: View {
                             )
                         } else {
                             List(filteredCharts, id: \.id) { chart in
-                                NavigationLink {
-                                    PDFReaderView(
-                                        chartID: "enroute_\(chart.id)",
-                                        displayName: chart.nameCn,
-                                        documentType: .enroute
-                                    )
-                                } label: {
-                                    EnrouteChartRowView(chart: chart)
+                                if let binding = selectedChartBinding {
+                                    // iPad 模式
+                                    Button {
+                                        print("🟢 EnrouteView - 点击航路图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
+                                        binding.wrappedValue = chart
+                                    } label: {
+                                        EnrouteChartRowView(chart: chart)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    // iPhone 模式
+                                    NavigationLink {
+                                        PDFReaderView(
+                                            chartID: "enroute_\(chart.id)",
+                                            displayName: chart.nameCn,
+                                            documentType: .enroute
+                                        )
+                                    } label: {
+                                        EnrouteChartRowView(chart: chart)
+                                    }
                                 }
                             }
                             .listStyle(.insetGrouped)

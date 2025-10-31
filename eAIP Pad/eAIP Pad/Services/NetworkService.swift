@@ -133,13 +133,15 @@ struct AuthResponse: Codable {
 }
 
 // MARK: - 机场响应
-struct AirportResponse: Codable {
+struct AirportResponse: Codable, Hashable, Identifiable {
     let icao: String
     let nameEn: String
     let nameCn: String
     let hasTerminalCharts: Bool
     let createdAt: String
     let isModified: Bool?
+    
+    var id: String { icao }  // 使用 ICAO 作为唯一标识
     
     enum CodingKeys: String, CodingKey {
         case icao
@@ -149,10 +151,18 @@ struct AirportResponse: Codable {
         case createdAt = "created_at"
         case isModified = "is_modified"
     }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(icao)
+    }
+    
+    static func == (lhs: AirportResponse, rhs: AirportResponse) -> Bool {
+        return lhs.icao == rhs.icao
+    }
 }
 
 // MARK: - 航图响应
-struct ChartResponse: Codable {
+struct ChartResponse: Codable, Hashable, Identifiable {
     let id: Int
     let documentId: String
     let parentId: String?
@@ -181,6 +191,14 @@ struct ChartResponse: Codable {
         case airacVersion = "airac_version"
         case isModified = "is_modified"
         case isOpened = "is_opened"
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: ChartResponse, rhs: ChartResponse) -> Bool {
+        return lhs.id == rhs.id
     }
 }
 

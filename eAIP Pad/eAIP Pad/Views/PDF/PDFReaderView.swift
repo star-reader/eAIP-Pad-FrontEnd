@@ -230,8 +230,15 @@ struct PDFReaderView: View {
         errorMessage = nil
         
         do {
-            // 提取实际的 ID
-            let actualID = chartID.replacingOccurrences(of: "\(documentType.rawValue)_", with: "")
+            // 提取实际的 ID - 从 chartID 中提取最后一个下划线后的数字
+            let actualID: String
+            if let lastUnderscoreIndex = chartID.lastIndex(of: "_") {
+                actualID = String(chartID[chartID.index(after: lastUnderscoreIndex)...])
+            } else {
+                actualID = chartID
+            }
+            
+            print("🔍 PDFReaderView - chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)")
             
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
             var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)

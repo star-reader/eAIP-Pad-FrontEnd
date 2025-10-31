@@ -254,6 +254,7 @@ struct AirportInfoCard: View {
 struct ChartRowView: View {
     let chart: ChartResponse
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     @Query private var pinnedCharts: [PinnedChart]
     
     private var isPinned: Bool {
@@ -265,13 +266,33 @@ struct ChartRowView: View {
     }
     
     var body: some View {
-        NavigationLink {
-            PDFReaderView(
-                chartID: "chart_\(chart.id)",
-                displayName: chart.nameCn,
-                documentType: .chart
-            )
-        } label: {
+        Group {
+            if let binding = selectedChartBinding {
+                // iPad 侧边栏模式：点击设置环境中的 selectedChart
+                Button {
+                    print("🔵 ChartRowView - 点击航图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
+                    binding.wrappedValue = chart
+                } label: {
+                    chartRowContent
+                }
+                .buttonStyle(.plain)
+            } else {
+                // iPhone 模式：使用 NavigationLink
+                NavigationLink {
+                    PDFReaderView(
+                        chartID: "chart_\(chart.id)",
+                        displayName: chart.nameCn,
+                        documentType: .chart
+                    )
+                } label: {
+                    chartRowContent
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var chartRowContent: some View {
             HStack(spacing: 0) {
                 // 左侧颜色边框
                 Rectangle()
@@ -327,7 +348,6 @@ struct ChartRowView: View {
                     .buttonStyle(.plain)
                 }
             }
-        }
     }
     
     private func togglePin() {

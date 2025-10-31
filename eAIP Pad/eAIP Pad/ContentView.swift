@@ -64,6 +64,20 @@ struct ContentView: View {
         isCheckingAIRAC = true
         
         do {
+            // 等待认证完成（最多等待 3 秒）
+            var waitCount = 0
+            while AuthenticationService.shared.authenticationState != .authenticated && waitCount < 30 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                waitCount += 1
+            }
+            
+            // 如果还未认证，则跳过 AIRAC 检查
+            guard AuthenticationService.shared.authenticationState == .authenticated else {
+                print("⚠️ 用户未认证，跳过 AIRAC 检查")
+                isCheckingAIRAC = false
+                return
+            }
+            
             print("🔄 检查 AIRAC 版本...")
             
             // 从 API 获取最新 AIRAC 版本

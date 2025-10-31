@@ -5,6 +5,7 @@ import Foundation
 // MARK: - 机场列表视图
 struct AirportListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.selectedAirportBinding) private var selectedAirportBinding
     @Query private var localAirports: [Airport]
     @State private var searchText = ""
     @State private var airports: [AirportResponse] = []
@@ -47,10 +48,21 @@ struct AirportListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(filteredAirports, id: \.icao) { airport in
-                        NavigationLink {
-                            AirportDetailView(airport: airport)
-                        } label: {
-                            AirportRowView(airport: airport)
+                        if let binding = selectedAirportBinding {
+                            // iPad 模式：点击设置选中的机场
+                            Button {
+                                binding.wrappedValue = airport
+                            } label: {
+                                AirportRowView(airport: airport)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            // iPhone 模式：使用 NavigationLink
+                            NavigationLink {
+                                AirportDetailView(airport: airport)
+                            } label: {
+                                AirportRowView(airport: airport)
+                            }
                         }
                     }
                     .searchable(text: $searchText, prompt: "搜索机场 ICAO 或名称")
