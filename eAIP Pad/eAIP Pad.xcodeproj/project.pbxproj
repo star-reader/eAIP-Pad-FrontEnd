@@ -6,7 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D509BFD62EB609FC002DF107 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D523D7F42EB37EC600D977E3 /* StoreKit.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		D509BFD72EB6189E002DF107 /* eAIP Pad.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "eAIP Pad.storekit"; sourceTree = "<group>"; };
 		D523D7F32EB37EC600D977E3 /* StoreKitTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKitTest.framework; path = Platforms/iPhoneOS.platform/Developer/Library/Frameworks/StoreKitTest.framework; sourceTree = DEVELOPER_DIR; };
 		D523D7F42EB37EC600D977E3 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		D5DBE0DC2EB33A8C0074D54A /* eAIP Pad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "eAIP Pad.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -25,6 +30,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D509BFD62EB609FC002DF107 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -43,6 +49,7 @@
 		D5DBE0D32EB33A8C0074D54A = {
 			isa = PBXGroup;
 			children = (
+				D509BFD72EB6189E002DF107 /* eAIP Pad.storekit */,
 				D5DBE0DE2EB33A8C0074D54A /* eAIP Pad */,
 				D523D7F22EB37EC500D977E3 /* Frameworks */,
 				D5DBE0DD2EB33A8C0074D54A /* Products */,

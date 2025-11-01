@@ -39,6 +39,7 @@ enum APIEndpoint {
     case saveAnnotation(type: String, id: Int)
     case deleteAnnotation(type: String, id: Int, page: Int)
     case verifyIAP
+    case verifySubscription  // 新增：验证订阅交易
     case subscriptionStatus
     case trialStart
     case currentAIRAC
@@ -95,6 +96,8 @@ enum APIEndpoint {
             return "/annotations/\(type)/\(id)/\(page)"
         case .verifyIAP:
             return "/iap/verify"
+        case .verifySubscription:
+            return "/subscription/verify"
         case .subscriptionStatus:
             return "/subscription/status"
         case .trialStart:
@@ -215,6 +218,25 @@ struct SignedURLResponse: Codable {
     }
 }
 
+// MARK: - 订阅验证请求
+struct SubscriptionVerificationRequest: Codable {
+    let transactionId: String
+    let originalTransactionId: String
+    let productId: String
+    let purchaseDate: String
+    let expiresDate: String?
+    let environment: String  // "Production" 或 "Sandbox"
+    
+    enum CodingKeys: String, CodingKey {
+        case transactionId = "transaction_id"
+        case originalTransactionId = "original_transaction_id"
+        case productId = "product_id"
+        case purchaseDate = "purchase_date"
+        case expiresDate = "expires_date"
+        case environment
+    }
+}
+
 // MARK: - 订阅状态响应
 struct SubscriptionStatusResponse: Codable {
     let status: String
@@ -222,6 +244,8 @@ struct SubscriptionStatusResponse: Codable {
     let trialEnd: String?
     let subscriptionEnd: String?
     let daysLeft: Int?
+    let autoRenew: Bool?
+    let productId: String?
     
     enum CodingKeys: String, CodingKey {
         case status
@@ -229,6 +253,8 @@ struct SubscriptionStatusResponse: Codable {
         case trialEnd = "trial_end"
         case subscriptionEnd = "subscription_end"
         case daysLeft = "days_left"
+        case autoRenew = "auto_renew"
+        case productId = "product_id"
     }
 }
 
@@ -567,6 +593,17 @@ class NetworkService: ObservableObject {
         return response
     }
     
+    func verifySubscription(request: SubscriptionVerificationRequest) async throws -> SubscriptionStatusResponse {
+        let bodyData = try JSONEncoder().encode(request)
+        
+        let response: SubscriptionStatusResponse = try await makeRequest(
+            endpoint: .verifySubscription,
+            method: .POST,
+            body: bodyData
+        )
+        return response
+    }
+    
     func verifyIAP(receipt: String) async throws -> SubscriptionStatusResponse {
         let body = ["receipt": receipt]
         let bodyData = try JSONEncoder().encode(body)
@@ -580,10 +617,7 @@ class NetworkService: ObservableObject {
     }
     
     // MARK: - 试用期开始
-    func startTrial(userId: String) async throws -> TrialStartResponse {
-        let body = ["user_id": userId]
-        let bodyData = try JSONEncoder().encode(body)
-        
+    func startTrial() async throws -> TrialStartResponse {
         var request = URLRequest(url: APIEndpoint.trialStart.url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -592,7 +626,8 @@ class NetworkService: ObservableObject {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        request.httpBody = bodyData
+        // 根据后端文档，此接口不需要请求体，用户信息从 JWT token 中获取
+        request.httpBody = nil
         
         let (data, response) = try await URLSession.shared.data(for: request)
         

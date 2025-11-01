@@ -180,7 +180,7 @@ class OnboardingCoordinator: ObservableObject {
             }
             
 
-            let response = try await NetworkService.shared.startTrial(userId: userId)
+            let response = try await NetworkService.shared.startTrial()
             
             // 安全地解包可选值
             guard let data = response.data, let status = data.status else {

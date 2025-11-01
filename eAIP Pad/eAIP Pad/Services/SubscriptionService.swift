@@ -28,11 +28,12 @@ enum AppSubscriptionStatus: String, CaseIterable {
 }
 
 // MARK: - 订阅服务
+@MainActor
 class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
     
-    // 产品ID
-    private let monthlyProductID = "com.eaip.pad.monthly"
+    // 产品ID - 修正为正确的订阅ID
+    private let monthlyProductID = "com.usagijin.eaip.monthly"
     
     // 订阅状态
     @Published var subscriptionStatus: AppSubscriptionStatus = .inactive
@@ -46,6 +47,43 @@ class SubscriptionService: ObservableObject {
     @Published var availableProducts: [Product] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    
+    // StoreKit 2 订阅状态
+    @Published var currentSubscription: Product.SubscriptionInfo.Status?
+    
+    // 计算属性
+    var hasValidSubscription: Bool {
+        return subscriptionStatus.isValid || isTrialActive
+    }
+    
+    var subscriptionDescription: String {
+        if isTrialActive {
+            if daysLeft > 0 {
+                return "试用期 - 剩余 \(daysLeft) 天"
+            } else {
+                return "试用期"
+            }
+        } else {
+            switch subscriptionStatus {
+            case .active:
+                if daysLeft > 0 {
+                    return "已订阅 - 剩余 \(daysLeft) 天"
+                } else {
+                    return "已订阅"
+                }
+            case .trial:
+                if daysLeft > 0 {
+                    return "试用期 - 剩余 \(daysLeft) 天"
+                } else {
+                    return "试用期"
+                }
+            case .expired:
+                return "订阅已过期"
+            case .inactive:
+                return "未订阅"
+            }
+        }
+    }
     
     private var updateListenerTask: Task<Void, Error>?
     
@@ -65,39 +103,70 @@ class SubscriptionService: ObservableObject {
     
     // MARK: - 加载产品
     func loadProducts() async {
+        print("🔄 开始加载产品: \(monthlyProductID)")
         do {
             let products = try await Product.products(for: [monthlyProductID])
-            await MainActor.run {
-                self.availableProducts = products
-                self.monthlyProduct = products.first
+            self.availableProducts = products
+            self.monthlyProduct = products.first
+            
+            if let product = products.first {
+                print("✅ 成功加载产品: \(product.displayName) - \(product.displayPrice)")
+                print("   产品ID: \(product.id)")
+                print("   产品类型: \(product.type)")
+                self.errorMessage = nil // 清除之前的错误
+            } else {
+                print("⚠️ 未找到产品: \(monthlyProductID)")
+                print("   返回的产品列表为空")
+                self.errorMessage = "未找到订阅产品，请检查App Store配置"
             }
         } catch {
-            await MainActor.run {
-                self.errorMessage = "加载产品失败: \(error.localizedDescription)"
+            print("❌ 加载产品失败: \(error.localizedDescription)")
+            print("   错误详情: \(error)")
+            if let storeKitError = error as? StoreKitError {
+                print("   StoreKit错误: \(storeKitError)")
             }
+            self.errorMessage = "加载产品失败: \(error.localizedDescription)"
         }
     }
     
     // MARK: - 购买月度订阅
     func purchaseMonthlySubscription() async -> Bool {
-        guard let product = monthlyProduct else {
-            await MainActor.run {
-                self.errorMessage = "产品不可用"
+        // 如果产品未加载，先尝试加载
+        if monthlyProduct == nil {
+            print("⚠️ 产品未加载，尝试重新加载...")
+            await loadProducts()
+            
+            // 再次检查产品是否已加载
+            guard monthlyProduct != nil else {
+                let errorMsg = self.errorMessage ?? "产品不可用，请稍后重试"
+                self.errorMessage = errorMsg
+                print("❌ 产品加载失败: \(errorMsg)")
+                return false
             }
+            
+            print("✅ 产品加载成功，继续购买流程")
+        }
+        
+        guard let product = monthlyProduct else {
+            self.errorMessage = "产品不可用，请稍后重试"
             return false
         }
         
-        await MainActor.run {
-            self.isLoading = true
-            self.errorMessage = nil
-        }
+        self.isLoading = true
+        self.errorMessage = nil
         
         do {
+            // 购买产品
             let result = try await product.purchase()
             
             switch result {
             case .success(let verification):
+                // 验证交易
                 let transaction = try checkVerified(verification)
+                print("✅ 购买成功: \(transaction.productID)")
+                
+                // 将收据发送到后端验证（如果后端需要）
+                await syncPurchaseWithBackend(transaction: transaction)
                 
                 // 完成交易
                 await transaction.finish()
@@ -105,190 +174,317 @@ class SubscriptionService: ObservableObject {
                 // 更新订阅状态
                 await updateSubscriptionStatus()
                 
-                await MainActor.run {
-                    self.isLoading = false
-                }
+                self.isLoading = false
                 return true
                 
             case .userCancelled:
-                await MainActor.run {
-                    self.errorMessage = "已取消"
-                    self.isLoading = false
-                }
+                print("ℹ️ 用户取消购买")
+                self.errorMessage = "已取消购买"
+                self.isLoading = false
                 return false
                 
             case .pending:
-                await MainActor.run {
-                    self.errorMessage = "购买正在处理中，请稍候"
-                    self.isLoading = false
-                }
+                print("⏳ 购买待处理（需要家长同意）")
+                self.errorMessage = "购买正在等待批准，请稍候"
+                self.isLoading = false
                 return false
                 
             @unknown default:
-                await MainActor.run {
-                    self.isLoading = false
-                }
+                print("⚠️ 未知的购买结果")
+                self.isLoading = false
                 return false
             }
+        } catch StoreKitError.userCancelled {
+            print("ℹ️ 用户取消购买")
+            self.errorMessage = "已取消购买"
+            self.isLoading = false
+            return false
         } catch {
-            await MainActor.run {
-                // 提供更友好的错误信息
-                if error.localizedDescription.contains("cancelled") || error.localizedDescription.contains("cancel") {
-                    self.errorMessage = "已取消"
-                } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
-                    self.errorMessage = "网络连接失败，请检查网络后重试"
-                } else if error.localizedDescription.contains("No active account") {
-                    self.errorMessage = "请先在设置中登录Apple ID"
-                } else {
-                    self.errorMessage = "发生错误，请稍后重试"
-                }
-                self.isLoading = false
+            print("❌ 购买失败: \(error.localizedDescription)")
+            
+            // 提供更友好的错误信息
+            if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
+                self.errorMessage = "网络连接失败，请检查网络后重试"
+            } else if error.localizedDescription.contains("No active account") || error.localizedDescription.contains("not signed in") {
+                self.errorMessage = "请先在设置中登录 Apple ID"
+            } else {
+                self.errorMessage = "购买失败，请稍后重试"
             }
+            self.isLoading = false
             return false
         }
     }
     
     // MARK: - 恢复购买
     func restorePurchases() async {
-        await MainActor.run {
-            self.isLoading = true
-            self.errorMessage = nil
-        }
+        self.isLoading = true
+        self.errorMessage = nil
         
         do {
+            // StoreKit 2: 同步购买记录
             try await AppStore.sync()
-            await updateSubscriptionStatus()
-        } catch {
-            await MainActor.run {
-                // 提供更友好的错误信息
-                if error.localizedDescription.contains("No active account") {
-                    self.errorMessage = "请先在设置中登录Apple ID"
-                } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
-                    self.errorMessage = "网络连接失败，请检查网络后重试"
-                } else {
-                    self.errorMessage = "未找到可恢复的购买记录"
-                }
-            }
-        }
-        
-        await MainActor.run {
-            self.isLoading = false
-        }
-    }
-    
-    // MARK: - 开始试用
-    func startTrial() async -> Bool {
-        await MainActor.run {
-            self.isLoading = true
-            self.errorMessage = nil
-        }
-        
-        do {
-            // 确保用户已登录
-            guard AuthenticationService.shared.currentUser != nil else {
-                await MainActor.run {
-                    self.errorMessage = "用户未登录"
-                    self.isLoading = false
-                }
-                return false
-            }
-            
-            // 调用后端开始试用（使用空字符串作为 userId，后端会从 token 中提取）
-            let response = try await NetworkService.shared.startTrial(userId: "")
-            print("✅ 试用开始成功: \(response)")
+            print("✅ 购买记录已同步")
             
             // 更新订阅状态
             await updateSubscriptionStatus()
             
-            await MainActor.run {
-                self.isLoading = false
+            // 检查是否有活跃订阅
+            if subscriptionStatus.isValid {
+                self.errorMessage = nil
+            } else {
+                self.errorMessage = "未找到可恢复的订阅"
             }
-            
-            return true
-        } catch let error as DecodingError {
-            print("❌ JSON 解析错误: \(error)")
-            switch error {
-            case .keyNotFound(let key, let context):
-                print("缺少键: \(key.stringValue), context: \(context)")
-            case .typeMismatch(let type, let context):
-                print("类型不匹配: \(type), context: \(context)")
-            case .valueNotFound(let type, let context):
-                print("值未找到: \(type), context: \(context)")
-            case .dataCorrupted(let context):
-                print("数据损坏: \(context)")
-            @unknown default:
-                print("未知解析错误")
-            }
-            
-            // 即使解析失败，也更新订阅状态（因为后端可能已经成功）
-            await updateSubscriptionStatus()
-            
-            await MainActor.run {
-                self.isLoading = false
-            }
-            
-            // 如果后端已经成功，返回 true
-            if subscriptionStatus == .trial {
-                return true
-            }
-            
-            await MainActor.run {
-                self.errorMessage = "响应格式错误，但试用可能已开启，请刷新查看"
-            }
-            return false
         } catch {
-            print("❌ 开启试用失败: \(error)")
-            await MainActor.run {
-                if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
-                    self.errorMessage = "网络连接失败，请检查网络后重试"
-                } else {
-                    self.errorMessage = "开启试用失败: \(error.localizedDescription)"
-                }
-                self.isLoading = false
+            print("❌ 恢复购买失败: \(error.localizedDescription)")
+            
+            if error.localizedDescription.contains("No active account") || error.localizedDescription.contains("not signed in") {
+                self.errorMessage = "请先在设置中登录 Apple ID"
+            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("Network") {
+                self.errorMessage = "网络连接失败，请检查网络后重试"
+            } else {
+                self.errorMessage = "未找到可恢复的购买记录"
             }
+        }
+        
+        self.isLoading = false
+    }
+    
+    // MARK: - 开始试用（后端）
+    func startTrial() async -> Bool {
+        self.isLoading = true
+        self.errorMessage = nil
+        
+        do {
+            // 确保用户已登录
+            guard AuthenticationService.shared.currentUser != nil else {
+                self.errorMessage = "用户未登录"
+                self.isLoading = false
+                return false
+            }
+            
+            // 调用后端开始试用
+            let response = try await NetworkService.shared.startTrial()
+            print("✅ 试用开始成功: \(response)")
+            
+            // 更新本地订阅状态
+            await updateSubscriptionStatusFromBackend()
+            
+            self.isLoading = false
+            return true
+        } catch {
+            print("❌ 开始试用失败: \(error)")
+            
+            if let decodingError = error as? DecodingError {
+                switch decodingError {
+                case .keyNotFound(let key, let context):
+                    print("❌ 缺少键: \(key.stringValue), 上下文: \(context.debugDescription)")
+                    self.errorMessage = "服务器响应格式错误"
+                case .typeMismatch(let type, let context):
+                    print("❌ 类型不匹配: \(type), 上下文: \(context.debugDescription)")
+                    self.errorMessage = "服务器响应格式错误"
+                case .valueNotFound(let type, let context):
+                    print("❌ 值未找到: \(type), 上下文: \(context.debugDescription)")
+                    self.errorMessage = "服务器响应格式错误"
+                case .dataCorrupted(let context):
+                    print("❌ 数据损坏: \(context.debugDescription)")
+                    self.errorMessage = "服务器响应数据损坏"
+                @unknown default:
+                    self.errorMessage = "未知的解析错误"
+                }
+            } else {
+                self.errorMessage = "开始试用失败: \(error.localizedDescription)"
+            }
+            
+            self.isLoading = false
             return false
         }
     }
     
     // MARK: - 更新订阅状态
-    @MainActor
     func updateSubscriptionStatus() async {
-        print("🔄 开始更新订阅状态...")
+        // 1. 首先检查 StoreKit 的订阅状态
+        await checkStoreKitSubscription()
         
-        // 首先从后端获取最新状态（包括试用期状态）
-        await fetchSubscriptionStatusFromBackend()
-        
-        // 如果后端显示没有订阅，再检查本地 StoreKit 交易
-        if subscriptionStatus == .inactive {
-            print("📱 后端显示未订阅，检查本地 StoreKit 交易...")
-            
-            for await result in Transaction.currentEntitlements {
-                do {
-                    let transaction = try checkVerified(result)
-                    
-                    if transaction.productID == monthlyProductID {
-                        print("✅ 发现本地活跃订阅")
-                        subscriptionStatus = .active
-                        return
-                    }
-                } catch {
-                    print("⚠️ 验证交易失败: \(error)")
-                }
-            }
+        // 2. 然后从后端同步状态
+        await updateSubscriptionStatusFromBackend()
+    }
+    
+    // MARK: - 检查 StoreKit 订阅状态
+    private func checkStoreKitSubscription() async {
+        guard let product = monthlyProduct else {
+            print("⚠️ 产品未加载")
+            return
         }
         
-        print("📊 最终订阅状态: \(subscriptionStatus)")
+        do {
+            // 获取当前订阅状态
+            let statuses = try await product.subscription?.status ?? []
+            
+            // 查找活跃的订阅
+            for status in statuses {
+                switch status.state {
+                case .subscribed:
+                    print("✅ 订阅活跃")
+                    let transaction = try checkVerified(status.transaction)
+                    
+                    // 获取续费信息
+                    if let _ = try? checkVerified(status.renewalInfo) {
+                        self.currentSubscription = status
+                        
+                        // 计算到期日期
+                        if let expirationDate = transaction.expirationDate {
+                            self.subscriptionEndDate = expirationDate
+                            let calendar = Calendar.current
+                            let components = calendar.dateComponents([.day], from: Date(), to: expirationDate)
+                            self.daysLeft = max(0, components.day ?? 0)
+                        }
+                        
+                        // 如果后端状态不是 active，同步到后端
+                        if self.subscriptionStatus != .active {
+                            await syncPurchaseWithBackend(transaction: transaction)
+                        }
+                    }
+                    return
+                    
+                case .expired, .revoked:
+                    print("ℹ️ 订阅已过期或被撤销")
+                    self.currentSubscription = nil
+                    
+                case .inBillingRetryPeriod:
+                    print("⚠️ 订阅在账单重试期")
+                    // 仍然允许访问
+                    self.currentSubscription = status
+                    
+                case .inGracePeriod:
+                    print("ℹ️ 订阅在宽限期")
+                    // 仍然允许访问
+                    self.currentSubscription = status
+                    
+                default:
+                    print("⚠️ 未知订阅状态")
+                }
+            }
+        } catch {
+            print("❌ 检查订阅状态失败: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - 从后端更新订阅状态
+    private func updateSubscriptionStatusFromBackend() async {
+        do {
+            let response = try await NetworkService.shared.getSubscriptionStatus()
+            
+            // 解析订阅状态
+            if let status = AppSubscriptionStatus(rawValue: response.status) {
+                self.subscriptionStatus = status
+            }
+            
+            // 解析试用状态
+            self.isTrialActive = response.isTrial
+            
+            // 解析到期时间
+            if let subscriptionEndString = response.subscriptionEnd {
+                let dateFormatter = ISO8601DateFormatter()
+                if let endDate = dateFormatter.date(from: subscriptionEndString) {
+                    self.subscriptionEndDate = endDate
+                    
+                    let calendar = Calendar.current
+                    let components = calendar.dateComponents([.day], from: Date(), to: endDate)
+                    self.daysLeft = max(0, components.day ?? 0)
+                }
+            }
+            
+            // 如果后端返回了剩余天数，直接使用
+            if let daysLeftFromServer = response.daysLeft {
+                self.daysLeft = daysLeftFromServer
+            }
+            
+            print("✅ 后端订阅状态: \(subscriptionStatus.rawValue), 试用: \(isTrialActive), 剩余天数: \(daysLeft)")
+        } catch {
+            print("❌ 从后端更新订阅状态失败: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - 将购买同步到后端
+    private func syncPurchaseWithBackend(transaction: AppStoreTransaction) async {
+        do {
+            print("🔄 同步购买到后端: \(transaction.productID)")
+            
+            // 获取环境信息（Production 或 Sandbox）
+            let environment: String
+            #if DEBUG
+            environment = "Sandbox"
+            #else
+            environment = "Production"
+            #endif
+            
+            // 格式化日期为 ISO 8601（不带小数秒，匹配后端格式）
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = [.withInternetDateTime]
+            
+            let purchaseDate = dateFormatter.string(from: transaction.purchaseDate)
+            let expiresDate = transaction.expirationDate.map { dateFormatter.string(from: $0) }
+            
+            // 获取 originalTransactionId（用于订阅，通常是第一次购买的交易ID）
+            // StoreKit 2 中，originalID 是 UInt64 类型，如果是首次购买，originalID 和 id 相同
+            let originalTransactionId = String(transaction.originalID)
+            
+            // 构造验证请求
+            let verificationRequest = SubscriptionVerificationRequest(
+                transactionId: String(transaction.id),
+                originalTransactionId: originalTransactionId,
+                productId: transaction.productID,
+                purchaseDate: purchaseDate,
+                expiresDate: expiresDate,
+                environment: environment
+            )
+            
+            // 调用后端验证接口
+            let response = try await NetworkService.shared.verifySubscription(request: verificationRequest)
+            print("✅ 订阅验证成功: status=\(response.status), daysLeft=\(response.daysLeft ?? 0)")
+            
+            // 更新本地状态
+            if let status = AppSubscriptionStatus(rawValue: response.status) {
+                self.subscriptionStatus = status
+            }
+            self.isTrialActive = response.isTrial
+            
+            // 更新到期日期
+            if let subscriptionEndString = response.subscriptionEnd {
+                let dateFormatter = ISO8601DateFormatter()
+                if let endDate = dateFormatter.date(from: subscriptionEndString) {
+                    self.subscriptionEndDate = endDate
+                    
+                    let calendar = Calendar.current
+                    let components = calendar.dateComponents([.day], from: Date(), to: endDate)
+                    self.daysLeft = max(0, components.day ?? 0)
+                }
+            }
+            
+            // 如果后端返回了剩余天数，直接使用
+            if let daysLeftFromServer = response.daysLeft {
+                self.daysLeft = daysLeftFromServer
+            }
+            
+        } catch {
+            print("❌ 同步购买到后端失败: \(error.localizedDescription)")
+            // 即使验证失败，也尝试从后端获取最新状态
+            await updateSubscriptionStatusFromBackend()
+        }
     }
     
     // MARK: - 监听交易更新
     private func listenForTransactions() -> Task<Void, Error> {
-        return Task.detached {
-            for await result in Transaction.updates {
+        return Task.detached { [weak self] in
+            guard let self = self else { return }
+            // 监听交易更新
+            for await result in StoreKit.Transaction.updates {
                 do {
-                    let transaction = try await self.checkVerified(result)
+                    let transaction = try self.verifyTransaction(result)
+                    print("🔔 收到交易更新: \(transaction.productID)")
                     
-                    // 验证收据
-                    await self.verifyReceiptWithBackend(transaction)
+                    // 同步到后端
+                    await self.syncPurchaseWithBackend(transaction: transaction)
                     
                     // 更新订阅状态
                     await self.updateSubscriptionStatus()
@@ -296,117 +492,43 @@ class SubscriptionService: ObservableObject {
                     // 完成交易
                     await transaction.finish()
                 } catch {
-                    print("处理交易更新失败: \(error)")
+                    print("❌ 处理交易更新失败: \(error.localizedDescription)")
                 }
             }
         }
     }
     
     // MARK: - 验证交易
+    @MainActor
     private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
-        case .unverified:
-            throw StoreError.failedVerification
-        case .verified(let safe):
-            return safe
+        case .unverified(_, let error):
+            print("❌ 交易未验证: \(error)")
+            throw error
+        case .verified(let verifiedTransaction):
+            return verifiedTransaction
         }
     }
     
-    // MARK: - 后端收据验证
-    private func verifyReceiptWithBackend(_ transaction: StoreKit.Transaction) async {
-        // TODO: 实现后端收据验证
-        print("验证收据: \(transaction.productID)")
+    // 非 MainActor 版本的验证方法
+    nonisolated private func verifyTransaction<T>(_ result: VerificationResult<T>) throws -> T {
+        switch result {
+        case .unverified(_, let error):
+            print("❌ 交易未验证: \(error)")
+            throw error
+        case .verified(let verifiedTransaction):
+            return verifiedTransaction
+        }
     }
     
-    // MARK: - 从后端获取订阅状态
-    private func fetchSubscriptionStatusFromBackend() async {
-        do {
-            let response = try await NetworkService.shared.getSubscriptionStatus()
-            
-            print("🌐 后端订阅状态响应: status=\(response.status), isTrial=\(response.isTrial), daysLeft=\(response.daysLeft ?? 0)")
-            
-            await MainActor.run {
-                // 根据后端响应设置状态
-                if response.isTrial || response.status == "trial" || response.status == "trial_started" {
-                    self.subscriptionStatus = .trial
-                } else {
-                    self.subscriptionStatus = AppSubscriptionStatus(rawValue: response.status) ?? .inactive
-                }
-                
-                self.isTrialActive = response.isTrial
-                self.daysLeft = response.daysLeft ?? 0
-                
-                print("📱 设置本地状态: subscriptionStatus=\(self.subscriptionStatus), isTrialActive=\(self.isTrialActive)")
-                
-                // 解析日期
-                if let trialEndString = response.trialEnd {
-                    self.trialEndDate = ISO8601DateFormatter().date(from: trialEndString)
-                }
-                
-                if let subscriptionEndString = response.subscriptionEnd {
-                    self.subscriptionEndDate = ISO8601DateFormatter().date(from: subscriptionEndString)
-                }
+    // MARK: - 管理订阅（跳转到系统设置）
+    func manageSubscription() async {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            do {
+                try await AppStore.showManageSubscriptions(in: windowScene)
+            } catch {
+                print("❌ 打开订阅管理失败: \(error.localizedDescription)")
             }
-        } catch {
-            print("⚠️ 获取后端订阅状态失败: \(error.localizedDescription)")
-            await MainActor.run {
-                self.subscriptionStatus = .inactive
-            }
-        }
-    }
-    
-    // MARK: - 格式化价格
-    func formattedPrice(for product: Product) -> String {
-        return product.displayPrice
-    }
-    
-    // MARK: - 订阅状态检查
-    var hasValidSubscription: Bool {
-        return subscriptionStatus.isValid
-    }
-    
-    // MARK: - 获取收据数据
-    func getReceiptData() async -> Data? {
-        do {
-            let verificationResult = try await AppTransaction.shared
-            let appTransaction = try checkVerified(verificationResult)
-            return Data(appTransaction.originalAppVersion.utf8)
-        } catch {
-            print("获取收据数据失败: \(error)")
-            return nil
-        }
-    }
-    
-    // MARK: - 订阅描述
-    var subscriptionDescription: String {
-        switch subscriptionStatus {
-        case .trial:
-            return "试用期 - 剩余 \(daysLeft) 天"
-        case .active:
-            if let subscriptionEndDate = subscriptionEndDate {
-                return "订阅至 \(subscriptionEndDate.formatted(.dateTime.month().day()))"
-            } else {
-                return "已订阅"
-            }
-        case .expired:
-            return "订阅已过期"
-        case .inactive:
-            return "未订阅"
-        }
-    }
-}
-
-// MARK: - StoreKit 错误
-enum StoreError: Error {
-    case failedVerification
-    case unknownError
-    
-    var localizedDescription: String {
-        switch self {
-        case .failedVerification:
-            return "交易验证失败"
-        case .unknownError:
-            return "未知错误"
         }
     }
 }
