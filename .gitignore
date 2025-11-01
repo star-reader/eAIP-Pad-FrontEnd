@@ -62,6 +62,3 @@ fastlane/screenshots/**/*.png
 fastlane/test_output
 
 .cursor
-
-*.storekit
-*.xcodeproj
