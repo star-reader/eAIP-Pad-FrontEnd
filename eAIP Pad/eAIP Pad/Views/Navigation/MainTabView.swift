@@ -43,12 +43,14 @@ struct MainTabView: View {
                     .tag(3)
                 
                 // 个人中心
-                ProfileView()
-                    .tabItem {
-                        Image(systemName: "person.circle.fill")
-                        Text("个人")
-                    }
-                    .tag(4)
+                NavigationStack {
+                    ProfileView()
+                }
+                .tabItem {
+                    Image(systemName: "person.circle.fill")
+                    Text("个人")
+                }
+                .tag(4)
             }
             .tint(.primaryBlue) // 蓝色主题
             .tabBarMinimizeBehavior(.onScrollDown)
@@ -87,12 +89,14 @@ struct MainTabView: View {
                     .tag(3)
                 
                 // 个人中心
-                ProfileView()
-                    .tabItem {
-                        Image(systemName: "person.circle.fill")
-                        Text("个人")
-                    }
-                    .tag(4)
+                NavigationStack {
+                    ProfileView()
+                }
+                .tabItem {
+                    Image(systemName: "person.circle.fill")
+                    Text("个人")
+                }
+                .tag(4)
             }
             .tint(.primaryBlue) // 蓝色主题
         }

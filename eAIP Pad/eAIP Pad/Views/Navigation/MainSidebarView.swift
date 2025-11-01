@@ -10,6 +10,10 @@ private struct SelectedAirportKey: EnvironmentKey {
     static let defaultValue: Binding<AirportResponse?>? = nil
 }
 
+private struct ColumnVisibilityKey: EnvironmentKey {
+    static let defaultValue: Binding<NavigationSplitViewVisibility>? = nil
+}
+
 extension EnvironmentValues {
     var selectedChartBinding: Binding<ChartResponse?>? {
         get { self[SelectedChartKey.self] }
@@ -19,6 +23,11 @@ extension EnvironmentValues {
     var selectedAirportBinding: Binding<AirportResponse?>? {
         get { self[SelectedAirportKey.self] }
         set { self[SelectedAirportKey.self] = newValue }
+    }
+    
+    var columnVisibilityBinding: Binding<NavigationSplitViewVisibility>? {
+        get { self[ColumnVisibilityKey.self] }
+        set { self[ColumnVisibilityKey.self] = newValue }
     }
 }
 
@@ -44,6 +53,7 @@ struct MainSidebarView: View {
                 .environment(\.selectedChartBinding, $selectedChart)
                 .environment(\.selectedAirportBinding, $selectedAirport)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 450)
+                .id(item.rawValue)  // 强制在切换页面时重新创建视图
                 .onChange(of: item) { oldValue, newValue in
                     // 切换页面时清空选中的航图和机场
                     if oldValue != newValue {
@@ -68,6 +78,7 @@ struct MainSidebarView: View {
                 selectedItem: selectedSidebarItem,
                 selectedChart: selectedChart
             )
+            .environment(\.columnVisibilityBinding, $columnVisibility)
             .id(selectedChart?.id ?? -1)  // 强制根据 selectedChart 重新创建视图
         }
         .navigationSplitViewStyle(.balanced)
@@ -171,6 +182,7 @@ struct ContentListView: View {
             case .documents:
                 DocumentsView()
             case .profile:
+                // 个人中心使用 sheet 显示设置，不需要 NavigationStack
                 ProfileView()
             }
         }

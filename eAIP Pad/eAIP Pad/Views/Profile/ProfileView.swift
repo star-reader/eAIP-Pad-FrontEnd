@@ -22,10 +22,9 @@ struct ProfileView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            List {
-                // 订阅状态卡片
-                Section {
+        List {
+            // 订阅状态卡片
+            Section {
                     SubscriptionStatusCard(
                         subscriptionService: subscriptionService,
                         onSubscribe: {
@@ -62,8 +61,8 @@ struct ProfileView: View {
                 
                 // 应用设置
                 Section("应用设置") {
-                    NavigationLink {
-                        SettingsView()
+                    Button {
+                        showingSettings = true
                     } label: {
                         SettingRow(
                             icon: "gearshape.fill",
@@ -152,11 +151,15 @@ struct ProfileView: View {
                         )
                     }
                 }
-            }
-            .navigationTitle("个人")
-            .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingSubscription) {
-                SubscriptionView()
+        }
+        .navigationTitle("个人")
+        .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showingSubscription) {
+            SubscriptionView()
+        }
+        .sheet(isPresented: $showingSettings) {
+            NavigationStack {
+                SettingsView()
             }
         }
     }

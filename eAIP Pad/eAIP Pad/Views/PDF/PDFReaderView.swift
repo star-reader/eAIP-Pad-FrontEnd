@@ -14,6 +14,7 @@ struct PDFReaderView: View {
     
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.columnVisibilityBinding) private var columnVisibilityBinding
     @Query private var annotations: [ChartAnnotation]
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var userSettings: [UserSettings]
@@ -117,6 +118,26 @@ struct PDFReaderView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.trailing, 8)
+                    }
+                    
+                    // iPad 侧边栏切换按钮（仅在 iPad 模式下显示）
+                    if let binding = columnVisibilityBinding {
+                        Button {
+                            withAnimation {
+                                // 切换侧边栏显示状态
+                                if binding.wrappedValue == .all || binding.wrappedValue == .doubleColumn {
+                                    binding.wrappedValue = .detailOnly
+                                } else {
+                                    binding.wrappedValue = .doubleColumn
+                                }
+                            }
+                        } label: {
+                            Image(
+                                systemName: "sidebar.left"
+                                // systemName: binding.wrappedValue == .detailOnly ? "sidebar.left" : "sidebar.left.fill"
+                                )
+                                .foregroundColor(.primary)
+                        }
                     }
                     
                     // Pinboard 按钮
