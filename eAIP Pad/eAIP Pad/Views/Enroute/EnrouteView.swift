@@ -69,9 +69,10 @@ struct EnrouteView: View {
                                         binding.wrappedValue = chart
                                     } label: {
                                         EnrouteChartRowView(chart: chart)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
-                                    .contentShape(Rectangle())  // 扩展点击区域到整行
                                 } else {
                                     // iPhone 模式
                                     NavigationLink {

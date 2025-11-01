@@ -73,9 +73,10 @@ struct RegulationsView: View {
                             }
                         } label: {
                             AirportRegulationRowView(airport: airport)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     }
                     .listStyle(.insetGrouped)
                 }

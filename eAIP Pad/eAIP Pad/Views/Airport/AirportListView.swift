@@ -54,9 +54,10 @@ struct AirportListView: View {
                                 binding.wrappedValue = airport
                             } label: {
                                 AirportRowView(airport: airport)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .contentShape(Rectangle())  // 扩展点击区域到整行
                         } else {
                             // iPhone 模式：使用 NavigationLink
                             NavigationLink {

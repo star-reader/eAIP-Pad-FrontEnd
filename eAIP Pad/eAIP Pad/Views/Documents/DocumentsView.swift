@@ -138,9 +138,10 @@ struct AIPDocumentsView: View {
                             )
                         } label: {
                             AIPDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {
@@ -265,9 +266,10 @@ struct SUPDocumentsView: View {
                             )
                         } label: {
                             SUPDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {
@@ -387,9 +389,10 @@ struct AMDTDocumentsView: View {
                             )
                         } label: {
                             AMDTDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {
@@ -509,9 +512,10 @@ struct NOTAMDocumentsView: View {
                             )
                         } label: {
                             NOTAMDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .contentShape(Rectangle())  // 扩展点击区域到整行
                     } else {
                         // iPhone 模式
                         NavigationLink {

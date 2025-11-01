@@ -31,9 +31,9 @@ struct MainSidebarView: View {
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            // 第一栏：侧边栏
+            // 第一栏：侧边栏（缩小宽度以节省空间）
             SidebarView(selectedItem: $selectedSidebarItem)
-                .navigationSplitViewColumnWidth(min: 250, ideal: 300)
+                .navigationSplitViewColumnWidth(min: 140, ideal: 260, max: 200)
         } content: {
             // 第二栏：内容视图
             if let item = selectedSidebarItem {
@@ -43,7 +43,7 @@ struct MainSidebarView: View {
                 )
                 .environment(\.selectedChartBinding, $selectedChart)
                 .environment(\.selectedAirportBinding, $selectedAirport)
-                .navigationSplitViewColumnWidth(min: 350, ideal: 400)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 450)
                 .onChange(of: item) { oldValue, newValue in
                     // 切换页面时清空选中的航图和机场
                     if oldValue != newValue {

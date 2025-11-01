@@ -274,9 +274,10 @@ struct ChartRowView: View {
                     binding.wrappedValue = chart
                 } label: {
                     chartRowContent
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .contentShape(Rectangle())  // 扩展点击区域到整行
             } else {
                 // iPhone 模式：使用 NavigationLink
                 NavigationLink {
