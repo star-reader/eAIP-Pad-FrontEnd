@@ -54,6 +54,21 @@ struct SubscriptionUpgradeView: View {
     @Binding var showingError: Bool
     @Binding var errorMessage: String
     
+    // 获取订阅价格显示（如果有试用期，显示首月免费）
+    private var priceDisplay: String {
+        if let product = subscriptionService.monthlyProduct {
+            // 检查是否有试用期优惠
+            if let subscription = product.subscription, subscription.introductoryOffer != nil {
+                // 有试用期，显示首月免费，然后正常价格
+                return "首月免费，然后 \(product.displayPrice)/月"
+            } else {
+                // 没有试用期，直接显示价格
+                return "\(product.displayPrice)/月"
+            }
+        }
+        return "¥18/月"
+    }
+    
     var body: some View {
         ZStack {
             // 简洁的背景
@@ -90,21 +105,22 @@ struct SubscriptionUpgradeView: View {
                 }
                 .padding(.horizontal)
                 
-                // 价格信息（写死）
+                // 价格信息卡片
                 VStack(spacing: 16) {
                     VStack(spacing: 8) {
-                        Text("¥15")
-                            .font(.largeTitle)
+                        Text(priceDisplay)
+                            .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(Color.primaryBlue)
                         
-                        Text("每月")
+                        Text("自动续费订阅")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                 }
+                .padding(.horizontal)
                 
                 Spacer()
                 
@@ -140,9 +156,8 @@ struct SubscriptionUpgradeView: View {
                     }
                     .foregroundColor(.secondary)
                     .disabled(subscriptionService.isLoading)
-                    // .glassEffect()
                     
-                    Text("订阅将自动续费，可随时取消")
+                    Text("订阅可随时取消，首月免费后按 \(subscriptionService.monthlyProduct?.displayPrice ?? "¥18")/月 自动续费")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
@@ -214,6 +229,59 @@ struct SimpleFeature: View {
                 .foregroundColor(.green)
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - 订阅套餐选择卡片
+struct SubscriptionPlanSelectionCard: View {
+    let title: String
+    let description: String
+    let price: String
+    let productID: String
+    let isSelected: Bool
+    let onSelect: () -> Void
+    
+    var body: some View {
+        Button {
+            onSelect()
+        } label: {
+            HStack(spacing: 16) {
+                // 选择指示器
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundColor(isSelected ? Color.primaryBlue : .gray)
+                    .frame(width: 28)
+                
+                // 套餐信息
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text(price)
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color.primaryBlue)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.primaryBlue.opacity(0.1) : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(isSelected ? Color.primaryBlue : Color.gray.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

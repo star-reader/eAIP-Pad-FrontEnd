@@ -11,46 +11,7 @@
   },
   "identifier" : "9F55F200",
   "nonRenewingSubscriptions" : [
-    {
-      "displayPrice" : "2.99",
-      "familyShareable" : false,
-      "internalID" : "6754793594",
-      "localizations" : [
-        {
-          "description" : "eAIP Pad月度订阅（不自动续费）",
-          "displayName" : "eAIP Pad月度订阅（不自动续费）",
-          "locale" : "zh_Hans"
-        },
-        {
-          "description" : "eAIP Pad Monthly (Non-auto renew)",
-          "displayName" : "eAIP Pad Monthly (Non-auto renew)",
-          "locale" : "en_US"
-        },
-        {
-          "description" : "eAIP Pad月度訂閲（不自動續費）",
-          "displayName" : "eAIP Pad月度訂閲（不自動續費）",
-          "locale" : "zh_Hant"
-        },
-        {
-          "description" : "eAIP Pad Monthly (Non-auto renew)",
-          "displayName" : "eAIP Pad Monthly (Non-auto renew)",
-          "locale" : "en_AU"
-        },
-        {
-          "description" : "eAIP Pad Monthly (Non-auto renew)",
-          "displayName" : "eAIP Pad Monthly (Non-auto renew)",
-          "locale" : "en_CA"
-        },
-        {
-          "description" : "eAIP Pad Monthly (Non-auto renew)",
-          "displayName" : "eAIP Pad Monthly (Non-auto renew)",
-          "locale" : "en_GB"
-        }
-      ],
-      "productID" : "com.usagijin.eaip.monthlynonrenewing",
-      "referenceName" : "eAIP Pad Monthly Subscription (Non-auto renew)",
-      "type" : "NonRenewingSubscription"
-    }
+
   ],
   "products" : [
 
@@ -63,7 +24,7 @@
     "_developerTeamID" : "2S577ZVVWZ",
     "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 783688002.02076006,
+    "_lastSynchronizedDate" : 783689618.98869801,
     "_locale" : "zh_Hans",
     "_renewalBillingIssuesEnabled" : true,
     "_storefront" : "CHN",
@@ -87,11 +48,16 @@
           "codeOffers" : [
 
           ],
-          "displayPrice" : "2.99",
+          "displayPrice" : "18.0",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "6754790184",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "8DDB5EBC",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1M"
+          },
           "localizations" : [
             {
               "description" : "eAIP Pad月度訂閲",
