@@ -7,7 +7,6 @@ enum OnboardingState {
     case loading           // 检查状态中
     case needsLogin       // 需要登录
     case newUserWelcome   // 新用户欢迎
-    case needsSubscription // 需要订阅
     case completed        // 完成，进入主应用
 }
 
@@ -18,7 +17,6 @@ class OnboardingCoordinator: ObservableObject {
     @Published var errorMessage: String?
     
     private let authService = AuthenticationService.shared
-    private let subscriptionService = SubscriptionService.shared
     
     init() {
         // 先做同步检查，避免闪现
@@ -87,39 +85,13 @@ class OnboardingCoordinator: ObservableObject {
             return
         }
         
-        // 3. 检查订阅状态
-        await checkSubscriptionStatus()
-    }
-    
-    @MainActor
-    private func checkSubscriptionStatus() async {
-        do {
-            // 添加超时保护，避免卡住
-            try await withTimeout(seconds: 5) {
-                await self.subscriptionService.updateSubscriptionStatus()
-            }
-            
-            print("📊 订阅状态: \(subscriptionService.subscriptionStatus)")
-            
-            switch subscriptionService.subscriptionStatus {
-            case .trial, .active:
-                // 有效订阅，进入主应用
-                currentState = .completed
-                
-            case .expired, .inactive:
-                // 订阅过期或未订阅，都显示升级页面
-                // 无论是否为新用户，只要订阅状态为inactive就显示试用页面
-                currentState = .needsSubscription
-            }
-        } catch {
-            // 如果订阅检查失败，检查是否为inactive状态，如果是则显示订阅页面
-            if subscriptionService.subscriptionStatus == .inactive {
-                currentState = .needsSubscription
-            } else {
-                currentState = .completed
-            }
+        // 3. 同步订阅状态（后台执行，不阻塞）
+        Task {
+            await SubscriptionService.shared.syncSubscriptionStatus()
         }
         
+        // 已登录且不是新用户，直接进入主应用
+        currentState = .completed
         isLoading = false
     }
     
@@ -153,77 +125,16 @@ class OnboardingCoordinator: ObservableObject {
             }
             
             if !authService.isNewUser {
-                await checkSubscriptionStatus()
+                currentState = .completed
             }
         }
     }
     
-    // MARK: - 处理新用户欢迎完成（开始试用）
+    // MARK: - 处理新用户欢迎完成
     func handleWelcomeCompleted() {
-        Task {
-            await startTrialForNewUser()
-        }
-    }
-    
-    @MainActor
-    private func startTrialForNewUser() async {
-        isLoading = true
-        
-        do {
-            // 获取当前用户ID（从 accessToken 或其他方式）
-            guard let userId = getCurrentUserId() else {
-                print("❌ 无法获取用户ID，直接进入主应用")
-                // 即使无法获取用户ID，新用户试用也应该直接进入主应用
-                currentState = .completed
-                isLoading = false
-                return
-            }
-            
-
-            let response = try await NetworkService.shared.startTrial()
-            
-            // 安全地解包可选值
-            guard let data = response.data, let status = data.status else {
-                print("⚠️ 响应数据不完整")
-                currentState = .needsSubscription
-                return
-            }
-            
-            switch status {
-            case "trial_started":
-                print("✅ 试用期开启成功")
-                // 直接使用试用API响应更新订阅状态
-                await MainActor.run {
-                    subscriptionService.subscriptionStatus = .trial
-                    subscriptionService.isTrialActive = true
-                    subscriptionService.daysLeft = data.daysLeft ?? 30
-                    
-                    // 解析试用结束日期
-                    if let trialEndString = data.trialEndDate {
-                        subscriptionService.trialEndDate = ISO8601DateFormatter().date(from: trialEndString)
-                    }
-                    
-                    print("📱 直接设置试用状态: subscriptionStatus=\(subscriptionService.subscriptionStatus), daysLeft=\(subscriptionService.daysLeft)")
-                }
-                
-                // 试用开启成功，直接进入主应用
-                currentState = .completed
-                
-            case "trial_used", "trial_expired":
-                print("⚠️ 试用期已使用或过期")
-                currentState = .needsSubscription
-                
-            default:
-                print("⚠️ 未知状态: \(status)")
-                currentState = .needsSubscription
-            }
-        } catch {
-            print("❌ 试用期启动失败: \(error)")
-            // 试用期启动失败，也让用户进入主应用（降级方案）
-            currentState = .completed
-        }
-        
-        isLoading = false
+        // 新用户欢迎完成后，直接进入主应用
+        print("ℹ️ 新用户欢迎完成，进入主应用")
+        currentState = .completed
     }
     
     // 获取当前用户ID的辅助方法
@@ -234,12 +145,6 @@ class OnboardingCoordinator: ObservableObject {
         return authService.currentUser?.accessToken.hashValue.description
     }
     
-    // MARK: - 处理订阅完成
-    func handleSubscriptionCompleted() {
-        Task {
-            await checkSubscriptionStatus()
-        }
-    }
     
     // MARK: - 重试
     func retry() {
@@ -267,17 +172,10 @@ struct OnboardingFlow: View {
                     }
                 
             case .newUserWelcome:
+                // 新用户欢迎页面
                 WelcomeView {
                     coordinator.handleWelcomeCompleted()
                 }
-                
-            case .needsSubscription:
-                SubscriptionView()
-                    .onReceive(SubscriptionService.shared.$subscriptionStatus) { status in
-                        if status.isValid {
-                            coordinator.handleSubscriptionCompleted()
-                        }
-                    }
                 
             case .completed:
                 MainAppView()
@@ -350,6 +248,7 @@ struct MainAppView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.modelContext) private var modelContext
     @Query private var userSettings: [UserSettings]
+    @StateObject private var subscriptionService = SubscriptionService.shared
     
     private var currentSettings: UserSettings {
         if let settings = userSettings.first {
@@ -363,18 +262,30 @@ struct MainAppView: View {
     
     var body: some View {
         Group {
-            if horizontalSizeClass == .compact {
-                // iPhone: 使用 TabView
-                MainTabView()
+            if subscriptionService.hasValidSubscription {
+                // 有订阅：显示主应用内容
+                Group {
+                    if horizontalSizeClass == .compact {
+                        // iPhone: 使用 TabView
+                        MainTabView()
+                    } else {
+                        // iPad: 使用 Sidebar
+                        MainSidebarView()
+                    }
+                }
+                .preferredColorScheme(colorScheme)
+                .tint(.primaryBlue)
+                .animation(.easeInOut(duration: 0.3), value: currentSettings.isDarkMode)
+                .animation(.easeInOut(duration: 0.3), value: currentSettings.followSystemAppearance)
             } else {
-                // iPad: 使用 Sidebar
-                MainSidebarView()
+                // 没有订阅：直接显示订阅页面
+                UnifiedSubscriptionView()
             }
         }
-        .preferredColorScheme(colorScheme)
-        .tint(.primaryBlue)
-        .animation(.easeInOut(duration: 0.3), value: currentSettings.isDarkMode)
-        .animation(.easeInOut(duration: 0.3), value: currentSettings.followSystemAppearance)
+        .task {
+            // 进入主应用时同步订阅状态
+            await subscriptionService.syncSubscriptionStatus()
+        }
     }
     
     private var colorScheme: ColorScheme? {
@@ -385,6 +296,7 @@ struct MainAppView: View {
         }
     }
 }
+
 
 #Preview("Loading") {
     LoadingView()

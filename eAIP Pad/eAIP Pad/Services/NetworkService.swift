@@ -38,11 +38,11 @@ enum APIEndpoint {
     case annotations(type: String, id: Int)
     case saveAnnotation(type: String, id: Int)
     case deleteAnnotation(type: String, id: Int, page: Int)
-    case verifyIAP
-    case verifySubscription  // 新增：验证订阅交易
-    case subscriptionStatus
-    case trialStart
     case currentAIRAC
+    // IAP v2 API
+    case iapVerify
+    case iapSync
+    case iapStatus
     
     var path: String {
         switch self {
@@ -94,16 +94,14 @@ enum APIEndpoint {
             return "/annotations/\(type)/\(id)"
         case .deleteAnnotation(let type, let id, let page):
             return "/annotations/\(type)/\(id)/\(page)"
-        case .verifyIAP:
-            return "/iap/verify"
-        case .verifySubscription:
-            return "/subscription/verify"
-        case .subscriptionStatus:
-            return "/subscription/status"
-        case .trialStart:
-            return "/trial/start"
         case .currentAIRAC:
             return "/airac/current"
+        case .iapVerify:
+            return "/iap/v2/verify"
+        case .iapSync:
+            return "/iap/v2/sync"
+        case .iapStatus:
+            return "/iap/v2/status"
         }
     }
     
@@ -124,14 +122,12 @@ struct AuthResponse: Codable {
     let refreshToken: String
     let expiresIn: Int
     let isNewUser: Bool
-    let subscription: String
     
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case expiresIn = "expires_in"
         case isNewUser = "is_new_user"
-        case subscription
     }
 }
 
@@ -218,66 +214,6 @@ struct SignedURLResponse: Codable {
     }
 }
 
-// MARK: - 订阅验证请求
-struct SubscriptionVerificationRequest: Codable {
-    let transactionId: String
-    let originalTransactionId: String
-    let productId: String
-    let purchaseDate: String
-    let expiresDate: String?
-    let environment: String  // "Production" 或 "Sandbox"
-    
-    enum CodingKeys: String, CodingKey {
-        case transactionId = "transaction_id"
-        case originalTransactionId = "original_transaction_id"
-        case productId = "product_id"
-        case purchaseDate = "purchase_date"
-        case expiresDate = "expires_date"
-        case environment
-    }
-}
-
-// MARK: - 订阅状态响应
-struct SubscriptionStatusResponse: Codable {
-    let status: String
-    let isTrial: Bool
-    let trialEnd: String?
-    let subscriptionEnd: String?
-    let daysLeft: Int?
-    let autoRenew: Bool?
-    let productId: String?
-    
-    enum CodingKeys: String, CodingKey {
-        case status
-        case isTrial = "is_trial"
-        case trialEnd = "trial_end"
-        case subscriptionEnd = "subscription_end"
-        case daysLeft = "days_left"
-        case autoRenew = "auto_renew"
-        case productId = "product_id"
-    }
-}
-
-// MARK: - 试用期响应
-struct TrialStartResponse: Codable {
-    let message: String?
-    let data: TrialData?
-    let status: String? // 有些接口可能直接返回 status
-    
-    struct TrialData: Codable {
-        let status: String? // trial_started, trial_used, trial_expired
-        let trialEndDate: String?
-        let daysLeft: Int?
-        let message: String?
-        
-        enum CodingKeys: String, CodingKey {
-            case status
-            case trialEndDate = "trial_end_date"
-            case daysLeft = "days_left"
-            case message
-        }
-    }
-}
 
 // MARK: - AIRAC版本响应
 struct AIRACResponse: Codable {
@@ -437,6 +373,106 @@ struct DocumentDetailResponse: Codable {
     }
 }
 
+// MARK: - IAP 请求模型
+struct VerifyJWSRequest: Codable {
+    let transactionJWS: String
+    let appleUserId: String
+    let environment: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case transactionJWS = "transaction_jws"
+        case appleUserId = "apple_user_id"
+        case environment
+    }
+}
+
+struct SyncSubscriptionRequest: Codable {
+    let transactionJWSList: [String]
+    let appleUserId: String
+    let environment: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case transactionJWSList = "transaction_jws_list"
+        case appleUserId = "apple_user_id"
+        case environment
+    }
+}
+
+// MARK: - IAP 响应模型
+struct VerifyJWSResponse: Codable {
+    let status: String
+    let subscriptionStatus: String?
+    let subscriptionStartDate: String?
+    let subscriptionEndDate: String?
+    let trialStartDate: String?
+    let autoRenew: Bool?
+    let productId: String?
+    let originalTransactionId: String?
+    let message: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case status
+        case subscriptionStatus = "subscription_status"
+        case subscriptionStartDate = "subscription_start_date"
+        case subscriptionEndDate = "subscription_end_date"
+        case trialStartDate = "trial_start_date"
+        case autoRenew = "auto_renew"
+        case productId = "product_id"
+        case originalTransactionId = "original_transaction_id"
+        case message
+    }
+}
+
+struct SyncSubscriptionResponse: Codable {
+    let status: String
+    let subscriptionStatus: String?
+    let subscriptionStartDate: String?
+    let subscriptionEndDate: String?
+    let trialStartDate: String?
+    let autoRenew: Bool?
+    let productId: String?
+    let syncedCount: Int?
+    let totalCount: Int?
+    let message: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case status
+        case subscriptionStatus = "subscription_status"
+        case subscriptionStartDate = "subscription_start_date"
+        case subscriptionEndDate = "subscription_end_date"
+        case trialStartDate = "trial_start_date"
+        case autoRenew = "auto_renew"
+        case productId = "product_id"
+        case syncedCount = "synced_count"
+        case totalCount = "total_count"
+        case message
+    }
+}
+
+struct SubscriptionStatusResponse: Codable {
+    let status: String
+    let subscriptionStartDate: String?
+    let subscriptionEndDate: String?
+    let trialStartDate: String?
+    let autoRenew: Bool?
+    let productId: String?
+    let originalTransactionId: String?
+    let environment: String?
+    let daysLeft: Int?
+    
+    enum CodingKeys: String, CodingKey {
+        case status
+        case subscriptionStartDate = "subscription_start_date"
+        case subscriptionEndDate = "subscription_end_date"
+        case trialStartDate = "trial_start_date"
+        case autoRenew = "auto_renew"
+        case productId = "product_id"
+        case originalTransactionId = "original_transaction_id"
+        case environment
+        case daysLeft = "days_left"
+    }
+}
+
 // MARK: - 网络服务
 class NetworkService: ObservableObject {
     static let shared = NetworkService()
@@ -459,6 +495,10 @@ class NetworkService: ObservableObject {
     
     func getCurrentAccessToken() -> String? {
         return accessToken
+    }
+    
+    func getCurrentRefreshToken() -> String? {
+        return refreshToken
     }
     
     // MARK: - 通用请求方法
@@ -587,77 +627,7 @@ class NetworkService: ObservableObject {
         return response
     }
     
-    // MARK: - 订阅相关
-    func getSubscriptionStatus() async throws -> SubscriptionStatusResponse {
-        let response: SubscriptionStatusResponse = try await makeRequest(endpoint: .subscriptionStatus)
-        return response
-    }
-    
-    func verifySubscription(request: SubscriptionVerificationRequest) async throws -> SubscriptionStatusResponse {
-        let bodyData = try JSONEncoder().encode(request)
-        
-        let response: SubscriptionStatusResponse = try await makeRequest(
-            endpoint: .verifySubscription,
-            method: .POST,
-            body: bodyData
-        )
-        return response
-    }
-    
-    func verifyIAP(receipt: String) async throws -> SubscriptionStatusResponse {
-        let body = ["receipt": receipt]
-        let bodyData = try JSONEncoder().encode(body)
-        
-        let response: SubscriptionStatusResponse = try await makeRequest(
-            endpoint: .verifyIAP,
-            method: .POST,
-            body: bodyData
-        )
-        return response
-    }
-    
-    // MARK: - 试用期开始
-    func startTrial() async throws -> TrialStartResponse {
-        var request = URLRequest(url: APIEndpoint.trialStart.url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
-        // 根据后端文档，此接口不需要请求体，用户信息从 JWT token 中获取
-        request.httpBody = nil
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        // 打印原始响应用于调试
-        if let jsonString = String(data: data, encoding: .utf8) {
-            print("📦 试用开始原始响应: \(jsonString)")
-        }
-        
-        guard httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(httpResponse.statusCode)
-        }
-        
-        // 尝试直接解析为 TrialStartResponse
-        do {
-            let response = try JSONDecoder().decode(TrialStartResponse.self, from: data)
-            return response
-        } catch {
-            print("❌ 直接解析失败，尝试从 APIResponse 中提取")
-            // 尝试从 APIResponse 包装中提取
-            let apiResponse = try JSONDecoder().decode(APIResponse<TrialStartResponse>.self, from: data)
-            guard let responseData = apiResponse.data else {
-                throw NetworkError.noData
-            }
-            return responseData
-        }
-    }
+    // MARK: - 航路图相关
     
     // MARK: - 航路图相关
     func getEnrouteCharts(type: String? = nil) async throws -> [ChartResponse] {
@@ -744,6 +714,212 @@ class NetworkService: ObservableObject {
         return response
     }
     
+    // MARK: - IAP 相关方法
+    /// 验证 JWS 凭证
+    func verifyJWS(transactionJWS: String, appleUserId: String, environment: String? = nil) async throws -> VerifyJWSResponse {
+        let request = VerifyJWSRequest(
+            transactionJWS: transactionJWS,
+            appleUserId: appleUserId,
+            environment: environment
+        )
+        let bodyData = try JSONEncoder().encode(request)
+        
+        // IAP API 可能返回直接响应或 APIResponse 包装
+        var urlRequest = URLRequest(url: APIEndpoint.iapVerify.url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = bodyData
+        
+        if let token = accessToken {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        logRequest(request: urlRequest, body: bodyData)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
+            throw NetworkError.invalidResponse
+        }
+        
+        // 处理401错误
+        if httpResponse.statusCode == 401 {
+            try await refreshAccessToken()
+            urlRequest.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
+            let (retryData, retryResponse) = try await URLSession.shared.data(for: urlRequest)
+            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                  retryHttpResponse.statusCode == 200 else {
+                throw NetworkError.unauthorized
+            }
+            logResponse(response: retryHttpResponse, data: retryData, error: nil)
+            
+            // 尝试直接解析或 APIResponse 格式
+            do {
+                return try JSONDecoder().decode(VerifyJWSResponse.self, from: retryData)
+            } catch {
+                let apiResponse = try JSONDecoder().decode(APIResponse<VerifyJWSResponse>.self, from: retryData)
+                guard let responseData = apiResponse.data else {
+                    throw NetworkError.noData
+                }
+                return responseData
+            }
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            let error = NetworkError.serverError(httpResponse.statusCode)
+            logResponse(response: httpResponse, data: data, error: error)
+            throw error
+        }
+        
+        logResponse(response: httpResponse, data: data, error: nil)
+        
+        do {
+            return try JSONDecoder().decode(VerifyJWSResponse.self, from: data)
+        } catch {
+            let apiResponse = try JSONDecoder().decode(APIResponse<VerifyJWSResponse>.self, from: data)
+            guard let responseData = apiResponse.data else {
+                throw NetworkError.noData
+            }
+            return responseData
+        }
+    }
+    
+    /// 批量同步订阅
+    func syncSubscriptions(transactionJWSList: [String], appleUserId: String, environment: String? = nil) async throws -> SyncSubscriptionResponse {
+        let request = SyncSubscriptionRequest(
+            transactionJWSList: transactionJWSList,
+            appleUserId: appleUserId,
+            environment: environment
+        )
+        let bodyData = try JSONEncoder().encode(request)
+        
+        var urlRequest = URLRequest(url: APIEndpoint.iapSync.url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = bodyData
+        
+        if let token = accessToken {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        logRequest(request: urlRequest, body: bodyData)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
+            throw NetworkError.invalidResponse
+        }
+        
+        // 处理401错误
+        if httpResponse.statusCode == 401 {
+            try await refreshAccessToken()
+            urlRequest.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
+            let (retryData, retryResponse) = try await URLSession.shared.data(for: urlRequest)
+            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                  retryHttpResponse.statusCode == 200 else {
+                throw NetworkError.unauthorized
+            }
+            logResponse(response: retryHttpResponse, data: retryData, error: nil)
+            
+            do {
+                return try JSONDecoder().decode(SyncSubscriptionResponse.self, from: retryData)
+            } catch {
+                let apiResponse = try JSONDecoder().decode(APIResponse<SyncSubscriptionResponse>.self, from: retryData)
+                guard let responseData = apiResponse.data else {
+                    throw NetworkError.noData
+                }
+                return responseData
+            }
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            let error = NetworkError.serverError(httpResponse.statusCode)
+            logResponse(response: httpResponse, data: data, error: error)
+            throw error
+        }
+        
+        logResponse(response: httpResponse, data: data, error: nil)
+        
+        do {
+            return try JSONDecoder().decode(SyncSubscriptionResponse.self, from: data)
+        } catch {
+            let apiResponse = try JSONDecoder().decode(APIResponse<SyncSubscriptionResponse>.self, from: data)
+            guard let responseData = apiResponse.data else {
+                throw NetworkError.noData
+            }
+            return responseData
+        }
+    }
+    
+    /// 查询订阅状态
+    func getSubscriptionStatus(appleUserId: String) async throws -> SubscriptionStatusResponse {
+        var components = URLComponents(url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "apple_user_id", value: appleUserId)]
+        
+        guard let finalURL = components.url else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: finalURL)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        logRequest(request: request, body: nil)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
+            throw NetworkError.invalidResponse
+        }
+        
+        // 处理401错误
+        if httpResponse.statusCode == 401 {
+            try await refreshAccessToken()
+            request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
+            let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
+            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                  retryHttpResponse.statusCode == 200 else {
+                throw NetworkError.unauthorized
+            }
+            logResponse(response: retryHttpResponse, data: retryData, error: nil)
+            
+            do {
+                return try JSONDecoder().decode(SubscriptionStatusResponse.self, from: retryData)
+            } catch {
+                let apiResponse = try JSONDecoder().decode(APIResponse<SubscriptionStatusResponse>.self, from: retryData)
+                guard let responseData = apiResponse.data else {
+                    throw NetworkError.noData
+                }
+                return responseData
+            }
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            let error = NetworkError.serverError(httpResponse.statusCode)
+            logResponse(response: httpResponse, data: data, error: error)
+            throw error
+        }
+        
+        logResponse(response: httpResponse, data: data, error: nil)
+        
+        do {
+            return try JSONDecoder().decode(SubscriptionStatusResponse.self, from: data)
+        } catch {
+            let apiResponse = try JSONDecoder().decode(APIResponse<SubscriptionStatusResponse>.self, from: data)
+            guard let responseData = apiResponse.data else {
+                throw NetworkError.noData
+            }
+            return responseData
+        }
+    }
+    
     // MARK: - 日志记录方法
     private func logRequest(request: URLRequest, body: Data?) {
         print("\n===== 网络请求开始 =====")
@@ -825,7 +1001,7 @@ enum NetworkError: Error, LocalizedError {
     case invalidResponse
     case noData
     case unauthorized
-    case serverError(Int)
+    case serverError(Int, message: String? = nil)
     case noRefreshToken
     case decodingError
     
@@ -839,7 +1015,10 @@ enum NetworkError: Error, LocalizedError {
             return "没有数据"
         case .unauthorized:
             return "未授权访问"
-        case .serverError(let code):
+        case .serverError(let code, let message):
+            if let message = message {
+                return "服务器错误 \(code): \(message)"
+            }
             return "服务器错误: \(code)"
         case .noRefreshToken:
             return "没有刷新令牌"

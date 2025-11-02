@@ -69,9 +69,6 @@ final class UserSettings {
     var pinboardStyle: String = "compact" // compact, preview, grid
     var lastSyncDate: Date?
     var isFirstLaunch: Bool = true
-    var subscriptionStatus: String = "trial" // trial, active, expired, inactive
-    var trialEndDate: Date?
-    var subscriptionEndDate: Date?
     
     init() {
         // 单例模式，默认设置
@@ -188,26 +185,3 @@ enum DocumentType: String, CaseIterable {
 
 // MARK: - Models 命名空间
 enum Models {}
-
-extension Models {
-    // MARK: - 订阅状态枚举
-    enum SubscriptionStatus: String, CaseIterable {
-    case trial = "trial"
-    case active = "active"
-    case expired = "expired"
-    case inactive = "inactive"
-    
-    var displayName: String {
-        switch self {
-        case .trial: return "试用期"
-        case .active: return "已订阅"
-        case .expired: return "已过期"
-        case .inactive: return "未订阅"
-        }
-    }
-    
-    var isValid: Bool {
-        return self == .trial || self == .active
-    }
-    }
-}

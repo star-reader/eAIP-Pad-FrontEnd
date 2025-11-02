@@ -185,11 +185,12 @@ struct FeatureCard: View {
 }
 
 // MARK: - 欢迎界面（新用户）
+/// 简化后的欢迎界面，移除试用逻辑
+/// 按照用户需求，新用户欢迎后直接进入统一的订阅页面
 struct WelcomeView: View {
     let onContinue: () -> Void
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isStartingTrial = false
-    @StateObject private var subscriptionService = SubscriptionService.shared
+    @State private var isLoading = false
     
     var body: some View {
         ZStack {
@@ -225,58 +226,38 @@ struct WelcomeView: View {
                     }
                 }
                 
-                // 新用户福利
-                VStack(spacing: 16) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "gift.fill")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                        Text("新用户专享 30 天免费试用")
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                    }
-                    .padding()
-                    .background(.white.opacity(0.2))
-                    .cornerRadius(12)
+                // 功能介绍
+                VStack(spacing: 12) {
+                    Text("开始探索专业航图功能")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.9))
+                        .fontWeight(.medium)
                     
-                    VStack(spacing: 8) {
-                        Text("试用期内可免费使用所有功能")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.9))
-                            .fontWeight(.medium)
-                        
-                        Text("包括完整航图库、专业标注、自动更新等")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.8))
-                        
-                        // 价格信息（写死）
-                        Text("试用结束后：¥15/月")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
-                            .padding(.top, 4)
-                    }
-                    .multilineTextAlignment(.center)
+                    Text("完整航图库、专业标注、自动更新等")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
                 }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
                 
                 Spacer()
                 
-                // 开始试用按钮
+                // 继续按钮（进入订阅页面）
                 Button {
-                    isStartingTrial = true
+                    isLoading = true
                     onContinue()
                 } label: {
                     HStack(spacing: 12) {
-                        if isStartingTrial {
+                        if isLoading {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle(tint: .primaryBlue))
                                 .scaleEffect(0.8)
                         } else {
-                            Image(systemName: "play.fill")
+                            Image(systemName: "arrow.right.circle.fill")
                                 .font(.title3)
                         }
                         
-                        Text(isStartingTrial ? "正在开启试用..." : "开始 30 天免费试用")
+                        Text(isLoading ? "加载中..." : "继续")
                             .fontWeight(.semibold)
                     }
                     .foregroundColor(.primaryBlue)
@@ -286,29 +267,8 @@ struct WelcomeView: View {
                     .cornerRadius(25)
                     .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
                 }
-                .disabled(isStartingTrial)
+                .disabled(isLoading)
                 .padding(.horizontal)
-                
-                VStack(spacing: 6) {
-                    // 突出显示不扣费信息
-                    Text("🎉 30天内完全免费，不会自动扣费")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(.white.opacity(0.2))
-                        .cornerRadius(8)
-                    
-                    Text("• 试用期结束前可随时取消")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
-                    
-                    Text("• 续费价格：¥15/月")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                .multilineTextAlignment(.center)
                 
                 Spacer(minLength: 40)
             }

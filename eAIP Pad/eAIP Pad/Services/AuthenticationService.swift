@@ -28,6 +28,7 @@ class AuthenticationService: NSObject, ObservableObject {
     var accessToken: String?
     var refreshToken: String?
     var isNewUser = false
+    var appleUserId: String?  // Apple 用户 ID（用于订阅验证）
     
     private override init() {
         super.init()
@@ -41,6 +42,7 @@ class AuthenticationService: NSObject, ObservableObject {
            let storedRefreshToken = UserDefaults.standard.string(forKey: "refresh_token") {
             self.accessToken = storedAccessToken
             self.refreshToken = storedRefreshToken
+            self.appleUserId = UserDefaults.standard.string(forKey: "apple_user_id")  // 恢复 Apple 用户 ID
             
             // 立即设置为已认证状态，避免闪现登录页面
             self.authenticationState = .authenticated
@@ -66,15 +68,44 @@ class AuthenticationService: NSObject, ObservableObject {
         NetworkService.shared.setTokens(accessToken: accessToken, refreshToken: refreshToken ?? "")
         
         do {
-            // 尝试获取订阅状态来验证 token
-            let _ = try await NetworkService.shared.getSubscriptionStatus()
+            // 通过调用需要认证的 API 来验证 token 是否有效
+            // 使用 getCurrentAIRAC 作为验证端点，因为它是只读的且相对轻量
+            _ = try await NetworkService.shared.getCurrentAIRAC()
             
+            // Token 有效，确认认证状态
             await MainActor.run {
                 self.authenticationState = .authenticated
                 self.currentUser = AuthenticatedUser(accessToken: accessToken)
             }
         } catch {
-            // Token 无效，清除存储的凭据
+            // Token 无效（401）或网络错误，尝试刷新 token
+            if refreshToken != nil {
+                do {
+                    // 尝试刷新 access token
+                    try await NetworkService.shared.refreshAccessToken()
+                    
+                    // 刷新成功，获取新的 token
+                    if let newAccessToken = NetworkService.shared.getCurrentAccessToken() {
+                        // 更新 refresh token（如果刷新时返回了新的）
+                        let newRefreshToken = NetworkService.shared.getCurrentRefreshToken()
+                        await MainActor.run {
+                            self.accessToken = newAccessToken
+                            if let newRefreshToken = newRefreshToken {
+                                self.refreshToken = newRefreshToken
+                                UserDefaults.standard.set(newRefreshToken, forKey: "refresh_token")
+                            }
+                            UserDefaults.standard.set(newAccessToken, forKey: "access_token")
+                            self.authenticationState = .authenticated
+                            self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
+                        }
+                        return
+                    }
+                } catch {
+                    // 刷新也失败，清除凭据
+                }
+            }
+            
+            // Token 无效且无法刷新，清除存储的凭据
             await MainActor.run {
                 self.clearStoredCredentials()
                 self.authenticationState = .notAuthenticated
@@ -107,6 +138,9 @@ class AuthenticationService: NSObject, ObservableObject {
             return
         }
         
+        // 获取 Apple 用户 ID（唯一标识符）
+        let appleUserId = credential.user
+        
         do {
             // 调用后端 Apple 登录接口
             let response = try await NetworkService.shared.appleLogin(idToken: tokenString)
@@ -116,11 +150,13 @@ class AuthenticationService: NSObject, ObservableObject {
                 self.accessToken = response.accessToken
                 self.refreshToken = response.refreshToken
                 self.isNewUser = response.isNewUser
+                self.appleUserId = appleUserId  // 存储 Apple 用户 ID
                 
                 // 保存到本地存储
                 UserDefaults.standard.set(response.accessToken, forKey: "access_token")
                 UserDefaults.standard.set(response.refreshToken, forKey: "refresh_token")
                 UserDefaults.standard.set(response.isNewUser, forKey: "is_new_user")
+                UserDefaults.standard.set(appleUserId, forKey: "apple_user_id")  // 存储 Apple 用户 ID
                 
                 // 设置网络服务的 token
                 NetworkService.shared.setTokens(
@@ -131,8 +167,7 @@ class AuthenticationService: NSObject, ObservableObject {
                 // 创建用户对象
                 self.currentUser = AuthenticatedUser(
                     accessToken: response.accessToken,
-                    isNewUser: response.isNewUser,
-                    subscriptionStatus: response.subscription
+                    isNewUser: response.isNewUser
                 )
                 
                 self.authenticationState = .authenticated
@@ -158,10 +193,12 @@ class AuthenticationService: NSObject, ObservableObject {
     private func clearStoredCredentials() {
         accessToken = nil
         refreshToken = nil
+        appleUserId = nil
         
         UserDefaults.standard.removeObject(forKey: "access_token")
         UserDefaults.standard.removeObject(forKey: "refresh_token")
         UserDefaults.standard.removeObject(forKey: "is_new_user")
+        UserDefaults.standard.removeObject(forKey: "apple_user_id")
     }
     
     // MARK: - 检查是否已登录
@@ -291,13 +328,11 @@ extension AuthenticationService: ASAuthorizationControllerPresentationContextPro
 struct AuthenticatedUser {
     let accessToken: String
     let isNewUser: Bool
-    let subscriptionStatus: String
     let authenticatedAt: Date
     
-    init(accessToken: String, isNewUser: Bool = false, subscriptionStatus: String = "inactive") {
+    init(accessToken: String, isNewUser: Bool = false) {
         self.accessToken = accessToken
         self.isNewUser = isNewUser
-        self.subscriptionStatus = subscriptionStatus
         self.authenticatedAt = Date()
     }
 }

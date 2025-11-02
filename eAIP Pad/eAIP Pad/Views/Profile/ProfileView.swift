@@ -9,9 +9,9 @@ struct ProfileView: View {
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var airacVersions: [AIRACVersion]
     @StateObject private var subscriptionService = SubscriptionService.shared
-    @State private var showingSubscription = false
     @State private var showingSettings = false
     @State private var showingAbout = false
+    @State private var showingSubscription = false
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -25,16 +25,16 @@ struct ProfileView: View {
         List {
             // 订阅状态卡片
             Section {
-                    SubscriptionStatusCard(
-                        subscriptionService: subscriptionService,
-                        onSubscribe: {
-                            showingSubscription = true
-                        }
-                    )
-                }
-                
-                // 统计信息
-                Section("使用统计") {
+                SubscriptionStatusCard(
+                    subscriptionService: subscriptionService,
+                    onSubscribe: {
+                        showingSubscription = true
+                    }
+                )
+            }
+            
+            // 统计信息
+            Section("使用统计") {
                     StatisticRow(
                         icon: "pin.fill",
                         title: "收藏航图",
@@ -155,7 +155,7 @@ struct ProfileView: View {
         .navigationTitle("个人")
         .navigationBarTitleDisplayMode(.large)
         .sheet(isPresented: $showingSubscription) {
-            SubscriptionView()
+            UnifiedSubscriptionView()
         }
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
@@ -207,7 +207,7 @@ struct ProfileView: View {
 
 // MARK: - 订阅状态卡片
 struct SubscriptionStatusCard: View {
-    let subscriptionService: SubscriptionService
+    @ObservedObject var subscriptionService: SubscriptionService
     let onSubscribe: () -> Void
     
     var body: some View {
@@ -248,6 +248,12 @@ struct SubscriptionStatusCard: View {
         }
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .onAppear {
+            // 页面显示时刷新订阅状态
+            Task {
+                await subscriptionService.querySubscriptionStatus()
+            }
+        }
     }
 }
 
@@ -540,7 +546,6 @@ struct AboutView: View {
                             Text("• 支持 iOS 18+ / iPadOS 18+")
                             Text("• 响应式设计，完美适配各种设备")
                             Text("• 本地优先存储，支持离线使用")
-                            Text("• Apple In-App Purchase 订阅")
                         }
                         .font(.subheadline)
                         .foregroundColor(.secondary)
