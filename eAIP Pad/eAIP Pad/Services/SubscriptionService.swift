@@ -43,7 +43,9 @@ class SubscriptionService: ObservableObject {
     
     // 订阅状态
     @Published var subscriptionStatus: AppSubscriptionStatus = .inactive
+    @Published var subscriptionStartDate: Date?
     @Published var subscriptionEndDate: Date?
+    @Published var trialStartDate: Date?
     @Published var daysLeft: Int = 0
     
     // StoreKit 产品
@@ -177,12 +179,11 @@ class SubscriptionService: ObservableObject {
         }
     }
     
-    // MARK: - 从 Transaction 获取 JWS 字符串
-    nonisolated private func getJWSString(from transaction: StoreKit.Transaction) -> String {
-        // transaction.jsonRepresentation 返回的是 JWS 令牌的 Data（字节表示）
-        let jsonData = transaction.jsonRepresentation
-        // 将 Data 转换为字符串
-        return String(data: jsonData, encoding: .utf8) ?? ""
+    // MARK: - 从 VerificationResult 获取原始 JWS 字符串
+    // VerificationResult 有 jwsRepresentation 属性，可以直接获取原始 JWS
+    nonisolated private func getJWSString(from result: VerificationResult<StoreKit.Transaction>) -> String? {
+        // VerificationResult 有 jwsRepresentation 属性，可以直接获取原始 JWS 字符串
+        return result.jwsRepresentation
     }
     
     // MARK: - 从 JWS 中提取环境信息
@@ -243,13 +244,11 @@ class SubscriptionService: ObservableObject {
             // 获取当前有效的交易
             var jwsList: [String] = []
             for await result in Transaction.currentEntitlements {
-                switch result {
-                case .verified(let transaction):
-                    // 从 transaction.jsonRepresentation 获取 JWS 字符串
-                    let jws = getJWSString(from: transaction)
+                // 直接从 VerificationResult 获取原始 JWS 字符串
+                if let jws = getJWSString(from: result), !jws.isEmpty {
                     jwsList.append(jws)
-                case .unverified:
-                    continue
+                } else {
+                    print("⚠️ 无法获取交易 JWS，跳过该交易")
                 }
             }
             
@@ -323,9 +322,24 @@ class SubscriptionService: ObservableObject {
     private func updateStatus(from response: SubscriptionStatusResponse) {
         subscriptionStatus = AppSubscriptionStatus(from: response.status)
         
+        let formatter = ISO8601DateFormatter()
+        
+        // 保存订阅开始日期
+        if let startDateString = response.subscriptionStartDate {
+            subscriptionStartDate = formatter.date(from: startDateString)
+        }
+        
+        // 保存订阅结束日期
         if let endDateString = response.subscriptionEndDate {
-            let formatter = ISO8601DateFormatter()
             subscriptionEndDate = formatter.date(from: endDateString)
+        }
+        
+        // 保存试用期开始日期
+        if let trialDateString = response.trialStartDate {
+            trialStartDate = formatter.date(from: trialDateString)
+        } else {
+            // 如果后端返回 null，表示从未使用过试用期
+            trialStartDate = nil
         }
         
         if let days = response.daysLeft {
@@ -352,6 +366,13 @@ class SubscriptionService: ObservableObject {
             guard let self = self else { return }
             
             for await result in Transaction.updates {
+                // 直接从 VerificationResult 获取原始 JWS 字符串
+                guard let transactionJWS = self.getJWSString(from: result) else {
+                    print("⚠️ 无法获取交易 JWS，跳过该交易")
+                    continue
+                }
+                
+                // 获取 Transaction 对象用于后续操作
                 let transaction: StoreKit.Transaction
                 switch result {
                 case .verified(let verifiedTransaction):
@@ -362,7 +383,6 @@ class SubscriptionService: ObservableObject {
                 }
                 
                 // 验证并更新状态
-                let transactionJWS = self.getJWSString(from: transaction)
                 let success = await self.verifyTransactionWithServer(transactionJWS: transactionJWS, transaction: transaction)
                 if success {
                     // 完成交易
@@ -401,6 +421,12 @@ class SubscriptionService: ObservableObject {
     // MARK: - 计算属性
     var hasValidSubscription: Bool {
         return subscriptionStatus.isValid
+    }
+    
+    /// 判断用户是否已使用过试用期
+    /// 如果 trialStartDate 不为 nil，说明用户曾经使用过试用期
+    var hasUsedTrial: Bool {
+        return trialStartDate != nil
     }
     
     var subscriptionDescription: String {

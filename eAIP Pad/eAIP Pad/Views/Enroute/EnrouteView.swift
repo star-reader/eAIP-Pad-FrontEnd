@@ -109,8 +109,32 @@ struct EnrouteView: View {
         errorMessage = nil
         
         do {
-            // 获取当前 AIRAC 版本
-            guard let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
+            
+            // 如果本地没有 AIRAC 版本，尝试从 API 获取
+            if currentAIRAC == nil {
+                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                do {
+                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
+                    currentAIRAC = airacResponse.version
+                    
+                    // 保存到本地数据库
+                    let newVersion = AIRACVersion(
+                        version: airacResponse.version,
+                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        isCurrent: true
+                    )
+                    modelContext.insert(newVersion)
+                    try? modelContext.save()
+                    
+                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                } catch {
+                    throw NSError(domain: "Enroute", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                }
+            }
+            
+            guard let currentAIRAC = currentAIRAC else {
                 throw NSError(domain: "Enroute", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
             

@@ -50,9 +50,10 @@ struct UnifiedSubscriptionView: View {
                         if let product = subscriptionService.monthlyProduct {
                             VStack(spacing: 16) {
                                 VStack(spacing: 8) {
-                                    // 检查是否有试用期优惠
+                                    // 检查是否有试用期优惠且用户未使用过试用期
                                     if let subscription = product.subscription,
-                                       subscription.introductoryOffer != nil {
+                                       subscription.introductoryOffer != nil,
+                                       !subscriptionService.hasUsedTrial {
                                         Text("首月免费")
                                             .font(.title2)
                                             .fontWeight(.bold)
@@ -126,7 +127,9 @@ struct UnifiedSubscriptionView: View {
                             .disabled(isLoading || subscriptionService.isLoading)
                             
                             if let product = subscriptionService.monthlyProduct {
-                                Text("订阅可随时取消，首月免费后按 \(product.displayPrice)/月 自动续费")
+                                Text(subscriptionService.hasUsedTrial 
+                                    ? "订阅可随时取消，按 \(product.displayPrice)/月 自动续费"
+                                    : "订阅可随时取消，首月免费后按 \(product.displayPrice)/月 自动续费")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)

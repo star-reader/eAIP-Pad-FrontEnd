@@ -301,9 +301,8 @@ struct PDFReaderView: View {
                 }
             }
             
-            guard let airacVersion = currentAIRAC else {
-                throw NSError(domain: "PDFReader", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
+            // 确保 airacVersion 不为 nil（如果 API 获取失败，已设置为 "unknown"）
+            let airacVersion = currentAIRAC ?? "unknown"
             
             // 1. 先尝试从缓存加载
             if let cachedDocument = PDFCacheService.shared.loadFromCache(
