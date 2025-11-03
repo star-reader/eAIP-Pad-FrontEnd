@@ -1,4 +1,5 @@
 import SwiftUI
+import MessageUI
 import SwiftData
 import Foundation
 
@@ -14,6 +15,7 @@ struct ProfileView: View {
     @State private var showingSubscription = false
     @State private var showingCacheCleared = false
     @State private var showingCacheError = false
+    @State private var showingEmailAlert = false
     @State private var cacheSizeText: String = ""
     @State private var errorMessage: String = ""
     
@@ -98,7 +100,7 @@ struct ProfileView: View {
                     }
                     
                     Button {
-                        // TODO: 联系支持
+                        sendEmail()
                     } label: {
                         SettingRow(
                             icon: "envelope.fill",
@@ -147,6 +149,11 @@ struct ProfileView: View {
             Text("已成功清理所有AIRAC数据与PDF缓存文件。")
         }
         .alert("清理缓存失败", isPresented: $showingCacheError) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+        .alert("邮件发送失败", isPresented: $showingEmailAlert) {
             Button("确定", role: .cancel) {}
         } message: {
             Text(errorMessage)
@@ -215,6 +222,23 @@ struct ProfileView: View {
         let formatted = PDFCacheService.shared.getFormattedTotalCacheSize()
         await MainActor.run {
             cacheSizeText = formatted
+        }
+    }
+    
+    // 发送邮件功能
+    private func sendEmail() {
+        let emailAddress = "jinch2287@outlook.com"
+        let subject = "eAIP Pad 用户反馈"
+        let body = "请在此处描述您的问题或建议..."
+        
+        let urlString = "mailto:\(emailAddress)?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        
+        if let url = URL(string: urlString), UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url)
+        } else {
+            // 如果无法打开邮件应用，显示提示
+            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：\(emailAddress)"
+            showingEmailAlert = true
         }
     }
 }
