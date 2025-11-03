@@ -53,13 +53,6 @@ struct ProfileView: View {
                             value: currentAIRAC.version,
                             color: .blue
                         )
-                        
-                        StatisticRow(
-                            icon: "arrow.down.circle",
-                            title: "已下载航图",
-                            value: "\(currentAIRAC.downloadedCharts) / \(currentAIRAC.totalCharts)",
-                            color: .green
-                        )
                     }
                 }
                 
@@ -90,18 +83,6 @@ struct ProfileView: View {
                             trailingText: cacheSizeText
                         )
                     }
-                    
-                    Button {
-                        Task {
-                            await syncData()
-                        }
-                    } label: {
-                        SettingRow(
-                            icon: "arrow.clockwise",
-                            title: "同步数据",
-                            color: .blue
-                        )
-                    }
                 }
                 
                 // 帮助与支持
@@ -117,21 +98,11 @@ struct ProfileView: View {
                     }
                     
                     Button {
-                        // TODO: 打开用户手册
-                    } label: {
-                        SettingRow(
-                            icon: "book.fill",
-                            title: "用户手册",
-                            color: .green
-                        )
-                    }
-                    
-                    Button {
                         // TODO: 联系支持
                     } label: {
                         SettingRow(
                             icon: "envelope.fill",
-                            title: "联系支持",
+                            title: "联系开发者",
                             color: .orange
                         )
                     }
@@ -246,33 +217,6 @@ struct ProfileView: View {
             cacheSizeText = formatted
         }
     }
-    
-    private func syncData() async {
-        // 同步最新AIRAC版本
-        do {
-            let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-            
-            // 检查是否需要更新
-            if !airacVersions.contains(where: { $0.version == airacResponse.version }) {
-                let newVersion = AIRACVersion(
-                    version: airacResponse.version,
-                    effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
-                    isCurrent: airacResponse.isCurrent
-                )
-                modelContext.insert(newVersion)
-                
-                // 将其他版本标记为非当前版本
-                for version in airacVersions {
-                    version.isCurrent = false
-                }
-                newVersion.isCurrent = true
-                
-                try? modelContext.save()
-            }
-        } catch {
-            print("同步数据失败: \(error)")
-        }
-    }
 }
 
 // MARK: - 订阅状态卡片
@@ -316,8 +260,6 @@ struct SubscriptionStatusCard: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .onAppear {
             // 页面显示时刷新订阅状态
             Task {
