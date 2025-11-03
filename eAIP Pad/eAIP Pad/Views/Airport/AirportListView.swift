@@ -95,7 +95,7 @@ struct AirportListView: View {
                 await loadAirports()
             }
         }
-        .onChange(of: authService.authenticationState) { newValue in
+        .onChange(of: authService.authenticationState) { _, newValue in
             if newValue == .authenticated {
                 Task { await loadAirports() }
             }
