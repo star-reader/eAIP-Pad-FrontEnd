@@ -398,14 +398,28 @@ struct PDFReaderView: View {
                 modelContext.delete(pinToRemove)
             }
         } else {
+            // 从chartID中提取ICAO
+            // 格式通常为: {icao}_{type}_{id}
+            let icaoCode: String
+            if let firstUnderscoreIndex = chartID.firstIndex(of: "_") {
+                icaoCode = String(chartID[..<firstUnderscoreIndex])
+            } else {
+                icaoCode = "" // 如果无法提取，则使用空字符串
+            }
+
+            print("我猜的icao, \(icaoCode)")
+            
+            // 获取当前AIRAC版本
+            let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) ?? "unknown"
+            
             // 添加收藏
             let newPin = PinnedChart(
                 chartID: chartID,
                 displayName: displayName,
-                icao: "", // TODO: 从上下文获取ICAO
+                icao: icaoCode,
                 type: documentType.rawValue,
                 documentType: documentType.rawValue,
-                airacVersion: "2510" // TODO: 从上下文获取AIRAC版本
+                airacVersion: currentAIRAC
             )
             modelContext.insert(newPin)
         }

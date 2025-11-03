@@ -25,6 +25,14 @@ struct WeatherSheetView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
                 .padding(.top, 8)
+                
+                // 添加内容视图
+                TabView(selection: $selection) {
+                    metarView.tag(0)
+                    tafView.tag(1)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.default, value: selection)
         }
         .onAppear {
             Task { await loadMETAR() }
@@ -35,13 +43,13 @@ struct WeatherSheetView: View {
     
     private var header: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(airportNameCn) • \(icao)")
-                    .font(.headline)
-                Text(airportNameEn)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
+            // VStack(alignment: .leading, spacing: 4) {
+            //     Text("\(airportNameCn) • \(icao)")
+            //         .font(.headline)
+            //     Text(airportNameEn)
+            //         .font(.subheadline)
+            //         .foregroundColor(.secondary)
+            // }
             Spacer()
             Button {
                 Task {
