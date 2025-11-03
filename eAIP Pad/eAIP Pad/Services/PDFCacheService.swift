@@ -151,23 +151,7 @@ class PDFCacheService {
     // MARK: - 获取缓存大小
     /// 获取所有缓存的总大小
     func getCacheSize() -> Int64 {
-        var totalSize: Int64 = 0
-        
-        do {
-            let cacheContents = try fileManager.contentsOfDirectory(
-                at: cacheDirectory,
-                includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey],
-                options: []
-            )
-            
-            for fileURL in cacheContents {
-                totalSize += calculateDirectorySize(url: fileURL)
-            }
-        } catch {
-            print("计算缓存大小失败: \(error)")
-        }
-        
-        return totalSize
+        return calculateDirectorySize(url: cacheDirectory)
     }
     
     /// 递归计算目录大小
@@ -202,6 +186,22 @@ class PDFCacheService {
     /// 格式化缓存大小显示
     func getFormattedCacheSize() -> String {
         let size = getCacheSize()
+        return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+    }
+
+    /// 获取 PDF 缓存 + 数据缓存 的总大小
+    func getTotalCacheSize() -> Int64 {
+        let pdfSize = calculateDirectorySize(url: cacheDirectory)
+        let dataSize = calculateDirectorySize(url: dataCacheDirectory)
+        return pdfSize + dataSize
+    }
+
+    /// 获取总缓存（PDF+数据）格式化显示
+    func getFormattedTotalCacheSize() -> String {
+        let size = getTotalCacheSize()
+        if size == 0 {
+            return "0 KB"
+        }
         return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
     }
     

@@ -266,7 +266,6 @@ struct AirportInfoCard: View {
                 Spacer()
                 
                 VStack(spacing: 8) {
-                    // TODO: 添加 METAR 天气信息
                     Button("天气") { onWeatherTap() }
                     .buttonStyle(.bordered)
                     .font(.caption)

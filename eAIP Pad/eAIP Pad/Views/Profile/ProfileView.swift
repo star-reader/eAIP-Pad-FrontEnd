@@ -12,6 +12,10 @@ struct ProfileView: View {
     @State private var showingSettings = false
     @State private var showingAbout = false
     @State private var showingSubscription = false
+    @State private var showingCacheCleared = false
+    @State private var showingCacheError = false
+    @State private var cacheSizeText: String = ""
+    @State private var errorMessage: String = ""
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -74,12 +78,16 @@ struct ProfileView: View {
                     Button {
                         Task {
                             await clearCache()
+                            await MainActor.run {
+                                showingCacheCleared = true
+                            }
                         }
                     } label: {
                         SettingRow(
                             icon: "trash.fill",
                             title: "清理缓存",
-                            color: .red
+                            color: .red,
+                            trailingText: cacheSizeText
                         )
                     }
                     
@@ -162,19 +170,81 @@ struct ProfileView: View {
                 SettingsView()
             }
         }
+        .alert("缓存已清理", isPresented: $showingCacheCleared) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text("已成功清理所有AIRAC数据与PDF缓存文件。")
+        }
+        .alert("清理缓存失败", isPresented: $showingCacheError) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+        .onAppear {
+            Task { await updateCacheSize() }
+        }
     }
     
     private func clearCache() async {
-        // 清理旧版本AIRAC数据
-        let oldVersions = airacVersions.filter { !$0.isCurrent }
-        for version in oldVersions {
-            modelContext.delete(version)
+        do {
+            // 1. 清理所有AIRAC数据（包括当前版本）
+            for version in airacVersions {
+                // 记录版本号，用于清理文件缓存
+                let versionString = version.version
+                
+                // 删除相关的航图数据
+                let chartsDescriptor = FetchDescriptor<LocalChart>(
+                    predicate: #Predicate<LocalChart> { chart in
+                        chart.airacVersion == versionString
+                    }
+                )
+                let chartsToDelete = try modelContext.fetch(chartsDescriptor)
+                
+                for chart in chartsToDelete {
+                    modelContext.delete(chart)
+                }
+                
+                // 清理该版本的PDF文件缓存
+                PDFCacheService.shared.clearCacheForVersion(versionString)
+                
+                // 清理该版本的数据缓存
+                PDFCacheService.shared.clearDataCacheForVersion(versionString)
+                
+                // 如果是当前版本，不删除版本记录，只清空其数据
+                if !version.isCurrent {
+                    modelContext.delete(version)
+                }
+            }
+            
+            // 2. 清理网络缓存
+            URLCache.shared.removeAllCachedResponses()
+            
+            // 3. 保存更改
+            try modelContext.save()
+            
+            // 4. 更新缓存大小显示
+            await updateCacheSize()
+            
+            // 5. 显示成功提示
+            await MainActor.run {
+                showingCacheCleared = true
+            }
+            
+        } catch {
+            print("清理缓存失败: \(error)")
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingCacheError = true
+            }
         }
-        
-        // 清理 PDF 缓存
-        PDFCacheService.shared.clearOldVersionCaches(modelContext: modelContext)
-        
-        try? modelContext.save()
+    }
+
+    private func updateCacheSize() async {
+        // 读取总缓存（PDF+数据）大小
+        let formatted = PDFCacheService.shared.getFormattedTotalCacheSize()
+        await MainActor.run {
+            cacheSizeText = formatted
+        }
     }
     
     private func syncData() async {
@@ -288,6 +358,7 @@ struct SettingRow: View {
     let icon: String
     let title: String
     let color: Color
+    var trailingText: String? = nil
     
     var body: some View {
         HStack {
@@ -299,6 +370,11 @@ struct SettingRow: View {
                 .font(.subheadline)
             
             Spacer()
+            if let trailingText = trailingText, !trailingText.isEmpty {
+                Text(trailingText)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }
