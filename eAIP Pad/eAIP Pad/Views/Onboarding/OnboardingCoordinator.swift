@@ -35,9 +35,23 @@ class OnboardingCoordinator: ObservableObject {
         authService.$authenticationState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                if state == .notAuthenticated && self?.currentState == .completed {
-                    print("🔄 Token验证失败，跳转到登录页面")
-                    self?.currentState = .needsLogin
+                guard let self = self else { return }
+                switch state {
+                case .authenticated, .authenticating:
+                    // 保持或切换为主应用，避免闪现登录
+                    if self.currentState != .completed {
+                        self.currentState = .completed
+                    }
+                case .notAuthenticated:
+                    // 仅当确无本地 token 时才进入登录
+                    let hasStoredAccessToken = UserDefaults.standard.string(forKey: "access_token") != nil
+                    if !hasStoredAccessToken {
+                        print("🔄 Token 无效且无本地凭据，进入登录页面")
+                        self.currentState = .needsLogin
+                    }
+                case .error:
+                    // 出错也不要闪现登录，交由用户主动进入登录
+                    break
                 }
             }
             .store(in: &cancellables)
@@ -68,10 +82,14 @@ class OnboardingCoordinator: ObservableObject {
     
     @MainActor
     private func performInitialChecks() async {
-        
-        // 1. 检查登录状态
-        print("📱 检查登录状态: \(authService.isAuthenticated)")
-        if !authService.isAuthenticated {
+        // 0. 启动期间避免闪现登录：如果正在认证或已加载到本地 token，则直接进入主应用
+        let hasStoredAccessToken = UserDefaults.standard.string(forKey: "access_token") != nil
+        if authService.authenticationState == .authenticating || hasStoredAccessToken {
+            currentState = .completed
+            isLoading = false
+            // 后台继续后续检查
+        } else if !authService.isAuthenticated {
+            // 无本地 token 且未认证，才进入登录
             currentState = .needsLogin
             isLoading = false
             return
@@ -262,21 +280,12 @@ struct MainAppView: View {
     
     var body: some View {
         Group {
-            if subscriptionService.hasValidSubscription {
+            // 启动时在首个订阅状态同步完成前，始终展示主应用，避免闪屏
+            if !subscriptionService.hasLoadedOnce {
+                contentView
+            } else if subscriptionService.hasValidSubscription {
                 // 有订阅：显示主应用内容
-                Group {
-                    if horizontalSizeClass == .compact {
-                        // iPhone: 使用 TabView
-                        MainTabView()
-                    } else {
-                        // iPad: 使用 Sidebar
-                        MainSidebarView()
-                    }
-                }
-                .preferredColorScheme(colorScheme)
-                .tint(.primaryBlue)
-                .animation(.easeInOut(duration: 0.3), value: currentSettings.isDarkMode)
-                .animation(.easeInOut(duration: 0.3), value: currentSettings.followSystemAppearance)
+                contentView
             } else {
                 // 没有订阅：直接显示订阅页面
                 UnifiedSubscriptionView()
@@ -286,6 +295,20 @@ struct MainAppView: View {
             // 进入主应用时同步订阅状态
             await subscriptionService.syncSubscriptionStatus()
         }
+    }
+    
+    private var contentView: some View {
+        Group {
+            if horizontalSizeClass == .compact {
+                MainTabView()
+            } else {
+                MainSidebarView()
+            }
+        }
+        .preferredColorScheme(colorScheme)
+        .tint(.primaryBlue)
+        .animation(.easeInOut(duration: 0.3), value: currentSettings.isDarkMode)
+        .animation(.easeInOut(duration: 0.3), value: currentSettings.followSystemAppearance)
     }
     
     private var colorScheme: ColorScheme? {

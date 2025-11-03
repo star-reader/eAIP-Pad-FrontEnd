@@ -10,6 +10,7 @@ struct AirportDetailView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedChartType: ChartType = .all
+    @State private var showWeatherSheet = false
     
     // 过滤后的航图列表
     private var filteredCharts: [ChartResponse] {
@@ -53,7 +54,9 @@ struct AirportDetailView: View {
             } else {
                 VStack(spacing: 0) {
                     // 机场信息卡片
-                    AirportInfoCard(airport: airport)
+                    AirportInfoCard(airport: airport) {
+                        showWeatherSheet = true
+                    }
                         .padding()
                     
                     // 使用原生 Picker 作为分段控制器
@@ -94,6 +97,9 @@ struct AirportDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showWeatherSheet) {
+            WeatherSheetView(icao: airport.icao, airportNameCn: airport.nameCn, airportNameEn: airport.nameEn)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
@@ -229,6 +235,7 @@ struct AirportDetailView: View {
 // MARK: - 机场信息卡片
 struct AirportInfoCard: View {
     let airport: AirportResponse
+    let onWeatherTap: () -> Void
     
     var body: some View {
         VStack(spacing: 12) {
@@ -260,9 +267,7 @@ struct AirportInfoCard: View {
                 
                 VStack(spacing: 8) {
                     // TODO: 添加 METAR 天气信息
-                    Button("天气") {
-                        // 获取 METAR 信息
-                    }
+                    Button("天气") { onWeatherTap() }
                     .buttonStyle(.bordered)
                     .font(.caption)
                 }

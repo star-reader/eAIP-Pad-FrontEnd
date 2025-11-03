@@ -43,6 +43,9 @@ enum APIEndpoint {
     case iapVerify
     case iapSync
     case iapStatus
+    // Weather
+    case weatherMETAR(icao: String)
+    case weatherTAF(icao: String)
     
     var path: String {
         switch self {
@@ -102,6 +105,10 @@ enum APIEndpoint {
             return "/iap/v2/sync"
         case .iapStatus:
             return "/iap/v2/status"
+        case .weatherMETAR(let icao):
+            return "/weather/metar/\(icao)"
+        case .weatherTAF(let icao):
+            return "/weather/taf/\(icao)"
         }
     }
     
@@ -352,6 +359,74 @@ struct NOTAMDocumentResponse: Codable {
     }
 }
 
+// MARK: - 天气响应
+struct METARResponse: Codable {
+    let station: String?
+    let observationTime: String?
+    let windDirection: String?
+    let windSpeed: String?
+    let visibility: String?
+    let temperature: String?
+    let dewpoint: String?
+    let qnh: String?
+    let weather: String?
+    let clouds: [String]?
+    let trend: String?
+    let raw: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case station
+        case observationTime = "observation_time"
+        case windDirection = "wind_direction"
+        case windSpeed = "wind_speed"
+        case visibility
+        case temperature
+        case dewpoint
+        case qnh
+        case weather
+        case clouds
+        case trend
+        case raw
+    }
+}
+
+struct TAFResponse: Codable {
+    let station: String?
+    let issueTime: String?
+    let validFrom: String?
+    let validTo: String?
+    let forecasts: [TAFPeriod]?
+    let raw: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case station
+        case issueTime = "issue_time"
+        case validFrom = "valid_from"
+        case validTo = "valid_to"
+        case forecasts
+        case raw
+    }
+}
+
+struct TAFPeriod: Codable, Hashable, Identifiable {
+    var id: String { (timeFrom ?? "") + "_" + (timeTo ?? UUID().uuidString) }
+    let timeFrom: String?
+    let timeTo: String?
+    let wind: String?
+    let visibility: String?
+    let weather: String?
+    let clouds: [String]?
+    
+    enum CodingKeys: String, CodingKey {
+        case timeFrom = "time_from"
+        case timeTo = "time_to"
+        case wind
+        case visibility
+        case weather
+        case clouds
+    }
+}
+
 // MARK: - 通用文档详情响应
 struct DocumentDetailResponse: Codable {
     let id: Int
@@ -537,6 +612,11 @@ class NetworkService: ObservableObject {
         if httpResponse.statusCode == 401 && requiresAuth {
             logResponse(response: httpResponse, data: data, error: nil)
             
+            // 若无 refresh token，直接返回未授权，避免抛出“没有刷新令牌”误导性错误
+            guard let currentRefreshToken = self.refreshToken, !currentRefreshToken.isEmpty else {
+                throw NetworkError.unauthorized
+            }
+            
             try await refreshAccessToken()
             // 重新设置认证头并重试
             request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
@@ -707,6 +787,142 @@ class NetworkService: ObservableObject {
     func getDocumentSignedURL(type: String, id: Int) async throws -> SignedURLResponse {
         let response: SignedURLResponse = try await makeRequest(endpoint: .documentSignedURL(type: type, id: id))
         return response
+    }
+    
+    // MARK: - 天气相关
+    func getMETAR(icao: String) async throws -> METARResponse {
+        struct MetarAPIModel: Codable {
+            let icaoId: String?
+            let obsTime: Int?
+            let reportTime: String?
+            let temp: Double?
+            let dewp: Double?
+            let wdir: Int?
+            let wspd: Double?
+            let visib: String?
+            let altim: Double?
+            let metarType: String?
+            let rawOb: String?
+            let cover: String?
+            let clouds: [String]?
+            let fltCat: String?
+        }
+
+        let apiModel: MetarAPIModel = try await makeRequest(endpoint: .weatherMETAR(icao: icao))
+
+        let station = apiModel.icaoId
+        let observationTime = apiModel.reportTime ?? (apiModel.obsTime.flatMap { Date(timeIntervalSince1970: TimeInterval($0)) }.map { ISO8601DateFormatter().string(from: $0) })
+        let windDirection = apiModel.wdir.map { "\($0)°" }
+        let windSpeed = apiModel.wspd.map { String(format: "%.0f MPS", $0) }
+        let visibility = apiModel.visib
+        let temperature = apiModel.temp.map { String(format: "%.0f℃", $0) }
+        let dewpoint = apiModel.dewp.map { String(format: "%.0f℃", $0) }
+        let qnh = apiModel.altim.map { String(format: "%.0f hPa", $0) }
+        let weather = apiModel.cover ?? apiModel.fltCat
+        let clouds = apiModel.clouds
+        let trend = apiModel.metarType
+        let raw = apiModel.rawOb
+
+        return METARResponse(
+            station: station,
+            observationTime: observationTime,
+            windDirection: windDirection,
+            windSpeed: windSpeed,
+            visibility: visibility,
+            temperature: temperature,
+            dewpoint: dewpoint,
+            qnh: qnh,
+            weather: weather,
+            clouds: clouds,
+            trend: trend,
+            raw: raw
+        )
+    }
+    
+    func getTAF(icao: String) async throws -> TAFResponse {
+        struct TAFForecastAPI: Codable {
+            let timeFrom: Int?
+            let timeTo: Int?
+            let timeBec: Int?
+            let fcstChange: String?
+            let probability: Int?
+            let wdir: Int?
+            let wspd: Double?
+            let wxString: String?
+            let visib: Int?
+            let altim: Double?
+            let clouds: [TAFCloudAPI]?
+        }
+
+        struct TAFCloudAPI: Codable {
+            let cover: String?
+            let base: Int?
+            let type: String?
+        }
+
+        struct TAFAPIModel: Codable {
+            let icaoId: String?
+            let bulletinTime: String?
+            let issueTime: String?
+            let validTimeFrom: Int?
+            let validTimeTo: Int?
+            let rawTAF: String?
+            let fcsts: [TAFForecastAPI]?
+        }
+
+        func formatEpoch(_ epoch: Int?) -> String? {
+            guard let epoch = epoch else { return nil }
+            return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: TimeInterval(epoch)))
+        }
+
+        func formatWind(dir: Int?, spd: Double?) -> String? {
+            guard let dir = dir, let spd = spd else { return nil }
+            return "\(dir)° \(Int(spd)) MPS"
+        }
+
+        func formatVisibility(_ vis: Int?) -> String? {
+            guard let vis = vis else { return nil }
+            if vis == 0 { return "CAVOK" }
+            return "\(vis) m"
+        }
+
+        func mapClouds(_ clouds: [TAFCloudAPI]?) -> [String]? {
+            guard let clouds = clouds, !clouds.isEmpty else { return nil }
+            return clouds.map { cloud in
+                let cover = cloud.cover ?? ""
+                if let base = cloud.base, base > 0 {
+                    return "\(cover) \(base)ft"
+                } else {
+                    return cover
+                }
+            }
+        }
+
+        let apiModel: TAFAPIModel = try await makeRequest(endpoint: .weatherTAF(icao: icao))
+
+        let periods: [TAFPeriod]? = apiModel.fcsts?.map { f in
+            let wind = formatWind(dir: f.wdir, spd: f.wspd)
+            let visibility = formatVisibility(f.visib)
+            let weather = f.wxString
+            let clouds = mapClouds(f.clouds)
+            return TAFPeriod(
+                timeFrom: formatEpoch(f.timeFrom),
+                timeTo: formatEpoch(f.timeTo),
+                wind: wind,
+                visibility: visibility,
+                weather: weather,
+                clouds: clouds
+            )
+        }
+
+        return TAFResponse(
+            station: apiModel.icaoId,
+            issueTime: apiModel.issueTime ?? apiModel.bulletinTime,
+            validFrom: formatEpoch(apiModel.validTimeFrom),
+            validTo: formatEpoch(apiModel.validTimeTo),
+            forecasts: periods,
+            raw: apiModel.rawTAF
+        )
     }
     
     // MARK: - AIRAC相关

@@ -12,6 +12,7 @@ struct RegulationNavigation: Identifiable, Hashable {
 struct RegulationsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.selectedChartBinding) private var selectedChartBinding
+    @ObservedObject private var authService = AuthenticationService.shared
     @State private var searchText = ""
     @State private var isLoading = false
     @State private var airports: [AirportResponse] = []
@@ -115,12 +116,22 @@ struct RegulationsView: View {
             }
         }
         .task {
-            await loadAirports()
+            // 仅在已认证后加载
+            if authService.authenticationState == .authenticated {
+                await loadAirports()
+            }
+        }
+        .onChange(of: authService.authenticationState) { newValue in
+            if newValue == .authenticated {
+                Task { await loadAirports() }
+            }
         }
     }
     
     // MARK: - 加载机场数据
     private func loadAirports() async {
+        // 若未认证则等待，不启动加载流程
+        guard authService.authenticationState == .authenticated else { return }
         isLoading = true
         errorMessage = nil
         

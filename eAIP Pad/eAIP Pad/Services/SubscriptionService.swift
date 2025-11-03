@@ -52,6 +52,8 @@ class SubscriptionService: ObservableObject {
     @Published var monthlyProduct: Product?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    // 首次同步完成标记：用于避免主界面与订阅界面在启动时来回闪烁
+    @Published var hasLoadedOnce = false
     
     private var updateListenerTask: Task<Void, Error>?
     private let networkService = NetworkService.shared
@@ -281,6 +283,8 @@ class SubscriptionService: ObservableObject {
         }
         
         isLoading = false
+        // 标记已完成至少一次同步
+        hasLoadedOnce = true
     }
     
     // MARK: - 查询订阅状态
@@ -293,6 +297,8 @@ class SubscriptionService: ObservableObject {
             let response = try await networkService.getSubscriptionStatus(appleUserId: appleUserId)
             updateStatus(from: response)
             print("✅ 查询订阅状态成功，状态: \(subscriptionStatus.rawValue)")
+            // 标记已完成至少一次查询
+            hasLoadedOnce = true
         } catch {
             print("❌ 查询订阅状态失败: \(error)")
         }

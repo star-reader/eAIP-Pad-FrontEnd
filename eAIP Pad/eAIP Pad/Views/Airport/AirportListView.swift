@@ -6,6 +6,7 @@ import Foundation
 struct AirportListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
+    @ObservedObject private var authService = AuthenticationService.shared
     @Query private var localAirports: [Airport]
     @State private var searchText = ""
     @State private var airports: [AirportResponse] = []
@@ -90,11 +91,19 @@ struct AirportListView: View {
             }
         }
         .task {
-            await loadAirports()
+            if authService.authenticationState == .authenticated {
+                await loadAirports()
+            }
+        }
+        .onChange(of: authService.authenticationState) { newValue in
+            if newValue == .authenticated {
+                Task { await loadAirports() }
+            }
         }
     }
     
     private func loadAirports() async {
+        guard authService.authenticationState == .authenticated else { return }
         isLoading = true
         errorMessage = nil
         
