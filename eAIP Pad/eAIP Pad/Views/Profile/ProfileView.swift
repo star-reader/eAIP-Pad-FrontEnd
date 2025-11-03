@@ -89,8 +89,8 @@ struct ProfileView: View {
                 
                 // 帮助与支持
                 Section("帮助与支持") {
-                    NavigationLink {
-                        AboutView()
+                    Button {
+                        showingAbout = true
                     } label: {
                         SettingRow(
                             icon: "info.circle.fill",
@@ -142,6 +142,9 @@ struct ProfileView: View {
             NavigationStack {
                 SettingsView()
             }
+        }
+        .sheet(isPresented: $showingAbout) {
+            AboutView()
         }
         .alert("缓存已清理", isPresented: $showingCacheCleared) {
             Button("确定", role: .cancel) {}
@@ -444,65 +447,65 @@ struct SettingsView: View {
                         Toggle("", isOn: .constant(true))
                     }
                     
-                    HStack {
-                        Image(systemName: "wifi")
-                            .foregroundColor(.green)
-                            .frame(width: 24)
+                    // HStack {
+                    //     Image(systemName: "wifi")
+                    //         .foregroundColor(.green)
+                    //         .frame(width: 24)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("仅WiFi下载")
-                            Text("大文件仅在WiFi环境下载载")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                    //     VStack(alignment: .leading, spacing: 4) {
+                    //         Text("仅WiFi下载")
+                    //         Text("大文件仅在WiFi环境下载载")
+                    //             .font(.caption)
+                    //             .foregroundColor(.secondary)
+                    //     }
                         
-                        Spacer()
+                    //     Spacer()
                         
-                        Toggle("", isOn: .constant(true))
-                    }
+                    //     Toggle("", isOn: .constant(true))
+                    // }
                 }
                 
                 // 阅读设置
-                Section("阅读") {
-                    HStack {
-                        Image(systemName: "pencil.tip.crop.circle")
-                            .foregroundColor(.purple)
-                            .frame(width: 24)
+                // Section("阅读") {
+                //     HStack {
+                //         Image(systemName: "pencil.tip.crop.circle")
+                //             .foregroundColor(.purple)
+                //             .frame(width: 24)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("默认标注工具")
-                            Text("打开PDF时的默认标注工具")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                //         VStack(alignment: .leading, spacing: 4) {
+                //             Text("默认标注工具")
+                //             Text("打开PDF时的默认标注工具")
+                //                 .font(.caption)
+                //                 .foregroundColor(.secondary)
+                //         }
                         
-                        Spacer()
+                //         Spacer()
                         
-                        Picker("标注工具", selection: .constant(AnnotationTool.pen)) {
-                            ForEach(AnnotationTool.allCases, id: \.self) { tool in
-                                Text(tool.displayName).tag(tool)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    }
+                //         Picker("标注工具", selection: .constant(AnnotationTool.pen)) {
+                //             ForEach(AnnotationTool.allCases, id: \.self) { tool in
+                //                 Text(tool.displayName).tag(tool)
+                //             }
+                //         }
+                //         .pickerStyle(.menu)
+                //     }
                     
-                    HStack {
-                        Image(systemName: "hand.draw")
-                            .foregroundColor(.red)
-                            .frame(width: 24)
+                //     HStack {
+                //         Image(systemName: "hand.draw")
+                //             .foregroundColor(.red)
+                //             .frame(width: 24)
                         
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Apple Pencil 支持")
-                            Text("启用Apple Pencil专用功能")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                //         VStack(alignment: .leading, spacing: 4) {
+                //             Text("Apple Pencil 支持")
+                //             Text("启用Apple Pencil专用功能")
+                //                 .font(.caption)
+                //                 .foregroundColor(.secondary)
+                //         }
                         
-                        Spacer()
+                //         Spacer()
                         
-                        Toggle("", isOn: .constant(true))
-                    }
-                }
+                //         Toggle("", isOn: .constant(true))
+                //     }
+                // }
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
