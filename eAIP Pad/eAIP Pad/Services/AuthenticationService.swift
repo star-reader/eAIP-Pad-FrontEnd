@@ -30,28 +30,102 @@ class AuthenticationService: NSObject, ObservableObject {
     var isNewUser = false
     var appleUserId: String?  // Apple 用户 ID（用于订阅验证）
     
+    // Token 自动刷新定时器
+    private var tokenRefreshTimer: Timer?
+    private let tokenRefreshInterval: TimeInterval = 3600 // 1小时 = 3600秒
+    
     private override init() {
         super.init()
         checkStoredCredentials()
+        setupAppLifecycleObservers()
+    }
+    
+    deinit {
+        // deinit 不能是 async，但我们可以在主线程上停止定时器
+        if Thread.isMainThread {
+            tokenRefreshTimer?.invalidate()
+            tokenRefreshTimer = nil
+        } else {
+            DispatchQueue.main.sync {
+                self.tokenRefreshTimer?.invalidate()
+                self.tokenRefreshTimer = nil
+            }
+        }
+        removeAppLifecycleObservers()
     }
     
     // MARK: - 检查存储的凭据
     private func checkStoredCredentials() {
         // 从 Keychain 或 UserDefaults 检查存储的 token
-        if let storedAccessToken = UserDefaults.standard.string(forKey: "access_token"),
-           let storedRefreshToken = UserDefaults.standard.string(forKey: "refresh_token") {
-            self.accessToken = storedAccessToken
-            self.refreshToken = storedRefreshToken
-            self.appleUserId = UserDefaults.standard.string(forKey: "apple_user_id")  // 恢复 Apple 用户 ID
-            
-            // 立即设置为已认证状态，避免闪现登录页面
-            self.authenticationState = .authenticated
-            self.currentUser = AuthenticatedUser(accessToken: storedAccessToken)
-            
-            // 后台验证 token 是否仍然有效
-            Task {
+        let storedAccessToken = UserDefaults.standard.string(forKey: "access_token")
+        let storedRefreshToken = UserDefaults.standard.string(forKey: "refresh_token")
+        self.appleUserId = UserDefaults.standard.string(forKey: "apple_user_id")
+        
+        guard let storedAccessToken = storedAccessToken else {
+            return
+        }
+        
+        self.accessToken = storedAccessToken
+        self.refreshToken = storedRefreshToken
+        
+        // 立即设置为已认证状态，避免闪现登录页面
+        self.authenticationState = .authenticated
+        self.currentUser = AuthenticatedUser(accessToken: storedAccessToken)
+        
+        // 设置网络服务的 token
+        NetworkService.shared.setTokens(accessToken: storedAccessToken, refreshToken: storedRefreshToken ?? "")
+        
+        // 如果有 refresh_token，启动时直接尝试刷新 token（因为 access_token 可能已过期）
+        // 如果没有 refresh_token，验证现有的 access_token 是否有效
+        Task {
+            if storedRefreshToken != nil {
+                // 有 refresh_token，直接尝试刷新
+                await refreshTokenIfNeeded()
+            } else {
+                // 没有 refresh_token，验证现有的 access_token
                 await validateStoredTokens()
             }
+        }
+    }
+    
+    // MARK: - 刷新 Token（如果需要）
+    private func refreshTokenIfNeeded() async {
+        guard let refreshToken = refreshToken else {
+            // 没有 refresh_token，验证现有的 access_token
+            await validateStoredTokens()
+            return
+        }
+        
+        // 设置网络服务的 token（用于刷新请求）
+        NetworkService.shared.setTokens(accessToken: accessToken ?? "", refreshToken: refreshToken)
+        
+        do {
+            // 尝试刷新 access token
+            try await NetworkService.shared.refreshAccessToken()
+            
+            // 刷新成功，获取新的 token
+            if let newAccessToken = NetworkService.shared.getCurrentAccessToken() {
+                let newRefreshToken = NetworkService.shared.getCurrentRefreshToken()
+                
+                await MainActor.run {
+                    self.accessToken = newAccessToken
+                    if let newRefreshToken = newRefreshToken {
+                        self.refreshToken = newRefreshToken
+                        UserDefaults.standard.set(newRefreshToken, forKey: "refresh_token")
+                    }
+                    UserDefaults.standard.set(newAccessToken, forKey: "access_token")
+                    self.authenticationState = .authenticated
+                    self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
+                    
+                    // 启动自动刷新定时器
+                    self.startTokenRefreshTimer()
+                }
+                return
+            }
+        } catch {
+            // 刷新失败，尝试验证现有的 access_token（可能还有效）
+            print("⚠️ Token 刷新失败，尝试验证现有 token: \(error)")
+            await validateStoredTokens()
         }
     }
     
@@ -76,6 +150,11 @@ class AuthenticationService: NSObject, ObservableObject {
             await MainActor.run {
                 self.authenticationState = .authenticated
                 self.currentUser = AuthenticatedUser(accessToken: accessToken)
+                
+                // 如果有 refresh_token，启动自动刷新定时器
+                if self.refreshToken != nil {
+                    self.startTokenRefreshTimer()
+                }
             }
         } catch {
             // Token 无效（401）或网络错误，尝试刷新 token
@@ -97,11 +176,15 @@ class AuthenticationService: NSObject, ObservableObject {
                             UserDefaults.standard.set(newAccessToken, forKey: "access_token")
                             self.authenticationState = .authenticated
                             self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
+                            
+                            // 启动自动刷新定时器
+                            self.startTokenRefreshTimer()
                         }
                         return
                     }
                 } catch {
                     // 刷新也失败，清除凭据
+                    print("❌ Token 刷新失败: \(error)")
                 }
             }
             
@@ -171,6 +254,9 @@ class AuthenticationService: NSObject, ObservableObject {
                 )
                 
                 self.authenticationState = .authenticated
+                
+                // 启动自动刷新定时器
+                self.startTokenRefreshTimer()
             }
         } catch {
             await MainActor.run {
@@ -182,6 +268,7 @@ class AuthenticationService: NSObject, ObservableObject {
     
     // MARK: - 登出
     func signOut() {
+        stopTokenRefreshTimer()
         clearStoredCredentials()
         NetworkService.shared.clearTokens()
         
@@ -213,6 +300,136 @@ class AuthenticationService: NSObject, ObservableObject {
         }
         return nil
     }
+    
+    // MARK: - Token 自动刷新定时器
+    @MainActor
+    private func startTokenRefreshTimer() {
+        stopTokenRefreshTimer() // 先停止现有的定时器
+        
+        guard refreshToken != nil else {
+            return
+        }
+        
+        // 在主线程上创建定时器
+        tokenRefreshTimer = Timer.scheduledTimer(withTimeInterval: tokenRefreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.performTokenRefresh()
+            }
+        }
+        
+        // 将定时器添加到 RunLoop
+        if let timer = tokenRefreshTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+    
+    // 非 MainActor 版本的启动方法，用于在异步上下文中调用
+    private func startTokenRefreshTimerAsync() async {
+        await MainActor.run {
+            startTokenRefreshTimer()
+        }
+    }
+    
+    @MainActor
+    private func stopTokenRefreshTimer() {
+        tokenRefreshTimer?.invalidate()
+        tokenRefreshTimer = nil
+    }
+    
+    @MainActor
+    private func performTokenRefresh() async {
+        guard let refreshToken = refreshToken else {
+            stopTokenRefreshTimer()
+            return
+        }
+        
+        // 确保已登录状态
+        guard authenticationState == .authenticated else {
+            stopTokenRefreshTimer()
+            return
+        }
+        
+        print("🔄 自动刷新 access_token...")
+        
+        // 设置网络服务的 token
+        NetworkService.shared.setTokens(accessToken: accessToken ?? "", refreshToken: refreshToken)
+        
+        do {
+            // 尝试刷新 access token
+            try await NetworkService.shared.refreshAccessToken()
+            
+            // 刷新成功，获取新的 token
+            if let newAccessToken = NetworkService.shared.getCurrentAccessToken() {
+                let newRefreshToken = NetworkService.shared.getCurrentRefreshToken()
+                
+                self.accessToken = newAccessToken
+                if let newRefreshToken = newRefreshToken {
+                    self.refreshToken = newRefreshToken
+                    UserDefaults.standard.set(newRefreshToken, forKey: "refresh_token")
+                }
+                UserDefaults.standard.set(newAccessToken, forKey: "access_token")
+                self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
+                
+                print("✅ Token 自动刷新成功")
+            }
+        } catch {
+            print("❌ Token 自动刷新失败: \(error)")
+            // 刷新失败，但不改变认证状态（可能只是临时网络问题）
+            // 下次定时器触发时会再次尝试
+        }
+    }
+    
+    // MARK: - App 生命周期监听
+    private func setupAppLifecycleObservers() {
+        #if canImport(UIKit)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+        #endif
+    }
+    
+    private func removeAppLifecycleObservers() {
+        #if canImport(UIKit)
+        NotificationCenter.default.removeObserver(self)
+        #endif
+    }
+    
+    #if canImport(UIKit)
+    @objc private func appDidEnterBackground() {
+        // App 进入后台时，定时器会自动暂停（Timer 的特性）
+        // 但为了节省资源，我们可以显式处理
+        print("📱 App 进入后台")
+    }
+    
+    @objc private func appWillEnterForeground() {
+        // App 回到前台时，重新验证 token 并刷新（如果需要）
+        print("📱 App 回到前台")
+        
+        guard authenticationState == .authenticated else {
+            return
+        }
+        
+        Task {
+            // 如果有 refresh_token，尝试刷新（因为可能已经过期）
+            if refreshToken != nil {
+                await refreshTokenIfNeeded()
+            } else {
+                // 没有 refresh_token，验证现有 token
+                await validateStoredTokens()
+            }
+        }
+    }
+    #endif
 }
 
 // MARK: - ASAuthorizationControllerDelegate

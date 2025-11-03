@@ -485,7 +485,8 @@ class NetworkService: ObservableObject {
     // MARK: - 认证相关
     func setTokens(accessToken: String, refreshToken: String) {
         self.accessToken = accessToken
-        self.refreshToken = refreshToken
+        // 避免将空字符串当作有效 refresh token 存入
+        self.refreshToken = refreshToken.isEmpty ? nil : refreshToken
     }
     
     func clearTokens() {
@@ -581,7 +582,7 @@ class NetworkService: ObservableObject {
     }
     
     func refreshAccessToken() async throws {
-        guard let refreshToken = refreshToken else {
+        guard let refreshToken = refreshToken, !refreshToken.isEmpty else {
             throw NetworkError.noRefreshToken
         }
         
