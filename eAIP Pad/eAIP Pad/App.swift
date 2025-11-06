@@ -20,6 +20,9 @@ struct eAIPPadApp: App {
         } catch {
             fatalError("无法初始化 SwiftData 容器: \(error)")
         }
+
+        // 初始化日志服务
+        LoggerService.shared.addLog(type: .info, message: "Application started.")
     }
     
     var body: some Scene {
