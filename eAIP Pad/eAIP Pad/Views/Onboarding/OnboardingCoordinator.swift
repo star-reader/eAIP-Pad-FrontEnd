@@ -31,26 +31,35 @@ class OnboardingCoordinator: ObservableObject {
     
     // MARK: - 设置认证状态监听
     private func setupAuthenticationListener() {
-        // 监听认证状态变化，如果token验证失败，跳转到登录页面
+        // 监听认证状态变化
+        // 注意：登录成功的处理由 OnboardingFlow 的监听器负责，这里只处理退出登录的情况
         authService.$authenticationState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self = self else { return }
                 switch state {
-                case .authenticated, .authenticating:
-                    // 保持或切换为主应用，避免闪现登录
-                    if self.currentState != .completed {
+                case .authenticated:
+                    // 已认证：如果当前不在登录流程中（不在 needsLogin 或 newUserWelcome），则切换到主应用
+                    // 这主要用于 app 重新启动时，已有 token 的情况
+                    if self.currentState != .needsLogin && self.currentState != .newUserWelcome {
+                        LoggerService.shared.info(module: "OnboardingCoordinator", message: "已认证且不在登录流程中，进入主应用")
                         self.currentState = .completed
+                    } else {
+                        LoggerService.shared.info(module: "OnboardingCoordinator", message: "已认证，但在登录流程中，由 OnboardingFlow 处理")
                     }
+                case .authenticating:
+                    // 登录中：保持当前状态，不做任何切换
+                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "正在认证中，保持登录界面")
                 case .notAuthenticated:
                     // 仅当确无本地 token 时才进入登录
                     let hasStoredAccessToken = UserDefaults.standard.string(forKey: "access_token") != nil
-                    if !hasStoredAccessToken {
+                    if !hasStoredAccessToken && self.currentState != .needsLogin {
                         LoggerService.shared.info(module: "OnboardingCoordinator", message: "Token 无效且无本地凭据，进入登录页面")
                         self.currentState = .needsLogin
                     }
                 case .error:
                     // 出错也不要闪现登录，交由用户主动进入登录
+                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "认证出错")
                     break
                 }
             }
@@ -133,36 +142,47 @@ class OnboardingCoordinator: ObservableObject {
     
     // MARK: - 处理登录完成
     func handleLoginCompleted() {
+        LoggerService.shared.info(module: "OnboardingCoordinator", message: "登录完成，准备进入应用")
         Task {
             await MainActor.run {
                 if authService.isNewUser {
+                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户，显示欢迎页面")
                     currentState = .newUserWelcome
                 } else {
-                    isLoading = true
+                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "老用户，显示加载页面")
+                    currentState = .loading
                 }
             }
             
+            // 老用户：短暂显示加载页面，确保平滑过渡
             if !authService.isNewUser {
-                currentState = .completed
+                // 等待一小段时间，让数据同步开始
+                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 秒
+                
+                await MainActor.run {
+                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "进入主应用")
+                    currentState = .completed
+                }
             }
         }
     }
     
     // MARK: - 处理新用户欢迎完成
     func handleWelcomeCompleted() {
-        // 新用户欢迎完成后，直接进入主应用
-        LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户欢迎完成，进入主应用")
-        currentState = .completed
+        // 新用户欢迎完成后，显示加载页面，然后进入主应用
+        LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户欢迎完成，显示加载页面")
+        currentState = .loading
+        
+        Task {
+            // 短暂显示加载页面，让用户感受到平滑过渡
+            try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 秒
+            
+            await MainActor.run {
+                LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户进入主应用")
+                currentState = .completed
+            }
+        }
     }
-    
-    // 获取当前用户ID的辅助方法
-    private func getCurrentUserId() -> String? {
-        // 这里可以从 AuthenticationService 获取用户ID
-        // 或者从 JWT token 中解析用户ID
-        // 暂时使用一个模拟的用户ID
-        return authService.currentUser?.accessToken.hashValue.description
-    }
-    
     
     // MARK: - 重试
     func retry() {
@@ -240,7 +260,7 @@ struct LoadingView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                     
-                    Text("正在检查登录状态...")
+                    Text("正在进入应用...")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.8))
                 }

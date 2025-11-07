@@ -104,6 +104,16 @@ struct ProfileView: View {
                     }
                     
                     Button {
+                        openGitHub()
+                    } label: {
+                        SettingRow(
+                            icon: "link.circle.fill",
+                            title: "GitHub 仓库",
+                            color: .green
+                        )
+                    }
+                    
+                    Button {
                         sendNewIdeaEmail()
                     } label: {
                         SettingRow(
@@ -127,7 +137,7 @@ struct ProfileView: View {
                 // 法律信息
                 Section("法律信息") {
                     Button {
-                        // TODO: 打开隐私政策
+                        openPrivacyPolicy()
                     } label: {
                         SettingRow(
                             icon: "hand.raised.fill",
@@ -137,7 +147,7 @@ struct ProfileView: View {
                     }
                     
                     Button {
-                        // TODO: 打开服务条款
+                        openTermsOfService()
                     } label: {
                         SettingRow(
                             icon: "doc.text.fill",
@@ -293,6 +303,33 @@ struct ProfileView: View {
         LoggerService.shared.info(module: "ProfileView", message: "用户点击退出登录")
         AuthenticationService.shared.signOut()
         LoggerService.shared.info(module: "ProfileView", message: "用户已成功退出登录")
+    }
+    
+    // 打开 GitHub 仓库
+    private func openGitHub() {
+        let urlString = "https://github.com/star-reader/eAIP-Pad-FrontEnd"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+            LoggerService.shared.info(module: "ProfileView", message: "打开 GitHub 链接：\(urlString)")
+        }
+    }
+    
+    // 打开隐私政策
+    private func openPrivacyPolicy() {
+        let urlString = "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Privacy-Policy"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+            LoggerService.shared.info(module: "ProfileView", message: "打开隐私政策链接：\(urlString)")
+        }
+    }
+    
+    // 打开服务条款
+    private func openTermsOfService() {
+        let urlString = "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Terms-of-Service"
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+            LoggerService.shared.info(module: "ProfileView", message: "打开服务条款链接：\(urlString)")
+        }
     }
     
     // 发送新想法邮件
@@ -729,6 +766,25 @@ struct AboutView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    
+                    // GitHub 链接
+                    Button {
+                        if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd") {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "link.circle.fill")
+                                .font(.title3)
+                            Text("在 GitHub 上查看源码")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.orange)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
                     
                     // 版权信息
                     VStack(spacing: 8) {

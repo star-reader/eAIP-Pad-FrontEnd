@@ -60,41 +60,49 @@ struct ContentView: View {
     }
     
     private func checkAndUpdateAIRAC() async {
-        LoggerService.shared.log(type: .info, module: "ContentView", message: "checkAndUpdateAIRAC started")
-        guard !isCheckingAIRAC else { return }
+        LoggerService.shared.info(module: "ContentView", message: "准备检查 AIRAC 版本...")
+        guard !isCheckingAIRAC else { 
+            LoggerService.shared.info(module: "ContentView", message: "AIRAC 检查已在进行中，跳过")
+            return 
+        }
         isCheckingAIRAC = true
         defer { isCheckingAIRAC = false }
-        LoggerService.shared.log(type: .info, module: "ContentView", message: "isCheckingAIRAC set to true")
         
-        // 等待认证完成
+        // 等待认证完成（最多 30 秒）
+        LoggerService.shared.info(module: "ContentView", message: "等待用户认证完成...")
         var waitCount = 0
         while AuthenticationService.shared.authenticationState != .authenticated && waitCount < 300 {
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             waitCount += 1
+            
+            // 每 5 秒记录一次等待状态
+            if waitCount % 50 == 0 {
+                LoggerService.shared.info(module: "ContentView", message: "仍在等待认证... (\(waitCount / 10) 秒)")
+            }
         }
-        LoggerService.shared.log(type: .info, module: "ContentView", message: "waitCount: \(waitCount)")
+        
         // 如果还未认证，则跳过 AIRAC 检查
         guard AuthenticationService.shared.authenticationState == .authenticated else {
-            LoggerService.shared.log(type: .warning, module: "ContentView", message: "用户未认证，跳过 AIRAC 检查")
+            LoggerService.shared.warning(module: "ContentView", message: "等待超时或用户未认证，跳过 AIRAC 检查")
             return
         }
+        
+        LoggerService.shared.info(module: "ContentView", message: "✓ 用户已认证，等待 Access Token...")
+        
+        // 等待 token 设置（最多 3 秒）
         var tokenWaitCount = 0
-        while NetworkService.shared.getCurrentAccessToken() == nil && tokenWaitCount < 20 {
+        while NetworkService.shared.getCurrentAccessToken() == nil && tokenWaitCount < 30 {
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             tokenWaitCount += 1
         }
-        LoggerService.shared.log(type: .info, module: "ContentView", message: "tokenWaitCount: \(tokenWaitCount)")
-        // 如果仍然没有 token，再尝试一次等待
-        if NetworkService.shared.getCurrentAccessToken() == nil {
-            LoggerService.shared.log(type: .warning, module: "ContentView", message: "Token 尚未设置，等待 token 验证完成...")
-            try? await Task.sleep(nanoseconds: 500_000_000) // 额外等待 0.5 秒
-        }
-        LoggerService.shared.log(type: .info, module: "ContentView", message: "NetworkService.shared.getCurrentAccessToken(): \(NetworkService.shared.getCurrentAccessToken() != nil)")
-        // 如果还是没有 token，跳过本次检查（会在下次进入主应用时重试）
+        
+        // 如果还是没有 token，跳过本次检查
         guard NetworkService.shared.getCurrentAccessToken() != nil else {
-            LoggerService.shared.log(type: .warning, module: "ContentView", message: "Token 未设置，跳过 AIRAC 检查（将在下次重试）")
+            LoggerService.shared.warning(module: "ContentView", message: "Access Token 未就绪，跳过 AIRAC 检查")
             return
         }
+        
+        LoggerService.shared.info(module: "ContentView", message: "✓ Access Token 已就绪，开始检查 AIRAC 版本")
         
         var airacResponse: AIRACResponse?
         var lastError: Error?
@@ -147,12 +155,19 @@ struct ContentView: View {
                 LoggerService.shared.log(type: .info, module: "ContentView", message: "清理旧版本数据...")
                 await clearOldVersionData(oldVersion: localVersion.version)
                 
+                // 触发新版本数据下载
+                LoggerService.shared.info(module: "ContentView", message: "开始下载新版本 AIRAC 数据")
+                await AIRACService.shared.checkAndUpdateAIRAC(modelContext: modelContext)
+                
                 LoggerService.shared.log(type: .info, module: "ContentView", message: "AIRAC 更新完成")
             } else {
                 LoggerService.shared.log(type: .info, module: "ContentView", message: "无需更新，AIRAC 版本已是最新: \(localVersion.version)")
+                
+                // 检查本地是否有数据，如果没有则下载
+                await checkAndDownloadDataIfNeeded(version: localVersion.version)
             }
         } else {
-            // 本地没有版本记录，创建新的
+            // 本地没有版本记录，创建新的并下载数据
             LoggerService.shared.log(type: .info, module: "ContentView", message: "初始化 AIRAC 版本: \(response.version)")
             let newVersion = AIRACVersion(
                 version: response.version,
@@ -161,7 +176,37 @@ struct ContentView: View {
             )
             modelContext.insert(newVersion)
             try? modelContext.save()
-            LoggerService.shared.log(type: .info, module: "ContentView", message: "AIRAC 初始化完成")
+            LoggerService.shared.log(type: .info, module: "ContentView", message: "AIRAC 初始化完成，准备下载航图数据")
+            
+            // 首次启动，触发完整的 AIRAC 数据下载
+            LoggerService.shared.info(module: "ContentView", message: "检测到首次启动，开始下载 AIRAC 数据")
+            await AIRACService.shared.checkAndUpdateAIRAC(modelContext: modelContext)
+        }
+    }
+    
+    // 检查并下载数据（如果本地没有）
+    private func checkAndDownloadDataIfNeeded(version: String) async {
+        do {
+            // 检查是否有机场数据
+            let airportDescriptor = FetchDescriptor<Airport>()
+            let airports = try modelContext.fetch(airportDescriptor)
+            
+            // 检查是否有航图数据
+            let chartDescriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { chart in
+                    chart.airacVersion == version
+                }
+            )
+            let charts = try modelContext.fetch(chartDescriptor)
+            
+            if airports.isEmpty || charts.isEmpty {
+                LoggerService.shared.info(module: "ContentView", message: "检测到本地无数据（机场: \(airports.count), 航图: \(charts.count)），开始下载")
+                await AIRACService.shared.checkAndUpdateAIRAC(modelContext: modelContext)
+            } else {
+                LoggerService.shared.info(module: "ContentView", message: "本地数据完整（机场: \(airports.count), 航图: \(charts.count)），无需下载")
+            }
+        } catch {
+            LoggerService.shared.error(module: "ContentView", message: "检查本地数据失败: \(error.localizedDescription)")
         }
     }
     

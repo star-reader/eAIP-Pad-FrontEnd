@@ -116,13 +116,17 @@ struct LoginView: View {
                             
                             HStack(spacing: 4) {
                                     Button("服务条款") {
-                                        // TODO: 打开服务条款
+                                        if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Terms-of-Service") {
+                                            UIApplication.shared.open(url)
+                                        }
                                     }
                                     
                                     Text("和")
                                     
                                     Button("隐私政策") {
-                                        // TODO: 打开隐私政策
+                                        if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Privacy-Policy") {
+                                            UIApplication.shared.open(url)
+                                        }
                                     }
                             }
                             .font(.caption)

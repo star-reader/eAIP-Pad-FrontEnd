@@ -863,8 +863,6 @@ enum AIPCategory: String, CaseIterable {
     }
 }
 
-// 模拟数据已移除，现在使用真实的网络请求
-
 #Preview {
     NavigationStack {
         DocumentsView()
