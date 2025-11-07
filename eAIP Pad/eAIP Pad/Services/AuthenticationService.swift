@@ -258,6 +258,10 @@ class AuthenticationService: NSObject, ObservableObject {
                 UserDefaults.standard.set(response.isNewUser, forKey: "is_new_user")
                 UserDefaults.standard.set(appleUserId, forKey: "apple_user_id")  // 存储 Apple 用户 ID
                 
+                // 强制同步到磁盘
+                UserDefaults.standard.synchronize()
+                LoggerService.shared.info(module: "AuthenticationService", message: "已保存登录凭据到本地存储")
+                
                 // 设置网络服务的 token
                 NetworkService.shared.setTokens(
                     accessToken: response.accessToken,
@@ -527,24 +531,31 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
             case NSURLErrorCannotConnectToHost:
                 return "无法连接到服务器，请检查网络"
             default:
-                return "网络错误，请检查网络连接"
+                return "网络错误：\(error.localizedDescription)"
             }
         }
         
-        // HTTP 状态码错误（如果有的话）
+        // 尝试解析 NetworkError
         let errorDescription = error.localizedDescription
+        
+        // 如果包含后端返回的具体错误信息，直接展示
+        if errorDescription.contains("Apple 用户不存在") || errorDescription.contains("Apple ID") {
+            return errorDescription
+        }
+        
+        // HTTP 状态码错误
         if errorDescription.contains("401") {
             return "身份验证失败，请重新登录"
         } else if errorDescription.contains("403") {
             return "访问被拒绝，请联系客服"
         } else if errorDescription.contains("404") {
-            return "服务不可用，请稍后重试"
+            return "Apple 账号未注册，请先在后台注册"
         } else if errorDescription.contains("500") || errorDescription.contains("502") || errorDescription.contains("503") {
             return "服务器繁忙，请稍后重试"
         }
         
-        // 默认错误
-        return "登录失败，请检查网络或稍后重试"
+        // 返回完整的错误描述，帮助调试
+        return "登录失败：\(errorDescription)"
     }
 }
 

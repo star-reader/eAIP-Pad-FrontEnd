@@ -98,11 +98,25 @@ class LoggerService {
             return nil
         }
         
+        // RSA-2048 with OAEP SHA256 最多加密 190 字节
+        // 如果消息太长，只加密前 180 字节，后面用 "..." 标记截断
+        let maxEncryptLength = 180
+        let dataToEncrypt: Data
+        var isTruncated = false
+        
+        if messageData.count > maxEncryptLength {
+            dataToEncrypt = messageData.prefix(maxEncryptLength)
+            isTruncated = true
+            osLog.info("消息过长(\(messageData.count) 字节)，仅加密前 \(maxEncryptLength) 字节")
+        } else {
+            dataToEncrypt = messageData
+        }
+        
         var error: Unmanaged<CFError>?
         guard let encryptedData = SecKeyCreateEncryptedData(
             publicKey,
             .rsaEncryptionOAEPSHA256,
-            messageData as CFData,
+            dataToEncrypt as CFData,
             &error
         ) as Data? else {
             if let error = error?.takeRetainedValue() {
@@ -110,8 +124,10 @@ class LoggerService {
             }
             return nil
         }
-        // 返回base64
-        return encryptedData.base64EncodedString()
+        
+        // 返回 base64，如果被截断则添加标记
+        let base64String = encryptedData.base64EncodedString()
+        return isTruncated ? "\(base64String)...[截断]" : base64String
     }
     
     // MARK: - Public Methods
@@ -229,7 +245,16 @@ class LoggerService {
                     return
                 }
                 
-                let logString = self.exportAsString()
+                // 直接在 queue 中访问 logs，避免调用 exportAsString() 导致的嵌套 queue.sync
+                var logString = ""
+                logString += "=== eAIP Pad 日志 ===\n"
+                logString += "导出时间: \(Date().formatted(date: .long, time: .complete))\n"
+                logString += "日志条目数: \(self.logs.count)\n"
+                logString += "======================================\n\n"
+                
+                for entry in self.logs {
+                    logString += entry.formatted() + "\n"
+                }
                 
                 // 创建临时文件
                 let dateFormatter = DateFormatter()
