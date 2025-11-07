@@ -1181,11 +1181,10 @@ class NetworkService: ObservableObject {
         
         // 记录请求头
         if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
-            LoggerService.shared.info(module: "NetworkService", message: "请求头:")
             for (key, value) in headers {
                 // 敏感信息加密记录
                 if key.lowercased().contains("authorization") {
-                    LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)", encrypt: true)
+                    LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)", encrypt: false)
                 } else {
                     LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)")
                 }
@@ -1197,7 +1196,7 @@ class NetworkService: ObservableObject {
             LoggerService.shared.info(module: "NetworkService", message: "请求体大小: \(body.count) bytes")
             if let bodyString = String(data: body, encoding: .utf8) {
                 // 加密记录完整请求体（可能包含敏感信息）
-                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)", encrypt: true)
+                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)", encrypt: false)
             }
         }
         LoggerService.shared.info(module: "NetworkService", message: "请求时间: \(Date())")

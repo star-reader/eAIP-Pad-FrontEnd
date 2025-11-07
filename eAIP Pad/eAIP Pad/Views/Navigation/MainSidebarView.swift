@@ -194,8 +194,8 @@ struct DetailView: View {
     let selectedItem: SidebarItem?
     let selectedChart: ChartResponse?
     
+    @ViewBuilder
     var body: some View {
-        Group {
             // 个人中心页面不在右侧显示，留空
             if selectedItem == .profile {
                 placeholderView
@@ -220,9 +220,6 @@ struct DetailView: View {
                     }
                 }()
                 
-                // 调试信息
-                LoggerService.shared.info(module: "MainSidebarView", message: "DetailView - Chart ID: \(chart.id), Type: \(chart.chartType), Name: \(chart.nameCn)")
-                
                 PDFReaderView(
                     chartID: "\(chart.chartType.lowercased())_\(chart.id)",
                     displayName: chart.nameCn,
@@ -233,7 +230,6 @@ struct DetailView: View {
                 // 占位符
                 placeholderView
             }
-        }
     }
     
     @ViewBuilder

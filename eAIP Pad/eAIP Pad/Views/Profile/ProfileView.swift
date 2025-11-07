@@ -23,6 +23,7 @@ struct ProfileView: View {
     @State private var mailSubject: String = ""
     @State private var mailBody: String = ""
     @State private var mailAttachmentData: Data?
+    @State private var showingSignOutConfirmation = false
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -147,6 +148,23 @@ struct ProfileView: View {
                         )
                     }
                 }
+                
+                // 账户管理
+                Section {
+                    Button {
+                        showingSignOutConfirmation = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundColor(.red)
+                                .frame(width: 24)
+                            
+                            Text("退出登录")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
         }
         .navigationTitle("个人")
         .navigationBarTitleDisplayMode(.large)
@@ -186,6 +204,14 @@ struct ProfileView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("附带日志文件可以帮助开发者更好地定位问题")
+        }
+        .confirmationDialog("确定要退出登录吗？", isPresented: $showingSignOutConfirmation) {
+            Button("退出登录", role: .destructive) {
+                handleSignOut()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("退出后需要重新登录才能使用应用")
         }
         .sheet(isPresented: $showingMailComposer) {
             MailComposeView(
@@ -264,6 +290,13 @@ struct ProfileView: View {
         await MainActor.run {
             cacheSizeText = formatted
         }
+    }
+    
+    // 退出登录
+    private func handleSignOut() {
+        LoggerService.shared.info(module: "ProfileView", message: "用户点击退出登录")
+        AuthenticationService.shared.signOut()
+        LoggerService.shared.info(module: "ProfileView", message: "用户已成功退出登录")
     }
     
     // 发送新想法邮件
