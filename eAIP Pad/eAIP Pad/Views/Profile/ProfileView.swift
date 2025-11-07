@@ -689,15 +689,11 @@ struct AboutView: View {
                 VStack(spacing: 24) {
                     // 应用图标和信息
                     VStack(spacing: 16) {
-                        Image(systemName: "airplane.circle.fill")
-                            .font(.system(size: 80))
-                            .foregroundColor(.orange)
-                        
                         Text("eAIP Pad")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                         
-                        Text("专业中国eAIP航图阅读器")
+                        Text("中国eAIP航图阅读器")
                             .font(.headline)
                             .foregroundColor(.secondary)
                         
@@ -715,26 +711,32 @@ struct AboutView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             FeatureItem(
                                 icon: "airplane",
-                                title: "完整航图库",
-                                description: "支持中国所有机场的SID、STAR、进近和机场图"
+                                title: "完整机场航图库",
+                                description: "中国全部AIP公开机场的完整机场航图"
                             )
                             
                             FeatureItem(
                                 icon: "map",
                                 title: "航路图支持",
-                                description: "高清航路图和区域图，支持缩放和标注"
+                                description: "高清航路图和区域图"
                             )
                             
-                            FeatureItem(
-                                icon: "pencil.tip.crop.circle",
-                                title: "专业标注",
-                                description: "Apple Pencil支持，标注永久保存"
-                            )
+                            // FeatureItem(
+                            //     icon: "pencil.tip.crop.circle",
+                            //     title: "专业标注",
+                            //     description: "Apple Pencil支持，标注永久保存"
+                            // )
                             
                             FeatureItem(
                                 icon: "pin",
                                 title: "快速访问",
                                 description: "收藏常用航图，支持多种显示样式"
+                            )
+
+                            FeatureItem(
+                                icon: "cloud.fill",
+                                title: "航图缓存",
+                                description: "航图加载后自动本地缓存，下次秒开"
                             )
                             
                             FeatureItem(
@@ -743,25 +745,6 @@ struct AboutView: View {
                                 description: "AIRAC版本自动同步，确保数据最新"
                             )
                         }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    
-                    // 技术信息
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("技术信息")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("• 基于 SwiftUI + SwiftData 构建")
-                            Text("• 支持 iOS 18+ / iPadOS 18+")
-                            Text("• 响应式设计，完美适配各种设备")
-                            Text("• 本地优先存储，支持离线使用")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
