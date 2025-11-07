@@ -21,10 +21,6 @@ struct UnifiedSubscriptionView: View {
                         
                         // 标题和图标
                         VStack(spacing: 16) {
-                            Image(systemName: "airplane.circle.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(Color.primaryBlue)
-                            
                             VStack(spacing: 8) {
                                 Text("订阅 eAIP Pad 专业版")
                                     .font(.title)
@@ -39,8 +35,8 @@ struct UnifiedSubscriptionView: View {
                         // 功能列表
                         VStack(spacing: 16) {
                             FeatureRow(icon: "map.fill", text: "完整航图库")
-                            FeatureRow(icon: "pencil.tip.crop.circle.fill", text: "专业标注工具")
-                            FeatureRow(icon: "pin.fill", text: "智能收藏夹")
+                            FeatureRow(icon: "pencil.tip.crop.circle.fill", text: "航图本地缓存")
+                            FeatureRow(icon: "pin.fill", text: "Pinboard快速访问")
                             FeatureRow(icon: "arrow.clockwise.circle.fill", text: "自动更新")
                             FeatureRow(icon: "icloud.fill", text: "云端同步")
                         }
