@@ -1,159 +1,298 @@
 import Foundation
-import Security
+import SwiftUI
+import OSLog
 
-// MARK: - LoggerService
+// MARK: - Log Types
+enum LogType: String, Codable {
+    case info = "INFO"
+    case warning = "WARNING"
+    case error = "ERROR"
+}
 
-/// A service for logging events and messages within the application.
-/// It supports different log levels, encryption for sensitive data, and exporting logs.
-public class LoggerService {
+// MARK: - Log Entry
+struct LogEntry: Codable, Identifiable {
+    let id: UUID
+    let timestamp: Date
+    let type: LogType
+    let module: String
+    let message: String
+    let isEncrypted: Bool
     
-    /// Singleton instance of the LoggerService.
-    public static let shared = LoggerService()
-    
-    /// The type of log entry.
-    public enum LogType: String {
-        case info = "INFO"
-        case warning = "WARNING"
-        case error = "ERROR"
+    init(type: LogType, module: String, message: String, isEncrypted: Bool = false) {
+        self.id = UUID()
+        self.timestamp = Date()
+        self.type = type
+        self.module = module
+        self.message = message
+        self.isEncrypted = isEncrypted
     }
     
-    /// Represents a single log entry.
-    public struct LogEntry {
-        public let timestamp: Date
-        public let type: LogType
-        public let message: String
-        public let isEncrypted: Bool
+    func formatted() -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        let timeString = dateFormatter.string(from: timestamp)
         
-        public var formattedString: String {
-            let dateFormatter = ISO8601DateFormatter()
-            let timestampString = dateFormatter.string(from: timestamp)
-            return "[\(timestampString)] [\(type.rawValue)] \(message)"
-        }
+        return "\(timeString) - \(type.rawValue), 模块[\(module)] \(message)"
     }
+}
+
+// MARK: - Logger Service
+@Observable
+class LoggerService {
+    static let shared = LoggerService()
+    private var logs: [LogEntry] = []
+    private let maxLogCount = 10000 // 最大日志条目数
+    private let queue = DispatchQueue(label: "logger.queue", qos: .utility)
+    private let osLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "eAIP-Pad", category: "LoggerService")
     
-    private var logEntries: [LogEntry] = []
-    private let logQueue = DispatchQueue(label: "com.eAIPPad.loggerQueue")
-    
-    // MARK: - Public Methods
-
-    /// Adds a new log entry.
-    /// - Parameters:
-    ///   - type: The type of log (.info, .warning, .error).
-    ///   - message: The log message.
-    ///   - encrypt: If `true`, the message will be RSA encrypted. Defaults to `false`.
-    public func addLog(type: LogType, message: String, encrypt shouldEncrypt: Bool = false) {
-        logQueue.async {
-            let messageToStore:
-            String
-            if shouldEncrypt {
-                if let encryptedMessage = self.encrypt(string: message) {
-                    messageToStore = "fetch byte infoData: \(encryptedMessage)"
-                } else {
-                    // 如果加密失败，记录一个错误，并存储原始消息
-                    messageToStore = "Encryption failed for message: \(message)"
-                    self.addLog(type: .error, message: "Failed to encrypt log message.")
-                }
-            } else {
-                messageToStore = message
-            }
-
-            let newEntry = LogEntry(
-                timestamp: Date(),
-                type: type,
-                message: messageToStore,
-                isEncrypted: shouldEncrypt
-            )
-            self.logEntries.append(newEntry)
-        }
-    }
-
-    /// Exports all log entries as a single formatted string.
-    /// - Returns: A string containing all log entries.
-    public func exportLogsToString() -> String {
-        logQueue.sync {
-            logEntries.map { $0.formattedString }.joined(separator: "\n")
-        }
-    }
-
-    /// Exports all log entries to a `log.txt` file.
-    /// - Returns: The URL of the saved log file, or `nil` if the operation fails.
-    public func exportLogsToFile() -> URL? {
-        let logString = exportLogsToString()
-        let fileManager = FileManager.default
-        let tempDirectory = fileManager.temporaryDirectory
-        let fileURL = tempDirectory.appendingPathComponent("log.txt")
-
-        do {
-            try logString.write(to: fileURL, atomically: true, encoding: .utf8)
-            return fileURL
-        } catch {
-            addLog(type: .error, message: "Failed to export logs to file: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    private init() {
-        // Private initializer to enforce singleton pattern.
-    }
-
-    // MARK: - RSA Encryption
-
-    /// The public key used for RSA encryption.
-    ///
-    /// **Security Note:** Replace this placeholder with your actual public key.
-    /// For enhanced security, consider loading the key from a secure location (e.g., a separate configuration file not tracked by Git)
-    /// rather than hardcoding it directly in the source code.
-    private let rsaPublicKey: String = """
-    -----BEGIN PUBLIC KEY-----
-    YOUR_PUBLIC_KEY_HERE
-    -----END PUBLIC KEY-----
+    // RSA 公钥 - 用户需要将公钥字符串放在这里
+    // 格式：PEM 格式的公钥字符串（去掉头尾的 BEGIN/END 标记和换行符）
+    private let rsaPublicKeyString = """
+    REPLACE_WITH_YOUR_PUBLIC_KEY_HERE
     """
-
-    /// Encrypts a string using the configured RSA public key.
-    /// - Parameter string: The string to encrypt.
-    /// - Returns: The Base64 encoded encrypted string, or `nil` if encryption fails.
-    private func encrypt(string: String) -> String? {
-        guard let data = string.data(using: .utf8) else {
-            return nil
-        }
-
-        guard let publicKey = getPublicKey() else {
-            return nil
-        }
-
-        var error: Unmanaged<CFError>?
-        guard let encryptedData = SecKeyCreateEncryptedData(publicKey, .rsaEncryptionOAEPSHA256, data as CFData, &error) as Data? else {
-            print("Encryption failed: \(error.debugDescription)")
-            return nil
-        }
-
-        return encryptedData.base64EncodedString()
+    
+    private var rsaPublicKey: SecKey?
+    
+    private init() {
+        setupRSAPublicKey()
+        log(type: .info, module: "LoggerService", message: "日志服务已初始化")
     }
-
-    /// Retrieves the SecKey object from the stored public key string.
-    /// - Returns: A `SecKey` object, or `nil` if the key is invalid.
-    private func getPublicKey() -> SecKey? {
-        let keyString = rsaPublicKey
+    
+    // MARK: - RSA Setup
+    private func setupRSAPublicKey() {
+        let cleanedKey = rsaPublicKeyString
             .replacingOccurrences(of: "-----BEGIN PUBLIC KEY-----", with: "")
             .replacingOccurrences(of: "-----END PUBLIC KEY-----", with: "")
             .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let data = Data(base64Encoded: keyString) else {
-            return nil
+        
+        guard let keyData = Data(base64Encoded: cleanedKey) else {
+            osLog.error("无法解码 RSA 公钥")
+            return
         }
-
+        
+        // 创建公钥
         let attributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
             kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
-            kSecAttrKeySizeInBits as String: 2048,
+            kSecAttrKeySizeInBits as String: 2048
         ]
-
+        
         var error: Unmanaged<CFError>?
-        guard let secKey = SecKeyCreateWithData(data as CFData, attributes as CFDictionary, &error) else {
-            print("Failed to create SecKey: \(error.debugDescription)")
+        guard let publicKey = SecKeyCreateWithData(keyData as CFData, attributes as CFDictionary, &error) else {
+            if let error = error?.takeRetainedValue() {
+                osLog.error("创建 RSA 公钥失败: \(error.localizedDescription)")
+            }
+            return
+        }
+        
+        self.rsaPublicKey = publicKey
+        osLog.info("RSA 公钥配置成功")
+    }
+    
+    private func encryptMessage(_ message: String) -> String? {
+        guard let publicKey = rsaPublicKey else {
+            osLog.warning("RSA 公钥未配置，无法加密消息")
             return nil
         }
-        return secKey
+        
+        guard let messageData = message.data(using: .utf8) else {
+            osLog.error("无法将消息转换为 Data")
+            return nil
+        }
+        
+        var error: Unmanaged<CFError>?
+        guard let encryptedData = SecKeyCreateEncryptedData(
+            publicKey,
+            .rsaEncryptionOAEPSHA256,
+            messageData as CFData,
+            &error
+        ) as Data? else {
+            if let error = error?.takeRetainedValue() {
+                osLog.error("RSA 加密失败: \(error.localizedDescription)")
+            }
+            return nil
+        }
+        // 返回base64
+        return encryptedData.base64EncodedString()
+    }
+    
+    // MARK: - Public Methods
+    
+    /// 记录日志
+    /// - Parameters:
+    ///   - type: 日志类型 (info, warning, error)
+    ///   - module: 模块名称
+    ///   - message: 日志消息
+    ///   - encrypt: 是否加密消息，默认为 false
+    func log(type: LogType, module: String, message: String, encrypt: Bool = false) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            
+            var finalMessage = message
+            
+            // 如果需要加密
+            if encrypt {
+                if let encryptedBase64 = self.encryptMessage(message) {
+                    finalMessage = encryptedBase64
+                } else {
+                    finalMessage = "[加密失败] \(message)"
+                }
+            }
+            
+            let entry = LogEntry(
+                type: type,
+                module: module,
+                message: finalMessage,
+                isEncrypted: encrypt
+            )
+            
+            self.logs.append(entry)
+            
+            if self.logs.count > self.maxLogCount {
+                self.logs.removeFirst(self.logs.count - self.maxLogCount)
+            }
+            
+            switch type {
+            case .info:
+                self.osLog.info("[\(module)] \(finalMessage)")
+            case .warning:
+                self.osLog.warning("[\(module)] \(finalMessage)")
+            case .error:
+                self.osLog.error("[\(module)] \(finalMessage)")
+            }
+        }
+    }
+    
+    /// 便捷方法：记录 info 日志
+    func info(module: String, message: String, encrypt: Bool = false) {
+        log(type: .info, module: module, message: message, encrypt: encrypt)
+    }
+    
+    /// 便捷方法：记录 warning 日志
+    func warning(module: String, message: String, encrypt: Bool = false) {
+        log(type: .warning, module: module, message: message, encrypt: encrypt)
+    }
+    
+    /// 便捷方法：记录 error 日志
+    func error(module: String, message: String, encrypt: Bool = false) {
+        log(type: .error, module: module, message: message, encrypt: encrypt)
+    }
+    
+    /// 导出日志为字符串
+    /// - Returns: 所有日志的字符串表示
+    func exportAsString() -> String {
+        var result = ""
+        result += "=== eAIP Pad 日志 ===\n"
+        result += "导出时间: \(Date().formatted(date: .long, time: .complete))\n"
+        result += "日志条目数: \(logs.count)\n"
+        result += "======================================\n\n"
+        
+        queue.sync {
+            for entry in logs {
+                result += entry.formatted() + "\n"
+            }
+        }
+        
+        return result
+    }
+    
+    /// 导出日志为文件（可以附加到邮件）
+    /// - Returns: 日志文件的 URL，如果失败返回 nil
+    func exportAsFile() -> URL? {
+        let logString = exportAsString()
+        
+        // 创建临时文件
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+        let dateString = dateFormatter.string(from: Date())
+        let fileName = "eAIP_Pad_Log_\(dateString).txt"
+        
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent(fileName)
+        
+        do {
+            try logString.write(to: fileURL, atomically: true, encoding: .utf8)
+            osLog.info("日志文件已导出: \(fileURL.path)")
+            return fileURL
+        } catch {
+            osLog.error("导出日志文件失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    /// 导出日志为 Data（可用于分享）
+    /// - Returns: 日志文件的 Data
+    func exportAsData() -> Data? {
+        let logString = exportAsString()
+        return logString.data(using: .utf8)
+    }
+    
+    /// 获取日志条目数量
+    func getLogCount() -> Int {
+        return queue.sync {
+            return logs.count
+        }
+    }
+    
+    /// 获取最近的 N 条日志
+    /// - Parameter count: 要获取的日志数量
+    /// - Returns: 日志条目数组
+    func getRecentLogs(count: Int) -> [LogEntry] {
+        return queue.sync {
+            let startIndex = max(0, logs.count - count)
+            return Array(logs[startIndex..<logs.count])
+        }
+    }
+    
+    /// 获取所有日志
+    /// - Returns: 所有日志条目
+    func getAllLogs() -> [LogEntry] {
+        return queue.sync {
+            return logs
+        }
+    }
+    
+    /// 清除所有日志
+    func clearLogs() {
+        queue.async { [weak self] in
+            self?.logs.removeAll()
+            self?.osLog.info("所有日志已清除")
+        }
+    }
+    
+    /// 按类型筛选日志
+    /// - Parameter type: 日志类型
+    /// - Returns: 筛选后的日志条目
+    func filterLogs(by type: LogType) -> [LogEntry] {
+        return queue.sync {
+            return logs.filter { $0.type == type }
+        }
+    }
+    
+    /// 按模块筛选日志
+    /// - Parameter module: 模块名称
+    /// - Returns: 筛选后的日志条目
+    func filterLogs(by module: String) -> [LogEntry] {
+        return queue.sync {
+            return logs.filter { $0.module == module }
+        }
     }
 }
+
+/*
+ LoggerService.shared.log(type: .info, module: "Authentication", message: "用户登录成功")
+ LoggerService.shared.info(module: "App", message: "应用启动")
+ let logString = LoggerService.shared.exportAsString()
+ 
+ if let fileURL = LoggerService.shared.exportAsFile() {
+     // 使用 MFMailComposeViewController 或 UIActivityViewController 分享
+     let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
+     present(activityVC, animated: true)
+ }
+ let allLogs = LoggerService.shared.getAllLogs()
+ let recentLogs = LoggerService.shared.getRecentLogs(count: 100)
+ let errorLogs = LoggerService.shared.filterLogs(by: .error)
+ */
+
