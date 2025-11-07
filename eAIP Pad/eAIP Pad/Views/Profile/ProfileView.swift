@@ -300,7 +300,7 @@ struct ProfileView: View {
         LoggerService.shared.info(module: "ProfileView", message: "用户点击「我有新想法」")
         
         if !MFMailComposeViewController.canSendMail() {
-            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：jinch2287@outlook.com"
+            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：jinch2287@gmail.com"
             showingEmailAlert = true
             LoggerService.shared.warning(module: "ProfileView", message: "设备无法发送邮件")
             return
@@ -328,7 +328,7 @@ struct ProfileView: View {
         LoggerService.shared.info(module: "ProfileView", message: "用户点击「反馈bug」，附带日志：\(withLogs)")
         
         if !MFMailComposeViewController.canSendMail() {
-            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：jinch2287@outlook.com"
+            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：jinch2287@gmail.com"
             showingEmailAlert = true
             LoggerService.shared.warning(module: "ProfileView", message: "设备无法发送邮件")
             return
@@ -796,7 +796,7 @@ struct MailComposeView: UIViewControllerRepresentable {
         
         let composer = MFMailComposeViewController()
         composer.mailComposeDelegate = context.coordinator
-        composer.setToRecipients(["jinch2287@outlook.com"])
+        composer.setToRecipients(["jinch2287@gmail.com"])
         composer.setSubject(subject)
         composer.setMessageBody(body, isHTML: false)
         
