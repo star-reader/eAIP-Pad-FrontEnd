@@ -27,15 +27,6 @@ struct LoginView: View {
                     // 应用图标和标题
                     VStack(spacing: 16) {
                         // 应用图标
-                        ZStack {
-                            Circle()
-                                .fill(.white.opacity(0.2))
-                                .frame(width: 100, height: 100)
-                            
-                            Image(systemName: "airplane.circle.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.white)
-                        }
                         
                         VStack(spacing: 6) {
                             Text("eAIP Pad")
