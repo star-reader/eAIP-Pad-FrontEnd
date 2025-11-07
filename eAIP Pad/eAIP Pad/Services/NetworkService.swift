@@ -555,16 +555,24 @@ class NetworkService: ObservableObject {
     private var accessToken: String?
     private var refreshToken: String?
     
-    private init() {}
+    private init() {
+        LoggerService.shared.info(module: "NetworkService", message: "网络服务初始化")
+    }
     
     // MARK: - 认证相关
     func setTokens(accessToken: String, refreshToken: String) {
         self.accessToken = accessToken
         // 避免将空字符串当作有效 refresh token 存入
         self.refreshToken = refreshToken.isEmpty ? nil : refreshToken
+        // 加密记录 token（敏感信息）
+        LoggerService.shared.info(module: "NetworkService", message: "设置 Access Token: \(accessToken)", encrypt: true)
+        if !refreshToken.isEmpty {
+            LoggerService.shared.info(module: "NetworkService", message: "设置 Refresh Token: \(refreshToken)", encrypt: true)
+        }
     }
     
     func clearTokens() {
+        LoggerService.shared.info(module: "NetworkService", message: "清除 Tokens")
         self.accessToken = nil
         self.refreshToken = nil
     }
@@ -649,6 +657,10 @@ class NetworkService: ObservableObject {
     
     // MARK: - 认证方法
     func appleLogin(idToken: String) async throws -> AuthResponse {
+        LoggerService.shared.info(module: "NetworkService", message: "开始 Apple 登录")
+        // 加密记录 idToken（敏感信息）
+        LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken)", encrypt: true)
+        
         let body = ["id_token": idToken]
         let bodyData = try JSONEncoder().encode(body)
         
@@ -658,13 +670,19 @@ class NetworkService: ObservableObject {
             body: bodyData,
             requiresAuth: false
         )
+        LoggerService.shared.info(module: "NetworkService", message: "Apple 登录成功")
         return response
     }
     
     func refreshAccessToken() async throws {
+        LoggerService.shared.info(module: "NetworkService", message: "开始刷新 Access Token")
         guard let refreshToken = refreshToken, !refreshToken.isEmpty else {
+            LoggerService.shared.error(module: "NetworkService", message: "刷新失败：缺少 Refresh Token")
             throw NetworkError.noRefreshToken
         }
+        
+        // 加密记录 refreshToken
+        LoggerService.shared.info(module: "NetworkService", message: "使用 Refresh Token: \(refreshToken)", encrypt: true)
         
         let body = ["refresh_token": refreshToken]
         let bodyData = try JSONEncoder().encode(body)
@@ -677,6 +695,7 @@ class NetworkService: ObservableObject {
         )
         
         setTokens(accessToken: response.accessToken, refreshToken: response.refreshToken)
+        LoggerService.shared.info(module: "NetworkService", message: "Access Token 刷新成功")
     }
     
     // MARK: - 机场相关
@@ -934,6 +953,12 @@ class NetworkService: ObservableObject {
     // MARK: - IAP 相关方法
     /// 验证 JWS 凭证
     func verifyJWS(transactionJWS: String, appleUserId: String, environment: String? = nil) async throws -> VerifyJWSResponse {
+        LoggerService.shared.info(module: "NetworkService", message: "开始验证 JWS")
+        // 加密记录敏感信息
+        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS: \(transactionJWS)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Environment: \(environment ?? "nil")")
+        
         let request = VerifyJWSRequest(
             transactionJWS: transactionJWS,
             appleUserId: appleUserId,
@@ -1004,6 +1029,12 @@ class NetworkService: ObservableObject {
     
     /// 批量同步订阅
     func syncSubscriptions(transactionJWSList: [String], appleUserId: String, environment: String? = nil) async throws -> SyncSubscriptionResponse {
+        LoggerService.shared.info(module: "NetworkService", message: "开始批量同步订阅")
+        // 加密记录敏感信息
+        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS List (\(transactionJWSList.count) 个): \(transactionJWSList.joined(separator: ","))", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Environment: \(environment ?? "nil")")
+        
         let request = SyncSubscriptionRequest(
             transactionJWSList: transactionJWSList,
             appleUserId: appleUserId,
@@ -1072,10 +1103,15 @@ class NetworkService: ObservableObject {
     
     /// 查询订阅状态
     func getSubscriptionStatus(appleUserId: String) async throws -> SubscriptionStatusResponse {
+        LoggerService.shared.info(module: "NetworkService", message: "开始查询订阅状态")
+        // 加密记录敏感信息
+        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)", encrypt: true)
+        
         var components = URLComponents(url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "apple_user_id", value: appleUserId)]
         
         guard let finalURL = components.url else {
+            LoggerService.shared.error(module: "NetworkService", message: "查询订阅状态失败：无效的 URL")
             throw NetworkError.invalidURL
         }
         
@@ -1139,68 +1175,63 @@ class NetworkService: ObservableObject {
     
     // MARK: - 日志记录方法
     private func logRequest(request: URLRequest, body: Data?) {
-        print("\n===== 网络请求开始 =====")
-        print("方法: \(request.httpMethod ?? "Unknown")")
-        print("URL: \(request.url?.absoluteString ?? "Unknown")")
+        LoggerService.shared.info(module: "NetworkService", message: "===== 网络请求开始 =====")
+        LoggerService.shared.info(module: "NetworkService", message: "方法: \(request.httpMethod ?? "Unknown")")
+        LoggerService.shared.info(module: "NetworkService", message: "URL: \(request.url?.absoluteString ?? "Unknown")")
         
         // 记录请求头
         if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
-            print("请求头:")
+            LoggerService.shared.info(module: "NetworkService", message: "请求头:")
             for (key, value) in headers {
-                // 隐藏敏感信息
+                // 敏感信息加密记录
                 if key.lowercased().contains("authorization") {
-                    print("  \(key): Bearer ***")
+                    LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)", encrypt: true)
                 } else {
-                    print("  \(key): \(value)")
+                    LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)")
                 }
             }
         }
         
         // 记录请求体
         if let body = body {
-            print("请求体大小: \(body.count) bytes")
+            LoggerService.shared.info(module: "NetworkService", message: "请求体大小: \(body.count) bytes")
             if let bodyString = String(data: body, encoding: .utf8) {
-                // 隐藏敏感信息
-                let sanitizedBody = bodyString
-                    .replacingOccurrences(of: "\"id_token\":\"[^\"]*\"", with: "\"id_token\":\"***\"", options: .regularExpression)
-                    .replacingOccurrences(of: "\"refresh_token\":\"[^\"]*\"", with: "\"refresh_token\":\"***\"", options: .regularExpression)
-                print("请求体内容: \(sanitizedBody)")
+                // 加密记录完整请求体（可能包含敏感信息）
+                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)", encrypt: true)
             }
         }
-        print("请求时间: \(Date())")
+        LoggerService.shared.info(module: "NetworkService", message: "请求时间: \(Date())")
     }
     
     private func logResponse(response: HTTPURLResponse?, data: Data, error: Error?) {
-        print("\n===== 网络响应 =====")
+        LoggerService.shared.info(module: "NetworkService", message: "===== 网络响应 =====")
         
         if let response = response {
-            print("状态码: \(response.statusCode)")
-            print("URL: \(response.url?.absoluteString ?? "Unknown")")
-            
-            // 记录响应头
-            
+            LoggerService.shared.info(module: "NetworkService", message: "状态码: \(response.statusCode)")
+            LoggerService.shared.info(module: "NetworkService", message: "URL: \(response.url?.absoluteString ?? "Unknown")")
         }
         
         // 记录响应体
-        print("响应体大小: \(data.count) bytes")
+        LoggerService.shared.info(module: "NetworkService", message: "响应体大小: \(data.count) bytes")
         if let responseString = String(data: data, encoding: .utf8) {
             // 限制日志长度，避免过长的响应
             let maxLength = 2000
             let truncatedResponse = responseString.count > maxLength 
                 ? String(responseString.prefix(maxLength)) + "... (截断)"
                 : responseString
-            print("响应内容: \(truncatedResponse)")
+            // 响应可能包含敏感信息，加密记录
+            LoggerService.shared.info(module: "NetworkService", message: "响应内容: \(truncatedResponse)", encrypt: true)
         }
         
         // 记录错误
         if let error = error {
-            print("错误: \(error.localizedDescription)")
+            LoggerService.shared.error(module: "NetworkService", message: "错误: \(error.localizedDescription)")
         } else {
-            print("请求成功")
+            LoggerService.shared.info(module: "NetworkService", message: "请求成功")
         }
         
-        print("响应时间: \(Date())")
-        print("===== 网络响应结束 =====\n")
+        LoggerService.shared.info(module: "NetworkService", message: "响应时间: \(Date())")
+        LoggerService.shared.info(module: "NetworkService", message: "===== 网络响应结束 =====")
     }
 }
 

@@ -60,56 +60,53 @@ struct ContentView: View {
     }
     
     private func checkAndUpdateAIRAC() async {
+        LoggerService.shared.log(type: .info, module: "ContentView", message: "checkAndUpdateAIRAC started")
         guard !isCheckingAIRAC else { return }
         isCheckingAIRAC = true
         defer { isCheckingAIRAC = false }
+        LoggerService.shared.log(type: .info, module: "ContentView", message: "isCheckingAIRAC set to true")
         
-        // 等待认证完成（最多等待 5 秒）
+        // 等待认证完成
         var waitCount = 0
-        while AuthenticationService.shared.authenticationState != .authenticated && waitCount < 50 {
+        while AuthenticationService.shared.authenticationState != .authenticated && waitCount < 300 {
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             waitCount += 1
         }
-        
+        LoggerService.shared.log(type: .info, module: "ContentView", message: "waitCount: \(waitCount)")
         // 如果还未认证，则跳过 AIRAC 检查
         guard AuthenticationService.shared.authenticationState == .authenticated else {
-            print("⚠️ 用户未认证，跳过 AIRAC 检查")
+            LoggerService.shared.log(type: .warning, module: "ContentView", message: "用户未认证，跳过 AIRAC 检查")
             return
         }
-        
-        // 确保 NetworkService 已设置 token（额外等待一小段时间让 token 验证完成）
         var tokenWaitCount = 0
         while NetworkService.shared.getCurrentAccessToken() == nil && tokenWaitCount < 20 {
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
             tokenWaitCount += 1
         }
-        
+        LoggerService.shared.log(type: .info, module: "ContentView", message: "tokenWaitCount: \(tokenWaitCount)")
         // 如果仍然没有 token，再尝试一次等待
         if NetworkService.shared.getCurrentAccessToken() == nil {
-            print("⚠️ Token 尚未设置，等待 token 验证完成...")
+            LoggerService.shared.log(type: .warning, module: "ContentView", message: "Token 尚未设置，等待 token 验证完成...")
             try? await Task.sleep(nanoseconds: 500_000_000) // 额外等待 0.5 秒
         }
-        
+        LoggerService.shared.log(type: .info, module: "ContentView", message: "NetworkService.shared.getCurrentAccessToken(): \(NetworkService.shared.getCurrentAccessToken() != nil)")
         // 如果还是没有 token，跳过本次检查（会在下次进入主应用时重试）
         guard NetworkService.shared.getCurrentAccessToken() != nil else {
-            print("⚠️ Token 未设置，跳过 AIRAC 检查（将在下次重试）")
+            LoggerService.shared.log(type: .warning, module: "ContentView", message: "Token 未设置，跳过 AIRAC 检查（将在下次重试）")
             return
         }
         
-        print("🔄 检查 AIRAC 版本...")
-        
-        // 从 API 获取最新 AIRAC 版本（最多重试 3 次）
         var airacResponse: AIRACResponse?
         var lastError: Error?
         
         for attempt in 1...3 {
             do {
                 airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                break // 成功，退出重试循环
+                LoggerService.shared.log(type: .info, module: "ContentView", message: "airacResponse: \(String(describing: airacResponse))")
+                break
             } catch {
                 lastError = error
-                print("⚠️ AIRAC 请求失败（尝试 \(attempt)/3）: \(error.localizedDescription)")
-                
+                LoggerService.shared.log(type: .warning, module: "ContentView", message: "AIRAC 请求失败（尝试 \(attempt)/3）: \(error.localizedDescription)")
                 // 如果是最后一次尝试，不再等待
                 if attempt < 3 {
                     // 等待后重试（指数退避）
@@ -121,7 +118,7 @@ struct ContentView: View {
         
         // 如果所有重试都失败，记录错误但不崩溃
         guard let response = airacResponse else {
-            print("❌ AIRAC 检查失败（所有重试均失败）: \(lastError?.localizedDescription ?? "未知错误")")
+            LoggerService.shared.log(type: .error, module: "ContentView", message: "AIRAC 检查失败（所有重试均失败）: \(lastError?.localizedDescription ?? "未知错误")")
             return
         }
         
@@ -131,7 +128,7 @@ struct ContentView: View {
         if let localVersion = currentLocalVersion {
             if localVersion.version != response.version {
                 // 云端版本已更新
-                print("🆕 检测到新版本 AIRAC: \(response.version) (本地: \(localVersion.version))")
+                LoggerService.shared.log(type: .info, module: "ContentView", message: "检测到新版本 AIRAC: \(response.version) (本地: \(localVersion.version))")
                 
                 // 创建新版本记录
                 let newVersion = AIRACVersion(
@@ -147,16 +144,16 @@ struct ContentView: View {
                 try? modelContext.save()
                 
                 // 清理旧版本缓存
-                print("🧹 清理旧版本数据...")
+                LoggerService.shared.log(type: .info, module: "ContentView", message: "清理旧版本数据...")
                 await clearOldVersionData(oldVersion: localVersion.version)
                 
-                print("✅ AIRAC 更新完成")
+                LoggerService.shared.log(type: .info, module: "ContentView", message: "AIRAC 更新完成")
             } else {
-                print("✅ AIRAC 版本已是最新: \(localVersion.version)")
+                LoggerService.shared.log(type: .info, module: "ContentView", message: "无需更新，AIRAC 版本已是最新: \(localVersion.version)")
             }
         } else {
             // 本地没有版本记录，创建新的
-            print("🆕 初始化 AIRAC 版本: \(response.version)")
+            LoggerService.shared.log(type: .info, module: "ContentView", message: "初始化 AIRAC 版本: \(response.version)")
             let newVersion = AIRACVersion(
                 version: response.version,
                 effectiveDate: ISO8601DateFormatter().date(from: response.effectiveDate) ?? Date(),
@@ -164,7 +161,7 @@ struct ContentView: View {
             )
             modelContext.insert(newVersion)
             try? modelContext.save()
-            print("✅ AIRAC 初始化完成")
+            LoggerService.shared.log(type: .info, module: "ContentView", message: "AIRAC 初始化完成")
         }
     }
     
@@ -195,10 +192,11 @@ struct ContentView: View {
             }
             
             try? modelContext.save()
-            print("✅ 已清理旧版本数据: \(oldVersion)")
+            LoggerService.shared.log(type: .info, module: "ContentView", message: "clearOldVersionData completed: \(oldVersion)")
         } catch {
-            print("⚠️ 清理旧版本数据失败: \(error)")
+            LoggerService.shared.log(type: .warning, module: "ContentView", message: "清理旧版本数据失败: \(error)")
         }
+        LoggerService.shared.log(type: .info, module: "ContentView", message: "clearOldVersionData completed: \(oldVersion)")
     }
 }
 

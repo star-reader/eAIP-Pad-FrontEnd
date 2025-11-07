@@ -34,7 +34,9 @@ class PDFCacheService {
         return cachePath
     }
     
-    private init() {}
+    private init() {
+        LoggerService.shared.info(module: "PDFCacheService", message: "PDF 缓存服务初始化")
+    }
     
     // MARK: - 生成缓存文件路径
     /// 生成缓存文件路径，格式：PDFCache/{airacVersion}/{documentType}_{id}.pdf
@@ -74,6 +76,7 @@ class PDFCacheService {
     func saveToCache(pdfData: Data, airacVersion: String, documentType: String, id: String) throws {
         let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
         try pdfData.write(to: filePath)
+        LoggerService.shared.info(module: "PDFCacheService", message: "保存 PDF 到缓存: \(documentType)_\(id)")
     }
     
     // MARK: - 获取当前 AIRAC 版本
@@ -86,7 +89,7 @@ class PDFCacheService {
             let currentVersion = try modelContext.fetch(descriptor).first
             return currentVersion?.version
         } catch {
-            print("获取当前 AIRAC 版本失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "获取当前 AIRAC 版本失败: \(error.localizedDescription)")
             return nil
         }
     }
@@ -94,23 +97,28 @@ class PDFCacheService {
     // MARK: - 清理旧版本缓存
     /// 清理指定 AIRAC 版本的所有缓存
     func clearCacheForVersion(_ version: String) {
+        LoggerService.shared.info(module: "PDFCacheService", message: "清理版本缓存: \(version)")
         let versionDirectory = cacheDirectory.appendingPathComponent(version)
         
         guard fileManager.fileExists(atPath: versionDirectory.path) else {
+            LoggerService.shared.info(module: "PDFCacheService", message: "版本目录不存在: \(version)")
             return
         }
         
         do {
             try fileManager.removeItem(at: versionDirectory)
+            LoggerService.shared.info(module: "PDFCacheService", message: "成功清理版本缓存: \(version)")
         } catch {
-            print("清理缓存失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "清理缓存失败: \(error.localizedDescription)")
         }
     }
     
     // MARK: - 清理非当前版本的缓存
     /// 清理所有非当前 AIRAC 版本的缓存
     func clearOldVersionCaches(modelContext: ModelContext) {
+        LoggerService.shared.info(module: "PDFCacheService", message: "开始清理旧版本缓存")
         guard let currentVersion = getCurrentAIRACVersion(modelContext: modelContext) else {
+            LoggerService.shared.warning(module: "PDFCacheService", message: "无法获取当前版本，跳过清理")
             return
         }
         
@@ -126,25 +134,28 @@ class PDFCacheService {
                 // 如果不是当前版本，则删除
                 if versionName != currentVersion {
                     try fileManager.removeItem(at: versionDir)
-                    print("已清理旧版本缓存: \(versionName)")
+                    LoggerService.shared.info(module: "PDFCacheService", message: "已清理旧版本缓存: \(versionName)")
                 }
             }
+            LoggerService.shared.info(module: "PDFCacheService", message: "旧版本缓存清理完成")
         } catch {
-            print("清理旧版本缓存失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "清理旧版本缓存失败: \(error.localizedDescription)")
         }
     }
     
     // MARK: - 清理所有缓存
     /// 清理所有 PDF 缓存
     func clearAllCache() {
+        LoggerService.shared.info(module: "PDFCacheService", message: "开始清理所有 PDF 缓存")
         do {
             if fileManager.fileExists(atPath: cacheDirectory.path) {
                 try fileManager.removeItem(at: cacheDirectory)
                 // 重新创建缓存目录
                 try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+                LoggerService.shared.info(module: "PDFCacheService", message: "所有 PDF 缓存清理完成")
             }
         } catch {
-            print("清理所有缓存失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "清理所有缓存失败: \(error.localizedDescription)")
         }
     }
     
@@ -177,7 +188,7 @@ class PDFCacheService {
                 totalSize += Int64(resourceValues.fileSize ?? 0)
             }
         } catch {
-            print("计算文件大小失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "计算文件大小失败: \(error.localizedDescription)")
         }
         
         return totalSize
@@ -225,7 +236,7 @@ class PDFCacheService {
                 statistics[versionName] = versionContents.count
             }
         } catch {
-            print("获取缓存统计失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "获取缓存统计失败: \(error.localizedDescription)")
         }
         
         return statistics
@@ -268,7 +279,7 @@ class PDFCacheService {
             let decoder = JSONDecoder()
             return try decoder.decode(type, from: jsonData)
         } catch {
-            print("加载缓存数据失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "加载缓存数据失败: \(error.localizedDescription)")
             return nil
         }
     }
@@ -281,35 +292,41 @@ class PDFCacheService {
     
     /// 清理数据缓存
     func clearDataCache() {
+        LoggerService.shared.info(module: "PDFCacheService", message: "开始清理数据缓存")
         do {
             if fileManager.fileExists(atPath: dataCacheDirectory.path) {
                 try fileManager.removeItem(at: dataCacheDirectory)
                 // 重新创建缓存目录
+                LoggerService.shared.info(module: "PDFCacheService", message: "数据缓存清理完成")
             }
         } catch {
-            print("清理数据缓存失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "清理数据缓存失败: \(error.localizedDescription)")
         }
     }
     
     /// 清理指定版本的数据缓存
     func clearDataCacheForVersion(_ version: String) {
+        LoggerService.shared.info(module: "PDFCacheService", message: "清理版本数据缓存: \(version)")
         let versionDirectory = dataCacheDirectory.appendingPathComponent(version)
         
         guard fileManager.fileExists(atPath: versionDirectory.path) else {
+            LoggerService.shared.info(module: "PDFCacheService", message: "版本数据缓存目录不存在: \(version)")
             return
         }
         
         do {
             try fileManager.removeItem(at: versionDirectory)
-            print("已清理 AIRAC \(version) 的数据缓存")
+            LoggerService.shared.info(module: "PDFCacheService", message: "已清理 AIRAC \(version) 的数据缓存")
         } catch {
-            print("清理数据缓存失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "清理数据缓存失败: \(error.localizedDescription)")
         }
     }
     
     /// 清理旧版本数据缓存
     func clearOldVersionDataCaches(modelContext: ModelContext) {
+        LoggerService.shared.info(module: "PDFCacheService", message: "开始清理旧版本数据缓存")
         guard let currentVersion = getCurrentAIRACVersion(modelContext: modelContext) else {
+            LoggerService.shared.warning(module: "PDFCacheService", message: "无法获取当前版本，跳过数据缓存清理")
             return
         }
         
@@ -325,11 +342,12 @@ class PDFCacheService {
                 // 如果不是当前版本，则删除
                 if versionName != currentVersion {
                     try fileManager.removeItem(at: versionDir)
-                    print("已清理旧版本数据缓存: \(versionName)")
+                    LoggerService.shared.info(module: "PDFCacheService", message: "已清理旧版本数据缓存: \(versionName)")
                 }
             }
+            LoggerService.shared.info(module: "PDFCacheService", message: "旧版本数据缓存清理完成")
         } catch {
-            print("清理旧版本数据缓存失败: \(error)")
+            LoggerService.shared.error(module: "PDFCacheService", message: "清理旧版本数据缓存失败: \(error.localizedDescription)")
         }
     }
 }

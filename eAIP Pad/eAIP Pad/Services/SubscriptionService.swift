@@ -60,6 +60,7 @@ class SubscriptionService: ObservableObject {
     private let authService = AuthenticationService.shared
     
     private init() {
+        LoggerService.shared.info(module: "SubscriptionService", message: "订阅服务初始化")
         // 启动时开始监听交易更新
         updateListenerTask = listenForTransactions()
     }
@@ -70,6 +71,7 @@ class SubscriptionService: ObservableObject {
     
     // MARK: - 加载产品
     func loadProducts() async {
+        LoggerService.shared.info(module: "SubscriptionService", message: "开始加载产品")
         isLoading = true
         errorMessage = nil
         
@@ -78,11 +80,13 @@ class SubscriptionService: ObservableObject {
             monthlyProduct = products.first
             
             if monthlyProduct == nil {
-                print("⚠️ 未找到产品: \(monthlyProductID)")
+                LoggerService.shared.warning(module: "SubscriptionService", message: "未找到产品: \(monthlyProductID)")
+            } else {
+                LoggerService.shared.info(module: "SubscriptionService", message: "产品加载成功")
             }
         } catch {
             errorMessage = "加载产品失败: \(error.localizedDescription)"
-            print("❌ 加载产品失败: \(error)")
+            LoggerService.shared.error(module: "SubscriptionService", message: "加载产品失败: \(error.localizedDescription)")
         }
         
         isLoading = false
@@ -92,9 +96,11 @@ class SubscriptionService: ObservableObject {
     func purchaseMonthlySubscription() async -> Bool {
         guard let product = monthlyProduct else {
             errorMessage = "产品未加载，请稍后再试"
+            LoggerService.shared.warning(module: "SubscriptionService", message: "购买失败：产品未加载")
             return false
         }
         
+        LoggerService.shared.info(module: "SubscriptionService", message: "开始购买月度订阅")
         isLoading = true
         errorMessage = nil
         
@@ -105,43 +111,51 @@ class SubscriptionService: ObservableObject {
             case .success(let verificationResult):
                 switch verificationResult {
                 case .verified(let transaction):
+                    LoggerService.shared.info(module: "SubscriptionService", message: "交易验证成功，准备发送到服务器")
                     // 交易验证成功，从 verificationResult 获取 JWS 字符串
                     let transactionJWS = verificationResult.jwsRepresentation
+                    // 加密记录 JWS（敏感信息）
+                    LoggerService.shared.info(module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)", encrypt: true)
                     // 发送到服务器验证
                     let success = await verifyTransactionWithServer(transactionJWS: transactionJWS, transaction: transaction)
                     if success {
                         await transaction.finish()
                         // 更新订阅状态
                         await updateSubscriptionStatus()
+                        LoggerService.shared.info(module: "SubscriptionService", message: "购买成功，订阅已激活")
                         isLoading = false
                         return true
                     } else {
                         await transaction.finish()
+                        LoggerService.shared.warning(module: "SubscriptionService", message: "服务器验证失败，购买未完成")
                         isLoading = false
                         return false
                     }
                 case .unverified(_, let error):
                     errorMessage = "交易验证失败: \(error.localizedDescription)"
-                    print("❌ 交易验证失败: \(error)")
+                    LoggerService.shared.error(module: "SubscriptionService", message: "交易验证失败: \(error.localizedDescription)")
                     isLoading = false
                     return false
                 }
             case .userCancelled:
                 errorMessage = "用户取消了购买"
+                LoggerService.shared.info(module: "SubscriptionService", message: "用户取消了购买")
                 isLoading = false
                 return false
             case .pending:
                 errorMessage = "购买正在处理中，请稍候"
+                LoggerService.shared.info(module: "SubscriptionService", message: "购买正在处理中")
                 isLoading = false
                 return false
             @unknown default:
                 errorMessage = "未知的购买结果"
+                LoggerService.shared.warning(module: "SubscriptionService", message: "未知的购买结果")
                 isLoading = false
                 return false
             }
         } catch {
             errorMessage = "购买失败: \(error.localizedDescription)"
-            print("❌ 购买失败: \(error)")
+            LoggerService.shared.error(module: "SubscriptionService", message: "购买失败: \(error.localizedDescription)")
             isLoading = false
             return false
         }
@@ -151,13 +165,19 @@ class SubscriptionService: ObservableObject {
     private func verifyTransactionWithServer(transactionJWS: String, transaction: StoreKit.Transaction) async -> Bool {
         guard let appleUserId = authService.appleUserId else {
             errorMessage = "无法获取 Apple 用户 ID"
+            LoggerService.shared.error(module: "SubscriptionService", message: "无法获取 Apple 用户 ID")
             return false
         }
         
+        // 加密记录 Apple 用户 ID（敏感信息）
+        LoggerService.shared.info(module: "SubscriptionService", message: "Apple 用户 ID: \(appleUserId)", encrypt: true)
+        
         // 从 JWS 中提取环境信息
         let environment = extractEnvironment(from: transactionJWS)
+        LoggerService.shared.info(module: "SubscriptionService", message: "交易环境: \(environment ?? "未知")")
         
         do {
+            LoggerService.shared.info(module: "SubscriptionService", message: "开始向服务器验证交易")
             let response = try await networkService.verifyJWS(
                 transactionJWS: transactionJWS,
                 appleUserId: appleUserId,
@@ -168,15 +188,16 @@ class SubscriptionService: ObservableObject {
             updateStatus(from: response)
             
             if response.status == "success" {
-                print("✅ 订阅验证成功")
+                LoggerService.shared.info(module: "SubscriptionService", message: "服务器验证成功，订阅状态: \(response.subscriptionStatus ?? "未知")")
                 return true
             } else {
                 errorMessage = response.message ?? "订阅验证失败"
+                LoggerService.shared.warning(module: "SubscriptionService", message: "服务器验证失败: \(response.message ?? "未知错误")")
                 return false
             }
         } catch {
             errorMessage = "服务器验证失败: \(error.localizedDescription)"
-            print("❌ 服务器验证失败: \(error)")
+            LoggerService.shared.error(module: "SubscriptionService", message: "服务器验证失败: \(error.localizedDescription)")
             return false
         }
     }
@@ -235,11 +256,14 @@ class SubscriptionService: ObservableObject {
     
     // MARK: - 同步订阅状态（App 启动时调用）
     func syncSubscriptionStatus() async {
+        LoggerService.shared.info(module: "SubscriptionService", message: "开始同步订阅状态")
         guard let appleUserId = authService.appleUserId else {
-            print("⚠️ 无法获取 Apple 用户 ID，跳过同步")
+            LoggerService.shared.warning(module: "SubscriptionService", message: "无法获取 Apple 用户 ID，跳过同步")
             return
         }
         
+        // 加密记录 Apple 用户 ID
+        LoggerService.shared.info(module: "SubscriptionService", message: "同步用户 ID: \(appleUserId)", encrypt: true)
         isLoading = true
         
         do {
@@ -250,14 +274,19 @@ class SubscriptionService: ObservableObject {
                 if let jws = getJWSString(from: result), !jws.isEmpty {
                     jwsList.append(jws)
                 } else {
-                    print("⚠️ 无法获取交易 JWS，跳过该交易")
+                    LoggerService.shared.warning(module: "SubscriptionService", message: "无法获取交易 JWS，跳过该交易")
                 }
             }
             
+            LoggerService.shared.info(module: "SubscriptionService", message: "找到 \(jwsList.count) 个本地交易")
+            
             if jwsList.isEmpty {
                 // 没有本地交易，直接查询服务器状态
+                LoggerService.shared.info(module: "SubscriptionService", message: "无本地交易，查询服务器状态")
                 await querySubscriptionStatus()
             } else {
+                // 加密记录交易列表
+                LoggerService.shared.info(module: "SubscriptionService", message: "交易 JWS 列表: \(jwsList.joined(separator: ","))", encrypt: true)
                 // 批量同步交易
                 let environment = extractEnvironment(from: jwsList.first ?? "")
                 let response = try await networkService.syncSubscriptions(
@@ -269,15 +298,15 @@ class SubscriptionService: ObservableObject {
                 updateStatus(from: response)
                 
                 if response.status == "success" {
-                    print("✅ 订阅同步成功，状态: \(subscriptionStatus.rawValue)")
+                    LoggerService.shared.info(module: "SubscriptionService", message: "订阅同步成功，状态: \(subscriptionStatus.rawValue)")
                 } else {
-                    print("⚠️ 订阅同步失败: \(response.message ?? "未知错误")")
+                    LoggerService.shared.warning(module: "SubscriptionService", message: "订阅同步失败: \(response.message ?? "未知错误")")
                     // 同步失败时，尝试查询状态
                     await querySubscriptionStatus()
                 }
             }
         } catch {
-            print("❌ 同步订阅失败: \(error)")
+            LoggerService.shared.error(module: "SubscriptionService", message: "同步订阅失败: \(error.localizedDescription)")
             // 同步失败时，尝试查询状态
             await querySubscriptionStatus()
         }
@@ -290,17 +319,22 @@ class SubscriptionService: ObservableObject {
     // MARK: - 查询订阅状态
     func querySubscriptionStatus() async {
         guard let appleUserId = authService.appleUserId else {
+            LoggerService.shared.warning(module: "SubscriptionService", message: "无法查询订阅状态：缺少 Apple 用户 ID")
             return
         }
+        
+        LoggerService.shared.info(module: "SubscriptionService", message: "开始查询订阅状态")
+        // 加密记录 Apple 用户 ID
+        LoggerService.shared.info(module: "SubscriptionService", message: "查询用户 ID: \(appleUserId)", encrypt: true)
         
         do {
             let response = try await networkService.getSubscriptionStatus(appleUserId: appleUserId)
             updateStatus(from: response)
-            print("✅ 查询订阅状态成功，状态: \(subscriptionStatus.rawValue)")
+            LoggerService.shared.info(module: "SubscriptionService", message: "查询订阅状态成功，状态: \(subscriptionStatus.rawValue)")
             // 标记已完成至少一次查询
             hasLoadedOnce = true
         } catch {
-            print("❌ 查询订阅状态失败: \(error)")
+            LoggerService.shared.error(module: "SubscriptionService", message: "查询订阅状态失败: \(error.localizedDescription)")
         }
     }
     
@@ -371,11 +405,26 @@ class SubscriptionService: ObservableObject {
         return Task.detached { [weak self] in
             guard let self = self else { return }
             
+            await MainActor.run {
+                LoggerService.shared.info(module: "SubscriptionService", message: "开始监听交易更新")
+            }
+            
             for await result in Transaction.updates {
+                await MainActor.run {
+                    LoggerService.shared.info(module: "SubscriptionService", message: "收到交易更新通知")
+                }
+                
                 // 直接从 VerificationResult 获取原始 JWS 字符串
                 guard let transactionJWS = self.getJWSString(from: result) else {
-                    print("⚠️ 无法获取交易 JWS，跳过该交易")
+                    await MainActor.run {
+                        LoggerService.shared.warning(module: "SubscriptionService", message: "无法获取交易 JWS，跳过该交易")
+                    }
                     continue
+                }
+                
+                // 加密记录交易 JWS
+                await MainActor.run {
+                    LoggerService.shared.info(module: "SubscriptionService", message: "更新交易 JWS: \(transactionJWS)", encrypt: true)
                 }
                 
                 // 获取 Transaction 对象用于后续操作
@@ -384,7 +433,9 @@ class SubscriptionService: ObservableObject {
                 case .verified(let verifiedTransaction):
                     transaction = verifiedTransaction
                 case .unverified(_, let error):
-                    print("❌ 交易验证失败: \(error)")
+                    await MainActor.run {
+                        LoggerService.shared.error(module: "SubscriptionService", message: "交易验证失败: \(error.localizedDescription)")
+                    }
                     continue
                 }
                 
@@ -396,6 +447,10 @@ class SubscriptionService: ObservableObject {
                     
                     // 更新订阅状态
                     await self.updateSubscriptionStatus()
+                    
+                    await MainActor.run {
+                        LoggerService.shared.info(module: "SubscriptionService", message: "交易更新处理完成")
+                    }
                 }
             }
         }
@@ -408,17 +463,19 @@ class SubscriptionService: ObservableObject {
     
     // MARK: - 恢复购买
     func restorePurchases() async {
+        LoggerService.shared.info(module: "SubscriptionService", message: "开始恢复购买")
         isLoading = true
         errorMessage = nil
         
         do {
             try await AppStore.sync()
+            LoggerService.shared.info(module: "SubscriptionService", message: "AppStore 同步成功")
             // 同步订阅状态
             await syncSubscriptionStatus()
-            print("✅ 恢复购买成功")
+            LoggerService.shared.info(module: "SubscriptionService", message: "恢复购买成功")
         } catch {
             errorMessage = "恢复购买失败: \(error.localizedDescription)"
-            print("❌ 恢复购买失败: \(error)")
+            LoggerService.shared.error(module: "SubscriptionService", message: "恢复购买失败: \(error.localizedDescription)")
         }
         
         isLoading = false

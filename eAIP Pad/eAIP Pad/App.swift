@@ -17,7 +17,9 @@ struct eAIPPadApp: App {
                 LocalChart.self,
                 Airport.self
             )
+            LoggerService.shared.log(type: .info, module: "App", message: "APP initialized successfully")
         } catch {
+            LoggerService.shared.log(type: .error, module: "App", message: "Failed to initialize SwiftData container: \(error)")
             fatalError("无法初始化 SwiftData 容器: \(error)")
         }
     }
