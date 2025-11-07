@@ -16,8 +16,13 @@ struct ProfileView: View {
     @State private var showingCacheCleared = false
     @State private var showingCacheError = false
     @State private var showingEmailAlert = false
+    @State private var showingMailComposer = false
+    @State private var showingBugReportOptions = false
     @State private var cacheSizeText: String = ""
     @State private var errorMessage: String = ""
+    @State private var mailSubject: String = ""
+    @State private var mailBody: String = ""
+    @State private var mailAttachmentData: Data?
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -100,12 +105,22 @@ struct ProfileView: View {
                     }
                     
                     Button {
-                        sendEmail()
+                        sendNewIdeaEmail()
                     } label: {
                         SettingRow(
-                            icon: "envelope.fill",
-                            title: "联系开发者",
-                            color: .orange
+                            icon: "lightbulb.fill",
+                            title: "我有新想法",
+                            color: .yellow
+                        )
+                    }
+                    
+                    Button {
+                        showingBugReportOptions = true
+                    } label: {
+                        SettingRow(
+                            icon: "ladybug.fill",
+                            title: "反馈bug",
+                            color: .red
                         )
                     }
                 }
@@ -160,6 +175,29 @@ struct ProfileView: View {
             Button("确定", role: .cancel) {}
         } message: {
             Text(errorMessage)
+        }
+        .confirmationDialog("是否附带日志文件？", isPresented: $showingBugReportOptions) {
+            Button("附带日志") {
+                sendBugReportEmail(withLogs: true)
+            }
+            Button("不附带") {
+                sendBugReportEmail(withLogs: false)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("附带日志文件可以帮助开发者更好地定位问题")
+        }
+        .sheet(isPresented: $showingMailComposer) {
+            MailComposeView(
+                subject: mailSubject,
+                body: mailBody,
+                attachmentData: mailAttachmentData,
+                onDismiss: { _ in
+                    showingMailComposer = false
+                    // 清空附件数据
+                    mailAttachmentData = nil
+                }
+            )
         }
         .onAppear {
             Task { await updateCacheSize() }
@@ -228,20 +266,83 @@ struct ProfileView: View {
         }
     }
     
-    // 发送邮件功能
-    private func sendEmail() {
-        let emailAddress = "jinch2287@outlook.com"
-        let subject = "eAIP Pad 用户反馈"
-        let body = "请在此处描述您的问题或建议..."
+    // 发送新想法邮件
+    private func sendNewIdeaEmail() {
+        LoggerService.shared.info(module: "ProfileView", message: "用户点击「我有新想法」")
         
-        let urlString = "mailto:\(emailAddress)?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&body=\(body.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
-        
-        if let url = URL(string: urlString), UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url)
-        } else {
-            // 如果无法打开邮件应用，显示提示
-            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：\(emailAddress)"
+        if !MFMailComposeViewController.canSendMail() {
+            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：jinch2287@outlook.com"
             showingEmailAlert = true
+            LoggerService.shared.warning(module: "ProfileView", message: "设备无法发送邮件")
+            return
+        }
+        
+        mailSubject = "eAIP Pad - 新想法反馈"
+        mailBody = """
+        
+        
+        ───────────────────────────
+        请在上方描述您的想法或建议
+        
+        系统信息：
+        • 设备型号：\(UIDevice.current.model)
+        • 系统版本：iOS \(UIDevice.current.systemVersion)
+        • App 版本：1.0.0 (Build 1)
+        """
+        mailAttachmentData = nil
+        showingMailComposer = true
+        
+        LoggerService.shared.info(module: "ProfileView", message: "打开新想法邮件编辑器")
+    }
+    
+    // 发送bug反馈邮件
+    private func sendBugReportEmail(withLogs: Bool) {
+        LoggerService.shared.info(module: "ProfileView", message: "用户点击「反馈bug」，附带日志：\(withLogs)")
+        
+        if !MFMailComposeViewController.canSendMail() {
+            errorMessage = "请确保您的设备已设置邮件账户，或者直接发送邮件至：jinch2287@outlook.com"
+            showingEmailAlert = true
+            LoggerService.shared.warning(module: "ProfileView", message: "设备无法发送邮件")
+            return
+        }
+        
+        mailSubject = "eAIP Pad - Bug 反馈"
+        mailBody = """
+        
+        
+        ───────────────────────────
+        请在上方描述您遇到的问题
+        
+        系统信息：
+        • 设备型号：\(UIDevice.current.model)
+        • 系统版本：iOS \(UIDevice.current.systemVersion)
+        • App 版本：1.0.0 (Build 1)
+        """
+        
+        if withLogs {
+            // 导出日志文件
+            Task {
+                do {
+                    let logFileURL = try await LoggerService.shared.exportLogsAsFile()
+                    let logData = try Data(contentsOf: logFileURL)
+                    
+                    await MainActor.run {
+                        mailAttachmentData = logData
+                        showingMailComposer = true
+                        LoggerService.shared.info(module: "ProfileView", message: "日志文件已附加，大小：\(logData.count) 字节")
+                    }
+                } catch {
+                    await MainActor.run {
+                        errorMessage = "导出日志失败：\(error.localizedDescription)"
+                        showingEmailAlert = true
+                        LoggerService.shared.error(module: "ProfileView", message: "导出日志失败：\(error.localizedDescription)")
+                    }
+                }
+            }
+        } else {
+            mailAttachmentData = nil
+            showingMailComposer = true
+            LoggerService.shared.info(module: "ProfileView", message: "打开bug反馈邮件编辑器（不附带日志）")
         }
     }
 }
@@ -639,6 +740,77 @@ struct FeatureItem: View {
                 Text(description)
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - 邮件编辑器视图
+struct MailComposeView: UIViewControllerRepresentable {
+    let subject: String
+    let body: String
+    let attachmentData: Data?
+    let onDismiss: (MFMailComposeResult) -> Void
+    
+    func makeUIViewController(context: Context) -> MFMailComposeViewController {
+        let composer = MFMailComposeViewController()
+        composer.mailComposeDelegate = context.coordinator
+        composer.setToRecipients(["jinch2287@outlook.com"])
+        composer.setSubject(subject)
+        composer.setMessageBody(body, isHTML: false)
+        
+        // 如果有附件数据，添加附件
+        if let attachmentData = attachmentData {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+            let timestamp = dateFormatter.string(from: Date())
+            let filename = "eAIPPad_logs_\(timestamp).txt"
+            
+            composer.addAttachmentData(
+                attachmentData,
+                mimeType: "text/plain",
+                fileName: filename
+            )
+            
+            LoggerService.shared.info(module: "MailComposeView", message: "已添加日志附件：\(filename)")
+        }
+        
+        return composer
+    }
+    
+    func updateUIViewController(_ uiViewController: MFMailComposeViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDismiss: onDismiss)
+    }
+    
+    class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
+        let onDismiss: (MFMailComposeResult) -> Void
+        
+        init(onDismiss: @escaping (MFMailComposeResult) -> Void) {
+            self.onDismiss = onDismiss
+        }
+        
+        func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+            if let error = error {
+                LoggerService.shared.error(module: "MailComposeView", message: "邮件发送错误：\(error.localizedDescription)")
+            }
+            
+            switch result {
+            case .sent:
+                LoggerService.shared.info(module: "MailComposeView", message: "邮件已发送")
+            case .saved:
+                LoggerService.shared.info(module: "MailComposeView", message: "邮件已保存为草稿")
+            case .cancelled:
+                LoggerService.shared.info(module: "MailComposeView", message: "用户取消发送邮件")
+            case .failed:
+                LoggerService.shared.error(module: "MailComposeView", message: "邮件发送失败")
+            @unknown default:
+                LoggerService.shared.warning(module: "MailComposeView", message: "未知的邮件发送结果")
+            }
+            
+            controller.dismiss(animated: true) {
+                self.onDismiss(result)
             }
         }
     }

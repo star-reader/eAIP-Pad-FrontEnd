@@ -218,6 +218,40 @@ class LoggerService {
         }
     }
     
+    /// 导出日志为文件（异步版本，用于 async/await 上下文）
+    /// - Returns: 日志文件的 URL
+    /// - Throws: 如果导出失败则抛出错误
+    public func exportLogsAsFile() async throws -> URL {
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume(throwing: NSError(domain: "LoggerService", code: -1, userInfo: [NSLocalizedDescriptionKey: "LoggerService 实例不存在"]))
+                    return
+                }
+                
+                let logString = self.exportAsString()
+                
+                // 创建临时文件
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+                let dateString = dateFormatter.string(from: Date())
+                let fileName = "eAIP_Pad_Log_\(dateString).txt"
+                
+                let tempDir = FileManager.default.temporaryDirectory
+                let fileURL = tempDir.appendingPathComponent(fileName)
+                
+                do {
+                    try logString.write(to: fileURL, atomically: true, encoding: .utf8)
+                    self.osLog.info("日志文件已异步导出: \(fileURL.path)")
+                    continuation.resume(returning: fileURL)
+                } catch {
+                    self.osLog.error("异步导出日志文件失败: \(error.localizedDescription)")
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
     /// 导出日志为 Data（可用于分享）
     /// - Returns: 日志文件的 Data
     func exportAsData() -> Data? {
