@@ -212,7 +212,7 @@ struct ProfileView: View {
             }
             
         } catch {
-            print("清理缓存失败: \(error)")
+            LoggerService.shared.error(module: "ProfileView", message: "清理缓存失败: \(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 showingCacheError = true

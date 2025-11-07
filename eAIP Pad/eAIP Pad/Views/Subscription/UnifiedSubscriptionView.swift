@@ -169,7 +169,7 @@ struct UnifiedSubscriptionView: View {
         await MainActor.run {
             if success {
                 // 购买成功，显示成功提示并关闭页面
-                print("✅ 订阅购买成功")
+                LoggerService.shared.info(module: "UnifiedSubscriptionView", message: "订阅购买成功")
                 // 这里可以添加成功提示，然后自动关闭
                 // 页面会自动关闭因为订阅状态已更新
             } else {
@@ -193,7 +193,7 @@ struct UnifiedSubscriptionView: View {
                 showingError = true
             }
         } else {
-            print("✅ 恢复购买成功")
+            LoggerService.shared.info(module: "UnifiedSubscriptionView", message: "恢复购买成功")
         }
         
         isLoading = false

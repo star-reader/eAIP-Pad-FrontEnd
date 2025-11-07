@@ -113,7 +113,7 @@ struct AirportListView: View {
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "AirportListView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -127,7 +127,7 @@ struct AirportListView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "AirportListView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
                     throw NSError(domain: "AirportList", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
                 }

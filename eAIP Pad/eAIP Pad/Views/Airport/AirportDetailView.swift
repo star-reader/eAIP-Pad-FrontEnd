@@ -131,7 +131,7 @@ struct AirportDetailView: View {
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "AirportDetailView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -145,7 +145,7 @@ struct AirportDetailView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "AirportDetailView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
                     throw NSError(domain: "AirportDetail", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
                 }
@@ -298,7 +298,7 @@ struct ChartRowView: View {
             if let binding = selectedChartBinding {
                 // iPad 侧边栏模式：点击设置环境中的 selectedChart
                 Button {
-                    print("🔵 ChartRowView - 点击航图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
+                    LoggerService.shared.info(module: "AirportDetailView", message: "点击航图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
                     binding.wrappedValue = chart
                 } label: {
                     chartRowContent

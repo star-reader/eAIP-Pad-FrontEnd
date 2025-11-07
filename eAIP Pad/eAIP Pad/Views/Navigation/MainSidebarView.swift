@@ -57,13 +57,13 @@ struct MainSidebarView: View {
                 .onChange(of: item) { oldValue, newValue in
                     // 切换页面时清空选中的航图和机场
                     if oldValue != newValue {
-                        print("🔄 切换页面: \(oldValue.title) -> \(newValue.title)")
+                        LoggerService.shared.info(module: "MainSidebarView", message: "切换页面: \(oldValue.title) -> \(newValue.title)")
                         selectedChart = nil
                         selectedAirport = nil
                     }
                 }
                 .onChange(of: selectedChart) { oldValue, newValue in
-                    print("📊 selectedChart 变化: ID从 \(oldValue?.id ?? -1) -> \(newValue?.id ?? -1), Type: \(newValue?.chartType ?? "nil")")
+                    LoggerService.shared.info(module: "MainSidebarView", message: "selectedChart 变化: ID从 \(oldValue?.id ?? -1) -> \(newValue?.id ?? -1), Type: \(newValue?.chartType ?? "nil")")
                 }
             } else {
                 ContentUnavailableView(
@@ -221,7 +221,7 @@ struct DetailView: View {
                 }()
                 
                 // 调试信息
-                let _ = print("📱 DetailView - Chart ID: \(chart.id), Type: \(chart.chartType), Name: \(chart.nameCn)")
+                LoggerService.shared.info(module: "MainSidebarView", message: "DetailView - Chart ID: \(chart.id), Type: \(chart.chartType), Name: \(chart.nameCn)")
                 
                 PDFReaderView(
                     chartID: "\(chart.chartType.lowercased())_\(chart.id)",

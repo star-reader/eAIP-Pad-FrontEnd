@@ -242,20 +242,20 @@ struct PDFReaderView: View {
             }
         }
         .task(id: chartID) {
-            print("🎬 PDFReaderView.task 触发 - chartID: \(chartID), documentType: \(documentType.rawValue)")
+            LoggerService.shared.info(module: "PDFReaderView", message: "task 触发 - chartID: \(chartID), documentType: \(documentType.rawValue)")
             await loadPDF()
         }
         .onChange(of: chartID) { oldValue, newValue in
-            print("🔄 PDFReaderView chartID 变化: \(oldValue) -> \(newValue)")
+            LoggerService.shared.info(module: "PDFReaderView", message: "chartID 变化: \(oldValue) -> \(newValue)")
             Task {
                 await loadPDF()
             }
         }
         .onAppear {
-            print("👁️ PDFReaderView.onAppear - chartID: \(chartID)")
+            LoggerService.shared.info(module: "PDFReaderView", message: "onAppear - chartID: \(chartID)")
         }
         .onDisappear {
-            print("👋 PDFReaderView.onDisappear - chartID: \(chartID)")
+            LoggerService.shared.info(module: "PDFReaderView", message: "onDisappear - chartID: \(chartID)")
         }
     }
     
@@ -272,14 +272,14 @@ struct PDFReaderView: View {
                 actualID = chartID
             }
             
-            print("🔍 PDFReaderView - chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)")
+            LoggerService.shared.info(module: "PDFReaderView", message: "chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)")
             
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
             var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "PDFReaderView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -293,9 +293,9 @@ struct PDFReaderView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "PDFReaderView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    print("⚠️ 无法从 API 获取 AIRAC 版本，使用默认值")
+                    LoggerService.shared.warning(module: "PDFReaderView", message: "无法从 API 获取 AIRAC 版本，使用默认值: \(error.localizedDescription)")
                     // 使用一个默认的 AIRAC 版本（用于降级处理）
                     currentAIRAC = "unknown"
                 }
@@ -407,7 +407,7 @@ struct PDFReaderView: View {
                 icaoCode = "" // 如果无法提取，则使用空字符串
             }
 
-            print("我猜的icao, \(icaoCode)")
+            LoggerService.shared.info(module: "PDFReaderView", message: "猜测的ICAO: \(icaoCode)")
             
             // 获取当前AIRAC版本
             let currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) ?? "unknown"
@@ -481,7 +481,7 @@ struct PDFReaderView: View {
             pdfFileToShare = tempURL
             showingShareSheet = true
         } catch {
-            print("创建临时文件失败: \(error)")
+            LoggerService.shared.error(module: "PDFReaderView", message: "创建临时文件失败: \(error.localizedDescription)")
         }
     }
     
@@ -509,7 +509,7 @@ struct PDFReaderView: View {
                 rootViewController.present(documentPicker, animated: true)
             }
         } catch {
-            print("保存PDF失败: \(error)")
+            LoggerService.shared.error(module: "PDFReaderView", message: "保存PDF失败: \(error.localizedDescription)")
         }
     }
     
@@ -535,7 +535,7 @@ struct PDFReaderView: View {
         DispatchQueue.main.async {
             printController.present(animated: true) { controller, completed, error in
                 if let error = error {
-                    print("打印失败: \(error)")
+                    LoggerService.shared.error(module: "PDFReaderView", message: "打印失败: \(error.localizedDescription)")
                 }
             }
         }

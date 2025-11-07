@@ -46,7 +46,7 @@ class OnboardingCoordinator: ObservableObject {
                     // 仅当确无本地 token 时才进入登录
                     let hasStoredAccessToken = UserDefaults.standard.string(forKey: "access_token") != nil
                     if !hasStoredAccessToken {
-                        print("🔄 Token 无效且无本地凭据，进入登录页面")
+                        LoggerService.shared.info(module: "OnboardingCoordinator", message: "Token 无效且无本地凭据，进入登录页面")
                         self.currentState = .needsLogin
                     }
                 case .error:
@@ -63,10 +63,10 @@ class OnboardingCoordinator: ObservableObject {
     private func performSyncCheck() {
         // 检查是否有存储的token
         if let _ = UserDefaults.standard.string(forKey: "access_token") {
-            print("🚀 检测到存储的登录信息，先进入主应用避免闪现")
+            LoggerService.shared.info(module: "OnboardingCoordinator", message: "检测到存储的登录信息，先进入主应用避免闪现")
             currentState = .completed
         } else {
-            print("📱 未检测到存储的登录信息")
+            LoggerService.shared.info(module: "OnboardingCoordinator", message: "未检测到存储的登录信息")
         }
     }
     
@@ -96,7 +96,7 @@ class OnboardingCoordinator: ObservableObject {
         }
         
         // 2. 检查是否是新用户
-        print("👤 检查是否新用户: \(authService.isNewUser)")
+        LoggerService.shared.info(module: "OnboardingCoordinator", message: "检查是否新用户: \(authService.isNewUser)")
         if authService.isNewUser {
             currentState = .newUserWelcome
             isLoading = false
@@ -151,7 +151,7 @@ class OnboardingCoordinator: ObservableObject {
     // MARK: - 处理新用户欢迎完成
     func handleWelcomeCompleted() {
         // 新用户欢迎完成后，直接进入主应用
-        print("ℹ️ 新用户欢迎完成，进入主应用")
+        LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户欢迎完成，进入主应用")
         currentState = .completed
     }
     

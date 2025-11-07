@@ -282,6 +282,6 @@ struct WelcomeView: View {
 
 #Preview("Welcome") {
     WelcomeView {
-        print("Continue tapped")
+        LoggerService.shared.info(module: "LoginView", message: "继续按钮点击")
     }
 }

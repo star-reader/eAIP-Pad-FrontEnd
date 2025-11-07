@@ -119,7 +119,7 @@ struct AIPDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            print("📄 AIPDocumentsView - 点击文档: ID=\(document.id), Name=\(document.nameCn)")
+                            LoggerService.shared.info(module: "AIPDocumentsView", message: "点击文档: ID=\(document.id), Name=\(document.nameCn)")
                             // 转换为 ChartResponse，使用 "AIP" 作为 chartType
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -173,7 +173,7 @@ struct AIPDocumentsView: View {
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -187,7 +187,7 @@ struct AIPDocumentsView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
                     throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
                 }
@@ -213,7 +213,7 @@ struct AIPDocumentsView: View {
                 return
             }
             
-            print("⬇️ 从网络下载 AIP 文档列表")
+            LoggerService.shared.info(module: "AIPDocumentsView", message: "从网络下载 AIP 文档列表")
             
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAIPDocuments(category: category)
@@ -271,7 +271,7 @@ struct SUPDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            print("📋 SUPDocumentsView - 点击文档: ID=\(document.id), Subject=\(document.localSubject)")
+                            LoggerService.shared.info(module: "SUPDocumentsView", message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)")
                             // 创建简化的 ChartResponse
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -325,7 +325,7 @@ struct SUPDocumentsView: View {
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -339,7 +339,7 @@ struct SUPDocumentsView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
                     throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
                 }
@@ -418,7 +418,7 @@ struct AMDTDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            print("📝 AMDTDocumentsView - 点击文档: ID=\(document.id), Subject=\(document.localSubject)")
+                            LoggerService.shared.info(module: "AMDTDocumentsView", message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)")
                             // 创建简化的 ChartResponse
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -472,7 +472,7 @@ struct AMDTDocumentsView: View {
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -486,7 +486,7 @@ struct AMDTDocumentsView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
                     throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
                 }
@@ -565,7 +565,7 @@ struct NOTAMDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            print("🔔 NOTAMDocumentsView - 点击文档: ID=\(document.id), Series=\(document.seriesName)")
+                            LoggerService.shared.info(module: "NOTAMDocumentsView", message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
                             // 创建简化的 ChartResponse
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -619,7 +619,7 @@ struct NOTAMDocumentsView: View {
             
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                print("⚠️ 本地无 AIRAC 版本，从 API 获取...")
+                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
@@ -633,7 +633,7 @@ struct NOTAMDocumentsView: View {
                     modelContext.insert(newVersion)
                     try? modelContext.save()
                     
-                    print("✅ 已获取并保存 AIRAC 版本: \(airacResponse.version)")
+                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
                     throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
                 }
