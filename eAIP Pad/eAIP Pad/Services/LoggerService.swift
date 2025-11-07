@@ -16,15 +16,13 @@ struct LogEntry: Codable, Identifiable {
     let type: LogType
     let module: String
     let message: String
-    let isEncrypted: Bool
     
-    init(type: LogType, module: String, message: String, isEncrypted: Bool = false) {
+    init(type: LogType, module: String, message: String) {
         self.id = UUID()
         self.timestamp = Date()
         self.type = type
         self.module = module
         self.message = message
-        self.isEncrypted = isEncrypted
     }
     
     func formatted() -> String {
@@ -45,89 +43,8 @@ class LoggerService {
     private let queue = DispatchQueue(label: "logger.queue", qos: .utility)
     private let osLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "eAIP-Pad", category: "LoggerService")
     
-    private let rsaPublicKeyString = SharedKey.getRSAPublicKey()
-    
-    private var rsaPublicKey: SecKey?
-    
     private init() {
-        setupRSAPublicKey()
         log(type: .info, module: "LoggerService", message: "日志服务已初始化")
-    }
-    
-    // MARK: - RSA Setup
-    private func setupRSAPublicKey() {
-        let cleanedKey = rsaPublicKeyString
-            .replacingOccurrences(of: "-----BEGIN PUBLIC KEY-----", with: "")
-            .replacingOccurrences(of: "-----END PUBLIC KEY-----", with: "")
-            .replacingOccurrences(of: "\n", with: "")
-            .replacingOccurrences(of: "\r", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        guard let keyData = Data(base64Encoded: cleanedKey) else {
-            osLog.error("无法解码 RSA 公钥")
-            return
-        }
-        
-        // 创建公钥
-        let attributes: [String: Any] = [
-            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeyClass as String: kSecAttrKeyClassPublic,
-            kSecAttrKeySizeInBits as String: 2048
-        ]
-        
-        var error: Unmanaged<CFError>?
-        guard let publicKey = SecKeyCreateWithData(keyData as CFData, attributes as CFDictionary, &error) else {
-            if let error = error?.takeRetainedValue() {
-                osLog.error("创建 RSA 公钥失败: \(error.localizedDescription)")
-            }
-            return
-        }
-        
-        self.rsaPublicKey = publicKey
-        osLog.info("RSA 公钥配置成功")
-    }
-    
-    private func encryptMessage(_ message: String) -> String? {
-        guard let publicKey = rsaPublicKey else {
-            osLog.warning("RSA 公钥未配置，无法加密消息")
-            return nil
-        }
-        
-        guard let messageData = message.data(using: .utf8) else {
-            osLog.error("无法将消息转换为 Data")
-            return nil
-        }
-        
-        // RSA-2048 with OAEP SHA256 最多加密 190 字节
-        // 如果消息太长，只加密前 180 字节，后面用 "..." 标记截断
-        let maxEncryptLength = 180
-        let dataToEncrypt: Data
-        var isTruncated = false
-        
-        if messageData.count > maxEncryptLength {
-            dataToEncrypt = messageData.prefix(maxEncryptLength)
-            isTruncated = true
-            osLog.info("消息过长(\(messageData.count) 字节)，仅加密前 \(maxEncryptLength) 字节")
-        } else {
-            dataToEncrypt = messageData
-        }
-        
-        var error: Unmanaged<CFError>?
-        guard let encryptedData = SecKeyCreateEncryptedData(
-            publicKey,
-            .rsaEncryptionOAEPSHA256,
-            dataToEncrypt as CFData,
-            &error
-        ) as Data? else {
-            if let error = error?.takeRetainedValue() {
-                osLog.error("RSA 加密失败: \(error.localizedDescription)")
-            }
-            return nil
-        }
-        
-        // 返回 base64，如果被截断则添加标记
-        let base64String = encryptedData.base64EncodedString()
-        return isTruncated ? "\(base64String)...[截断]" : base64String
     }
     
     // MARK: - Public Methods
@@ -137,27 +54,14 @@ class LoggerService {
     ///   - type: 日志类型 (info, warning, error)
     ///   - module: 模块名称
     ///   - message: 日志消息
-    ///   - encrypt: 是否加密消息，默认为 false
-    func log(type: LogType, module: String, message: String, encrypt: Bool = false) {
+    func log(type: LogType, module: String, message: String) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            
-            var finalMessage = message
-            
-            // 如果需要加密
-            if encrypt {
-                if let encryptedBase64 = self.encryptMessage(message) {
-                    finalMessage = encryptedBase64
-                } else {
-                    finalMessage = "[加密失败] \(message)"
-                }
-            }
             
             let entry = LogEntry(
                 type: type,
                 module: module,
-                message: finalMessage,
-                isEncrypted: encrypt
+                message: message
             )
             
             self.logs.append(entry)
@@ -168,28 +72,28 @@ class LoggerService {
             
             switch type {
             case .info:
-                self.osLog.info("[\(module)] \(finalMessage)")
+                self.osLog.info("[\(module)] \(message)")
             case .warning:
-                self.osLog.warning("[\(module)] \(finalMessage)")
+                self.osLog.warning("[\(module)] \(message)")
             case .error:
-                self.osLog.error("[\(module)] \(finalMessage)")
+                self.osLog.error("[\(module)] \(message)")
             }
         }
     }
     
     /// 便捷方法：记录 info 日志
-    func info(module: String, message: String, encrypt: Bool = false) {
-        log(type: .info, module: module, message: message, encrypt: encrypt)
+    func info(module: String, message: String) {
+        log(type: .info, module: module, message: message)
     }
     
     /// 便捷方法：记录 warning 日志
-    func warning(module: String, message: String, encrypt: Bool = false) {
-        log(type: .warning, module: module, message: message, encrypt: encrypt)
+    func warning(module: String, message: String) {
+        log(type: .warning, module: module, message: message)
     }
     
     /// 便捷方法：记录 error 日志
-    func error(module: String, message: String, encrypt: Bool = false) {
-        log(type: .error, module: module, message: message, encrypt: encrypt)
+    func error(module: String, message: String) {
+        log(type: .error, module: module, message: message)
     }
     
     /// 导出日志为字符串
@@ -350,4 +254,3 @@ class LoggerService {
  let recentLogs = LoggerService.shared.getRecentLogs(count: 100)
  let errorLogs = LoggerService.shared.filterLogs(by: .error)
  */
-

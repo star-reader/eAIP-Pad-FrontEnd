@@ -4,16 +4,13 @@ import Combine
 
 // MARK: - 引导流程状态
 enum OnboardingState {
-    case loading           // 检查状态中
     case needsLogin       // 需要登录
-    case newUserWelcome   // 新用户欢迎
     case completed        // 完成，进入主应用
 }
 
 // MARK: - 引导流程协调器
 class OnboardingCoordinator: ObservableObject {
-    @Published var currentState: OnboardingState = .loading
-    @Published var isLoading = false
+    @Published var currentState: OnboardingState = .completed
     @Published var errorMessage: String?
     
     private let authService = AuthenticationService.shared
@@ -39,9 +36,9 @@ class OnboardingCoordinator: ObservableObject {
                 guard let self = self else { return }
                 switch state {
                 case .authenticated:
-                    // 已认证：如果当前不在登录流程中（不在 needsLogin 或 newUserWelcome），则切换到主应用
+                    // 已认证：如果当前不在登录流程中，则切换到主应用
                     // 这主要用于 app 重新启动时，已有 token 的情况
-                    if self.currentState != .needsLogin && self.currentState != .newUserWelcome {
+                    if self.currentState != .needsLogin {
                         LoggerService.shared.info(module: "OnboardingCoordinator", message: "已认证且不在登录流程中，进入主应用")
                         self.currentState = .completed
                     } else {
@@ -81,7 +78,6 @@ class OnboardingCoordinator: ObservableObject {
     
     // MARK: - 检查初始状态
     func checkInitialState() {
-        isLoading = true
         errorMessage = nil
         
         Task {
@@ -95,31 +91,20 @@ class OnboardingCoordinator: ObservableObject {
         let hasStoredAccessToken = UserDefaults.standard.string(forKey: "access_token") != nil
         if authService.authenticationState == .authenticating || hasStoredAccessToken {
             currentState = .completed
-            isLoading = false
             // 后台继续后续检查
         } else if !authService.isAuthenticated {
             // 无本地 token 且未认证，才进入登录
             currentState = .needsLogin
-            isLoading = false
             return
         }
         
-        // 2. 检查是否是新用户
-        LoggerService.shared.info(module: "OnboardingCoordinator", message: "检查是否新用户: \(authService.isNewUser)")
-        if authService.isNewUser {
-            currentState = .newUserWelcome
-            isLoading = false
-            return
-        }
-        
-        // 3. 同步订阅状态（后台执行，不阻塞）
+        // 同步订阅状态（后台执行，不阻塞）
         Task {
             await SubscriptionService.shared.syncSubscriptionStatus()
         }
         
-        // 已登录且不是新用户，直接进入主应用
+        // 已登录，直接进入主应用
         currentState = .completed
-        isLoading = false
     }
     
     // 超时辅助函数
@@ -142,46 +127,8 @@ class OnboardingCoordinator: ObservableObject {
     
     // MARK: - 处理登录完成
     func handleLoginCompleted() {
-        LoggerService.shared.info(module: "OnboardingCoordinator", message: "登录完成，准备进入应用")
-        Task {
-            await MainActor.run {
-                if authService.isNewUser {
-                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户，显示欢迎页面")
-                    currentState = .newUserWelcome
-                } else {
-                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "老用户，显示加载页面")
-                    currentState = .loading
-                }
-            }
-            
-            // 老用户：短暂显示加载页面，确保平滑过渡
-            if !authService.isNewUser {
-                // 等待一小段时间，让数据同步开始
-                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 秒
-                
-                await MainActor.run {
-                    LoggerService.shared.info(module: "OnboardingCoordinator", message: "进入主应用")
-                    currentState = .completed
-                }
-            }
-        }
-    }
-    
-    // MARK: - 处理新用户欢迎完成
-    func handleWelcomeCompleted() {
-        // 新用户欢迎完成后，显示加载页面，然后进入主应用
-        LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户欢迎完成，显示加载页面")
-        currentState = .loading
-        
-        Task {
-            // 短暂显示加载页面，让用户感受到平滑过渡
-            try? await Task.sleep(nanoseconds: 800_000_000) // 0.8 秒
-            
-            await MainActor.run {
-                LoggerService.shared.info(module: "OnboardingCoordinator", message: "新用户进入主应用")
-                currentState = .completed
-            }
-        }
+        LoggerService.shared.info(module: "OnboardingCoordinator", message: "登录完成，进入主应用")
+        currentState = .completed
     }
     
     // MARK: - 重试
@@ -198,9 +145,6 @@ struct OnboardingFlow: View {
     var body: some View {
         Group {
             switch coordinator.currentState {
-            case .loading:
-                LoadingView()
-                
             case .needsLogin:
                 LoginView()
                     .onReceive(AuthenticationService.shared.$authenticationState) { state in
@@ -208,12 +152,6 @@ struct OnboardingFlow: View {
                             coordinator.handleLoginCompleted()
                         }
                     }
-                
-            case .newUserWelcome:
-                // 新用户欢迎页面
-                WelcomeView {
-                    coordinator.handleWelcomeCompleted()
-                }
                 
             case .completed:
                 MainAppView()
@@ -232,47 +170,6 @@ struct OnboardingFlow: View {
         }
     }
 }
-
-// MARK: - 加载视图
-struct LoadingView: View {
-    @State private var rotationAngle: Double = 0
-    
-    var body: some View {
-        ZStack {
-            LinearGradient.skyGradient
-                .ignoresSafeArea()
-            
-            VStack(spacing: 30) {
-                // 旋转的飞机图标
-                Image(systemName: "airplane")
-                    .font(.system(size: 60))
-                    .foregroundColor(.white)
-                    .rotationEffect(.degrees(rotationAngle))
-                    .onAppear {
-                        withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
-                            rotationAngle = 360
-                        }
-                    }
-                
-                VStack(spacing: 12) {
-                    Text("eAIP Pad")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    Text("正在进入应用...")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.2)
-            }
-        }
-    }
-}
-
 
 // MARK: - 超时错误
 struct TimeoutError: Error {
@@ -338,10 +235,5 @@ struct MainAppView: View {
             return currentSettings.isDarkMode ? .dark : .light
         }
     }
-}
-
-
-#Preview("Loading") {
-    LoadingView()
 }
 

@@ -565,9 +565,9 @@ class NetworkService: ObservableObject {
         // 避免将空字符串当作有效 refresh token 存入
         self.refreshToken = refreshToken.isEmpty ? nil : refreshToken
         // 加密记录 token（敏感信息）
-        LoggerService.shared.info(module: "NetworkService", message: "设置 Access Token: \(accessToken)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "设置 Access Token: \(accessToken)")
         if !refreshToken.isEmpty {
-            LoggerService.shared.info(module: "NetworkService", message: "设置 Refresh Token: \(refreshToken)", encrypt: true)
+            LoggerService.shared.info(module: "NetworkService", message: "设置 Refresh Token: \(refreshToken)")
         }
     }
     
@@ -659,7 +659,7 @@ class NetworkService: ObservableObject {
     func appleLogin(idToken: String) async throws -> AuthResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始 Apple 登录")
         // 加密记录 idToken（敏感信息）
-        LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken)")
         
         let body = ["id_token": idToken]
         let bodyData = try JSONEncoder().encode(body)
@@ -682,7 +682,7 @@ class NetworkService: ObservableObject {
         }
         
         // 加密记录 refreshToken
-        LoggerService.shared.info(module: "NetworkService", message: "使用 Refresh Token: \(refreshToken)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "使用 Refresh Token: \(refreshToken)")
         
         let body = ["refresh_token": refreshToken]
         let bodyData = try JSONEncoder().encode(body)
@@ -955,8 +955,8 @@ class NetworkService: ObservableObject {
     func verifyJWS(transactionJWS: String, appleUserId: String, environment: String? = nil) async throws -> VerifyJWSResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始验证 JWS")
         // 加密记录敏感信息
-        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS: \(transactionJWS)", encrypt: true)
-        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS: \(transactionJWS)")
+        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)")
         LoggerService.shared.info(module: "NetworkService", message: "Environment: \(environment ?? "nil")")
         
         let request = VerifyJWSRequest(
@@ -1031,8 +1031,8 @@ class NetworkService: ObservableObject {
     func syncSubscriptions(transactionJWSList: [String], appleUserId: String, environment: String? = nil) async throws -> SyncSubscriptionResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始批量同步订阅")
         // 加密记录敏感信息
-        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS List (\(transactionJWSList.count) 个): \(transactionJWSList.joined(separator: ","))", encrypt: true)
-        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS List (\(transactionJWSList.count) 个): \(transactionJWSList.joined(separator: ","))")
+        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)")
         LoggerService.shared.info(module: "NetworkService", message: "Environment: \(environment ?? "nil")")
         
         let request = SyncSubscriptionRequest(
@@ -1105,7 +1105,7 @@ class NetworkService: ObservableObject {
     func getSubscriptionStatus(appleUserId: String) async throws -> SubscriptionStatusResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始查询订阅状态")
         // 加密记录敏感信息
-        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)")
         
         var components = URLComponents(url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "apple_user_id", value: appleUserId)]
@@ -1184,7 +1184,7 @@ class NetworkService: ObservableObject {
             for (key, value) in headers {
                 // 敏感信息加密记录
                 if key.lowercased().contains("authorization") {
-                    LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)", encrypt: false)
+                    LoggerService.shared.info(module: "NetworkService", message: "[Authorization] \(key): \(value)")
                 } else {
                     LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)")
                 }
@@ -1196,7 +1196,7 @@ class NetworkService: ObservableObject {
             LoggerService.shared.info(module: "NetworkService", message: "请求体大小: \(body.count) bytes")
             if let bodyString = String(data: body, encoding: .utf8) {
                 // 加密记录完整请求体（可能包含敏感信息）
-                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)", encrypt: false)
+                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)")
             }
         }
         LoggerService.shared.info(module: "NetworkService", message: "请求时间: \(Date())")
@@ -1219,7 +1219,7 @@ class NetworkService: ObservableObject {
                 ? String(responseString.prefix(maxLength)) + "... (截断)"
                 : responseString
             // 响应可能包含敏感信息，加密记录
-            LoggerService.shared.info(module: "NetworkService", message: "响应内容: \(truncatedResponse)", encrypt: true)
+            LoggerService.shared.info(module: "NetworkService", message: "响应内容: \(truncatedResponse)")
         }
         
         // 记录错误

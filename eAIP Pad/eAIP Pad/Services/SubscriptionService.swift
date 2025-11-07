@@ -115,7 +115,7 @@ class SubscriptionService: ObservableObject {
                     // 交易验证成功，从 verificationResult 获取 JWS 字符串
                     let transactionJWS = verificationResult.jwsRepresentation
                     // 加密记录 JWS（敏感信息）
-                    LoggerService.shared.info(module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)", encrypt: true)
+                    LoggerService.shared.info(module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)")
                     // 发送到服务器验证
                     let success = await verifyTransactionWithServer(transactionJWS: transactionJWS, transaction: transaction)
                     if success {
@@ -170,7 +170,7 @@ class SubscriptionService: ObservableObject {
         }
         
         // 加密记录 Apple 用户 ID（敏感信息）
-        LoggerService.shared.info(module: "SubscriptionService", message: "Apple 用户 ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "SubscriptionService", message: "Apple 用户 ID: \(appleUserId)")
         
         // 从 JWS 中提取环境信息
         let environment = extractEnvironment(from: transactionJWS)
@@ -263,7 +263,7 @@ class SubscriptionService: ObservableObject {
         }
         
         // 加密记录 Apple 用户 ID
-        LoggerService.shared.info(module: "SubscriptionService", message: "同步用户 ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "SubscriptionService", message: "同步用户 ID: \(appleUserId)")
         isLoading = true
         
         do {
@@ -286,7 +286,7 @@ class SubscriptionService: ObservableObject {
                 await querySubscriptionStatus()
             } else {
                 // 加密记录交易列表
-                LoggerService.shared.info(module: "SubscriptionService", message: "交易 JWS 列表: \(jwsList.joined(separator: ","))", encrypt: true)
+                LoggerService.shared.info(module: "SubscriptionService", message: "交易 JWS 列表: \(jwsList.joined(separator: ","))")
                 // 批量同步交易
                 let environment = extractEnvironment(from: jwsList.first ?? "")
                 let response = try await networkService.syncSubscriptions(
@@ -325,7 +325,7 @@ class SubscriptionService: ObservableObject {
         
         LoggerService.shared.info(module: "SubscriptionService", message: "开始查询订阅状态")
         // 加密记录 Apple 用户 ID
-        LoggerService.shared.info(module: "SubscriptionService", message: "查询用户 ID: \(appleUserId)", encrypt: true)
+        LoggerService.shared.info(module: "SubscriptionService", message: "查询用户 ID: \(appleUserId)")
         
         do {
             let response = try await networkService.getSubscriptionStatus(appleUserId: appleUserId)
@@ -424,7 +424,7 @@ class SubscriptionService: ObservableObject {
                 
                 // 加密记录交易 JWS
                 await MainActor.run {
-                    LoggerService.shared.info(module: "SubscriptionService", message: "更新交易 JWS: \(transactionJWS)", encrypt: true)
+                    LoggerService.shared.info(module: "SubscriptionService", message: "更新交易 JWS: \(transactionJWS)")
                 }
                 
                 // 获取 Transaction 对象用于后续操作

@@ -74,7 +74,7 @@ class AuthenticationService: NSObject, ObservableObject {
         // 立即设置为已认证状态，避免闪现登录页面
         self.authenticationState = .authenticated
         self.currentUser = AuthenticatedUser(accessToken: storedAccessToken)
-        LoggerService.shared.info(module: "AuthenticationService", message: "找到存储的凭据，设置为已认证状态")
+        LoggerService.shared.info(module: "AuthenticationService", message: "找到存储的凭据，设置为已认证状态， useid为\(String(describing: appleUserId))")
         
         // 设置网络服务的 token
         NetworkService.shared.setTokens(accessToken: storedAccessToken, refreshToken: storedRefreshToken ?? "")
