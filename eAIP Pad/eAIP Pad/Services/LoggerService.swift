@@ -45,11 +45,7 @@ class LoggerService {
     private let queue = DispatchQueue(label: "logger.queue", qos: .utility)
     private let osLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "eAIP-Pad", category: "LoggerService")
     
-    // RSA 公钥 - 用户需要将公钥字符串放在这里
-    // 格式：PEM 格式的公钥字符串（去掉头尾的 BEGIN/END 标记和换行符）
-    private let rsaPublicKeyString = """
-    REPLACE_WITH_YOUR_PUBLIC_KEY_HERE
-    """
+    private let rsaPublicKeyString = SharedKey.getRSAPublicKey()
     
     private var rsaPublicKey: SecKey?
     
