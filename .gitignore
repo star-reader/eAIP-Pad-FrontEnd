@@ -63,4 +63,4 @@ fastlane/test_output
 
 .cursor
 
-Configs/SharedKey.swift
+SharedKey.swift
