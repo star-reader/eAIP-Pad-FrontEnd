@@ -20,9 +20,7 @@ struct ProfileView: View {
     @State private var showingBugReportOptions = false
     @State private var cacheSizeText: String = ""
     @State private var errorMessage: String = ""
-    @State private var mailSubject: String = ""
-    @State private var mailBody: String = ""
-    @State private var mailAttachmentData: Data?
+    @State private var mailData: MailData?
     @State private var showingSignOutConfirmation = false
     
     private var currentSettings: UserSettings {
@@ -213,15 +211,13 @@ struct ProfileView: View {
         } message: {
             Text("退出后需要重新登录才能使用应用")
         }
-        .sheet(isPresented: $showingMailComposer) {
+        .sheet(item: $mailData) { data in
             MailComposeView(
-                subject: mailSubject,
-                body: mailBody,
-                attachmentData: mailAttachmentData,
+                subject: data.subject,
+                body: data.body,
+                attachmentData: data.attachmentData,
                 onDismiss: { _ in
-                    showingMailComposer = false
-                    // 清空附件数据
-                    mailAttachmentData = nil
+                    mailData = nil
                 }
             )
         }
@@ -310,8 +306,8 @@ struct ProfileView: View {
             return
         }
         
-        mailSubject = "eAIP Pad - 新想法反馈"
-        mailBody = """
+        let subject = "eAIP Pad - 新想法反馈"
+        let body = """
         
         
         ───────────────────────────
@@ -322,9 +318,8 @@ struct ProfileView: View {
         • 系统版本：iOS \(UIDevice.current.systemVersion)
         • App 版本：1.0.0 (Build 1)
         """
-        mailAttachmentData = nil
-        showingMailComposer = true
         
+        mailData = MailData(subject: subject, body: body, attachmentData: nil)
         LoggerService.shared.info(module: "ProfileView", message: "打开新想法邮件编辑器")
     }
     
@@ -339,8 +334,8 @@ struct ProfileView: View {
             return
         }
         
-        mailSubject = "eAIP Pad - Bug 反馈"
-        mailBody = """
+        let subject = "eAIP Pad - Bug 反馈"
+        let body = """
         
         
         ───────────────────────────
@@ -356,13 +351,16 @@ struct ProfileView: View {
             // 导出日志文件
             Task {
                 do {
+                    LoggerService.shared.info(module: "ProfileView", message: "开始导出日志文件")
                     let logFileURL = try await LoggerService.shared.exportLogsAsFile()
                     let logData = try Data(contentsOf: logFileURL)
                     
+                    LoggerService.shared.info(module: "ProfileView", message: "日志文件读取成功，大小：\(logData.count) 字节")
+                    
                     await MainActor.run {
-                        mailAttachmentData = logData
-                        showingMailComposer = true
-                        LoggerService.shared.info(module: "ProfileView", message: "日志文件已附加，大小：\(logData.count) 字节")
+                        // 直接创建包含所有数据的 MailData 对象
+                        self.mailData = MailData(subject: subject, body: body, attachmentData: logData)
+                        LoggerService.shared.info(module: "ProfileView", message: "mailData 已创建，附件大小：\(logData.count) 字节")
                     }
                 } catch {
                     await MainActor.run {
@@ -373,8 +371,7 @@ struct ProfileView: View {
                 }
             }
         } else {
-            mailAttachmentData = nil
-            showingMailComposer = true
+            mailData = MailData(subject: subject, body: body, attachmentData: nil)
             LoggerService.shared.info(module: "ProfileView", message: "打开bug反馈邮件编辑器（不附带日志）")
         }
     }
@@ -778,6 +775,14 @@ struct FeatureItem: View {
     }
 }
 
+// MARK: - 邮件数据模型
+struct MailData: Identifiable {
+    let id = UUID()
+    let subject: String
+    let body: String
+    let attachmentData: Data?
+}
+
 // MARK: - 邮件编辑器视图
 struct MailComposeView: UIViewControllerRepresentable {
     let subject: String
@@ -786,6 +791,9 @@ struct MailComposeView: UIViewControllerRepresentable {
     let onDismiss: (MFMailComposeResult) -> Void
     
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
+        LoggerService.shared.info(module: "MailComposeView", message: "开始创建邮件编辑器")
+        LoggerService.shared.info(module: "MailComposeView", message: "附件数据: \(attachmentData?.count ?? 0) 字节")
+        
         let composer = MFMailComposeViewController()
         composer.mailComposeDelegate = context.coordinator
         composer.setToRecipients(["jinch2287@outlook.com"])
@@ -799,13 +807,17 @@ struct MailComposeView: UIViewControllerRepresentable {
             let timestamp = dateFormatter.string(from: Date())
             let filename = "eAIPPad_logs_\(timestamp).txt"
             
+            LoggerService.shared.info(module: "MailComposeView", message: "准备添加附件：\(filename)，大小：\(attachmentData.count) 字节")
+            
             composer.addAttachmentData(
                 attachmentData,
                 mimeType: "text/plain",
                 fileName: filename
             )
             
-            LoggerService.shared.info(module: "MailComposeView", message: "已添加日志附件：\(filename)")
+            LoggerService.shared.info(module: "MailComposeView", message: "✓ 已成功添加日志附件：\(filename)")
+        } else {
+            LoggerService.shared.warning(module: "MailComposeView", message: "⚠️ attachmentData 为 nil，未添加附件")
         }
         
         return composer
