@@ -1,11 +1,50 @@
 import SwiftUI
 import AuthenticationServices
 
+// MARK: - 轮播项数据
+struct CarouselItem: Identifiable {
+    let id = UUID()
+    let imageName: String
+    let title: String
+    let description: String
+}
+
 // MARK: - 登录视图
 struct LoginView: View {
     @StateObject private var authService = AuthenticationService.shared
     @State private var showingError = false
+    @State private var currentPage = 0
     @Environment(\.colorScheme) private var colorScheme
+    
+    // 定义轮播数据
+    private let carouselItems: [CarouselItem] = [
+        CarouselItem(
+            imageName: "terminal",
+            title: "机场航图",
+            description: "国内AIP公开机场完整航图"
+        ),
+        CarouselItem(
+            imageName: "enroute",
+            title: "航路图",
+            description: "eAIP航路图"
+        ),
+        CarouselItem(
+            imageName: "area",
+            title: "区域图",
+            description: "北京、上海、广州等空域对应区域图"
+        ),
+        CarouselItem(
+            imageName: "ad",
+            title: "机场细则",
+            description: "查看机场细则文档"
+        ),
+        CarouselItem(
+            imageName: "aip",
+            title: "AIP文档",
+            description: "AIP、SUP、NOTAM文档阅读"
+        ),   
+        
+    ]
     
     var body: some View {
         GeometryReader { geometry in
@@ -21,53 +60,29 @@ struct LoginView: View {
                 )
                 .ignoresSafeArea()
                 
-                VStack(spacing: 24) {
-                    Spacer(minLength: geometry.size.height * 0.05)
-                    
-                    // 应用图标和标题
-                    VStack(spacing: 16) {
-                        // 应用图标
+                VStack(spacing: 20) {
+                    // 应用标题
+                    VStack(spacing: 6) {
+                        Spacer().frame(height: 30)
+                        Text("eAIP Pad")
+                            .font(.system(size: 36, weight: .bold))
+                            .foregroundColor(.white)
                         
-                        VStack(spacing: 6) {
-                            Text("eAIP Pad")
-                                .font(.largeTitle)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                            
-                            Text("专业中国eAIP航图阅读器")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.9))
-                                .multilineTextAlignment(.center)
-                        }
+                        Text("专业中国eAIP航图阅读器")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.9))
                     }
                     
-                    // 功能介绍卡片（紧凑版）
-                    VStack(spacing: 12) {
-                        FeatureCard(
-                            icon: "map.fill",
-                            title: "完整航图库",
-                            description: "中国所有机场的SID、STAR、进近和机场图"
-                        )
-                        
-                        FeatureCard(
-                            icon: "pencil.tip.crop.circle.fill",
-                            title: "专业标注",
-                            description: "Apple Pencil支持，标注永久保存"
-                        )
-                        
-                        FeatureCard(
-                            icon: "arrow.clockwise.circle.fill",
-                            title: "自动更新",
-                            description: "AIRAC版本自动同步，确保数据最新"
-                        )
-                    }
-                    .padding(.horizontal)
+                    // 轮播视图
+                    CarouselView(items: carouselItems, currentPage: $currentPage)
+                        .frame(height: geometry.size.height * 0.6)
+                        .padding(.horizontal)
                     
-                    Spacer(minLength: 20)
+                    Spacer(minLength: 10)
                     
                     // 登录按钮区域
                     VStack(spacing: 16) {
-                        // Apple Sign In 按钮（中文）
+                        // Apple Sign In 按钮
                         Button {
                             Task {
                                 await authService.signInWithApple()
@@ -106,19 +121,19 @@ struct LoginView: View {
                                 .foregroundColor(.white.opacity(0.8))
                             
                             HStack(spacing: 4) {
-                                    Button("服务条款") {
-                                        if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Terms-of-Service") {
-                                            UIApplication.shared.open(url)
-                                        }
+                                Button("服务条款") {
+                                    if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Terms-of-Service") {
+                                        UIApplication.shared.open(url)
                                     }
-                                    
-                                    Text("和")
-                                    
-                                    Button("隐私政策") {
-                                        if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Privacy-Policy") {
-                                            UIApplication.shared.open(url)
-                                        }
+                                }
+                                
+                                Text("和")
+                                
+                                Button("隐私政策") {
+                                    if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Privacy-Policy") {
+                                        UIApplication.shared.open(url)
                                     }
+                                }
                             }
                             .font(.caption)
                             .foregroundColor(.white.opacity(0.8))
@@ -126,7 +141,7 @@ struct LoginView: View {
                     }
                     .padding(.horizontal)
                     
-                    Spacer(minLength: geometry.size.height * 0.05)
+                    Spacer(minLength: geometry.size.height * 0.02)
                 }
             }
         }
@@ -145,37 +160,90 @@ struct LoginView: View {
     }
 }
 
-// MARK: - 功能介绍卡片
-struct FeatureCard: View {
-    let icon: String
-    let title: String
-    let description: String
-    @Environment(\.colorScheme) private var colorScheme
+// MARK: - 轮播视图
+struct CarouselView: View {
+    let items: [CarouselItem]
+    @Binding var currentPage: Int
+    @State private var timer: Timer?
     
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(colorScheme == .dark ? .white : .primaryBlue)
-                .frame(width: 28)
-            
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(colorScheme == .dark ? .white : .primary)
-                
-                Text(description)
-                    .font(.caption)
-                    .foregroundColor(colorScheme == .dark ? .white.opacity(0.7) : .secondary)
+        VStack(spacing: 0) {
+            // TabView 实现轮播
+            TabView(selection: $currentPage) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    CarouselItemView(item: item)
+                        .tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .onAppear {
+                startAutoScroll()
+            }
+            .onDisappear {
+                stopAutoScroll()
             }
             
-            Spacer()
+            // 自定义页面指示器
+            HStack(spacing: 8) {
+                ForEach(0..<items.count, id: \.self) { index in
+                    Circle()
+                        .fill(currentPage == index ? Color.white : Color.white.opacity(0.4))
+                        .frame(width: 8, height: 8)
+                        .animation(.easeInOut(duration: 0.3), value: currentPage)
+                }
+            }
+            .padding(.top, 12)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .background(colorScheme == .dark ? Color.white.opacity(0.15) : Color.white.opacity(0.9))
-        .cornerRadius(12)
+    }
+    
+    private func startAutoScroll() {
+        timer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { _ in
+            withAnimation(.easeInOut(duration: 0.5)) {
+                currentPage = (currentPage + 1) % items.count
+            }
+        }
+    }
+    
+    private func stopAutoScroll() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
+// MARK: - 轮播项视图
+struct CarouselItemView: View {
+    let item: CarouselItem
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // 图片容器，保持固定高度
+            GeometryReader { geometry in
+                Image(item.imageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .cornerRadius(16)
+                    .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 5)
+            }
+            
+            // 文字说明
+            VStack(spacing: 8) {
+                Text(item.title)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text(item.description)
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .padding(.horizontal)
+            .frame(height: 60)
+        }
+        .padding(.horizontal, 4)
     }
 }
 
