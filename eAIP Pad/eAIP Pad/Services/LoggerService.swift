@@ -239,18 +239,3 @@ class LoggerService {
         }
     }
 }
-
-/*
- LoggerService.shared.log(type: .info, module: "Authentication", message: "用户登录成功")
- LoggerService.shared.info(module: "App", message: "应用启动")
- let logString = LoggerService.shared.exportAsString()
- 
- if let fileURL = LoggerService.shared.exportAsFile() {
-     // 使用 MFMailComposeViewController 或 UIActivityViewController 分享
-     let activityVC = UIActivityViewController(activityItems: [fileURL], applicationActivities: nil)
-     present(activityVC, animated: true)
- }
- let allLogs = LoggerService.shared.getAllLogs()
- let recentLogs = LoggerService.shared.getRecentLogs(count: 100)
- let errorLogs = LoggerService.shared.filterLogs(by: .error)
- */
