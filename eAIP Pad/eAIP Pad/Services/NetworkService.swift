@@ -1,12 +1,12 @@
+import Combine
 import Foundation
 import SwiftUI
-import Combine
 
 // MARK: - 网络配置
 struct NetworkConfig {
     static let baseURL = "https://api.usagi-jin.top"
     static let apiVersion = "/eaip/v1"
-    
+
     static var baseAPIURL: String {
         return baseURL + apiVersion
     }
@@ -46,7 +46,7 @@ enum APIEndpoint {
     // Weather
     case weatherMETAR(icao: String)
     case weatherTAF(icao: String)
-    
+
     var path: String {
         switch self {
         case .appleLogin:
@@ -111,7 +111,7 @@ enum APIEndpoint {
             return "/weather/taf/\(icao)"
         }
     }
-    
+
     var url: URL {
         return URL(string: NetworkConfig.baseAPIURL + path)!
     }
@@ -129,7 +129,7 @@ struct AuthResponse: Codable {
     let refreshToken: String
     let expiresIn: Int
     let isNewUser: Bool
-    
+
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
@@ -146,9 +146,9 @@ struct AirportResponse: Codable, Hashable, Identifiable {
     let hasTerminalCharts: Bool
     let createdAt: String
     let isModified: Bool?
-    
+
     var id: String { icao }  // 使用 ICAO 作为唯一标识
-    
+
     enum CodingKeys: String, CodingKey {
         case icao
         case nameEn = "name_en"
@@ -157,11 +157,11 @@ struct AirportResponse: Codable, Hashable, Identifiable {
         case createdAt = "created_at"
         case isModified = "is_modified"
     }
-    
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(icao)
     }
-    
+
     static func == (lhs: AirportResponse, rhs: AirportResponse) -> Bool {
         return lhs.icao == rhs.icao
     }
@@ -182,7 +182,7 @@ struct ChartResponse: Codable, Hashable, Identifiable {
     let airacVersion: String
     let isModified: Bool
     let isOpened: Bool?  // 改为可选，因为API可能不返回此字段
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case documentId = "document_id"
@@ -198,11 +198,11 @@ struct ChartResponse: Codable, Hashable, Identifiable {
         case isModified = "is_modified"
         case isOpened = "is_opened"
     }
-    
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
-    
+
     static func == (lhs: ChartResponse, rhs: ChartResponse) -> Bool {
         return lhs.id == rhs.id
     }
@@ -213,7 +213,7 @@ struct SignedURLResponse: Codable {
     let url: String
     let expiresIn: Int
     let expire: Int64
-    
+
     enum CodingKeys: String, CodingKey {
         case url
         case expiresIn = "expires_in"
@@ -221,14 +221,13 @@ struct SignedURLResponse: Codable {
     }
 }
 
-
 // MARK: - AIRAC版本响应
 struct AIRACResponse: Codable {
     let version: String
     let effectiveDate: String
     let isCurrent: Bool
     let createdAt: String
-    
+
     enum CodingKeys: String, CodingKey {
         case version
         case effectiveDate = "effective_date"
@@ -250,10 +249,10 @@ struct AIPDocumentResponse: Codable {
     let htmlPath: String?
     let htmlEnPath: String?
     let airacVersion: String
-    let isModified: Bool?  // 改为可选，API返回的是has_update
-    let hasUpdate: Bool?   // 新增字段，对应API的has_update
-    let isOpened: Bool?    // 改为可选，因为API可能不返回此字段
-    
+    let isModified: Bool?
+    let hasUpdate: Bool?
+    let isOpened: Bool?
+
     enum CodingKeys: String, CodingKey {
         case id
         case documentId = "document_id"
@@ -280,14 +279,14 @@ struct SUPDocumentResponse: Codable {
     let subject: String
     let localSubject: String
     let chapterType: String
-    let pdfPath: String?  // 改为可选，API可能不返回
+    let pdfPath: String?
     let effectiveTime: String?
     let outDate: String?
     let pubDate: String?
     let airacVersion: String
-    let isModified: Bool?  // 改为可选，API返回的是has_update
-    let hasUpdate: Bool?   // 新增字段，对应API的has_update
-    
+    let isModified: Bool?
+    let hasUpdate: Bool?
+
     enum CodingKeys: String, CodingKey {
         case id
         case documentId = "document_id"
@@ -313,14 +312,14 @@ struct AMDTDocumentResponse: Codable {
     let subject: String
     let localSubject: String
     let chapterType: String
-    let pdfPath: String?  // 改为可选，API可能不返回
+    let pdfPath: String?
     let effectiveTime: String?
     let outDate: String?
     let pubDate: String?
     let airacVersion: String
-    let isModified: Bool?  // 改为可选，API返回的是has_update
-    let hasUpdate: Bool?   // 新增字段，对应API的has_update
-    
+    let isModified: Bool?
+    let hasUpdate: Bool?
+
     enum CodingKeys: String, CodingKey {
         case id
         case documentId = "document_id"
@@ -343,11 +342,11 @@ struct NOTAMDocumentResponse: Codable {
     let id: Int
     let documentId: String
     let seriesName: String
-    let pdfPath: String?  // 改为可选，API可能不返回
+    let pdfPath: String?
     let generateTime: String
     let generateTimeEn: String
     let airacVersion: String
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case documentId = "document_id"
@@ -373,7 +372,7 @@ struct METARResponse: Codable {
     let clouds: [String]?
     let trend: String?
     let raw: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case station
         case observationTime = "observation_time"
@@ -397,7 +396,7 @@ struct TAFResponse: Codable {
     let validTo: String?
     let forecasts: [TAFPeriod]?
     let raw: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case station
         case issueTime = "issue_time"
@@ -416,7 +415,7 @@ struct TAFPeriod: Codable, Hashable, Identifiable {
     let visibility: String?
     let weather: String?
     let clouds: [String]?
-    
+
     enum CodingKeys: String, CodingKey {
         case timeFrom = "time_from"
         case timeTo = "time_to"
@@ -436,7 +435,7 @@ struct DocumentDetailResponse: Codable {
     let type: String
     let airacVersion: String
     let isModified: Bool
-    
+
     enum CodingKeys: String, CodingKey {
         case id
         case documentId = "document_id"
@@ -453,7 +452,7 @@ struct VerifyJWSRequest: Codable {
     let transactionJWS: String
     let appleUserId: String
     let environment: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case transactionJWS = "transaction_jws"
         case appleUserId = "apple_user_id"
@@ -465,7 +464,7 @@ struct SyncSubscriptionRequest: Codable {
     let transactionJWSList: [String]
     let appleUserId: String
     let environment: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case transactionJWSList = "transaction_jws_list"
         case appleUserId = "apple_user_id"
@@ -484,7 +483,7 @@ struct VerifyJWSResponse: Codable {
     let productId: String?
     let originalTransactionId: String?
     let message: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case status
         case subscriptionStatus = "subscription_status"
@@ -509,7 +508,7 @@ struct SyncSubscriptionResponse: Codable {
     let syncedCount: Int?
     let totalCount: Int?
     let message: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case status
         case subscriptionStatus = "subscription_status"
@@ -534,7 +533,7 @@ struct SubscriptionStatusResponse: Codable {
     let originalTransactionId: String?
     let environment: String?
     let daysLeft: Int?
-    
+
     enum CodingKeys: String, CodingKey {
         case status
         case subscriptionStartDate = "subscription_start_date"
@@ -551,40 +550,42 @@ struct SubscriptionStatusResponse: Codable {
 // MARK: - 网络服务
 class NetworkService: ObservableObject {
     static let shared = NetworkService()
-    
+
     private var accessToken: String?
     private var refreshToken: String?
-    
+
     private init() {
         LoggerService.shared.info(module: "NetworkService", message: "网络服务初始化")
     }
-    
+
     // MARK: - 认证相关
     func setTokens(accessToken: String, refreshToken: String) {
         self.accessToken = accessToken
         // 避免将空字符串当作有效 refresh token 存入
         self.refreshToken = refreshToken.isEmpty ? nil : refreshToken
         // 加密记录 token（敏感信息）
-        LoggerService.shared.info(module: "NetworkService", message: "设置 Access Token: \(accessToken)")
+        LoggerService.shared.info(
+            module: "NetworkService", message: "设置 Access Token: \(accessToken)")
         if !refreshToken.isEmpty {
-            LoggerService.shared.info(module: "NetworkService", message: "设置 Refresh Token: \(refreshToken)")
+            LoggerService.shared.info(
+                module: "NetworkService", message: "设置 Refresh Token: \(refreshToken)")
         }
     }
-    
+
     func clearTokens() {
         LoggerService.shared.info(module: "NetworkService", message: "清除 Tokens")
         self.accessToken = nil
         self.refreshToken = nil
     }
-    
+
     func getCurrentAccessToken() -> String? {
         return accessToken
     }
-    
+
     func getCurrentRefreshToken() -> String? {
         return refreshToken
     }
-    
+
     // MARK: - 通用请求方法
     private func makeRequest<T: Codable>(
         endpoint: APIEndpoint,
@@ -595,75 +596,78 @@ class NetworkService: ObservableObject {
         var request = URLRequest(url: endpoint.url)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+
         // 添加认证头
         if requiresAuth, let token = accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
+
         // 添加请求体
         if let body = body {
             request.httpBody = body
         }
-        
+
         // 记录请求日志
         logRequest(request: request, body: body)
-        
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
             throw NetworkError.invalidResponse
         }
-        
+
         // 处理401错误，尝试刷新token
         if httpResponse.statusCode == 401 && requiresAuth {
             logResponse(response: httpResponse, data: data, error: nil)
-            
+
             // 若无 refresh token，直接返回未授权，避免抛出“没有刷新令牌”误导性错误
             guard let currentRefreshToken = self.refreshToken, !currentRefreshToken.isEmpty else {
                 throw NetworkError.unauthorized
             }
-            
+
             try await refreshAccessToken()
             // 重新设置认证头并重试
             request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                  retryHttpResponse.statusCode == 200 else {
-                logResponse(response: retryResponse as? HTTPURLResponse, data: retryData, error: NetworkError.unauthorized)
+                retryHttpResponse.statusCode == 200
+            else {
+                logResponse(
+                    response: retryResponse as? HTTPURLResponse, data: retryData,
+                    error: NetworkError.unauthorized)
                 throw NetworkError.unauthorized
             }
             logResponse(response: retryHttpResponse, data: retryData, error: nil)
             return try JSONDecoder().decode(APIResponse<T>.self, from: retryData).data!
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             let error = NetworkError.serverError(httpResponse.statusCode)
             logResponse(response: httpResponse, data: data, error: error)
             throw error
         }
-        
+
         // 记录成功响应
         logResponse(response: httpResponse, data: data, error: nil)
-        
+
         let apiResponse = try JSONDecoder().decode(APIResponse<T>.self, from: data)
         guard let responseData = apiResponse.data else {
             throw NetworkError.noData
         }
-        
+
         return responseData
     }
-    
+
     // MARK: - 认证方法
     func appleLogin(idToken: String) async throws -> AuthResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始 Apple 登录")
         // 加密记录 idToken（敏感信息）
         LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken)")
-        
+
         let body = ["id_token": idToken]
         let bodyData = try JSONEncoder().encode(body)
-        
+
         let response: AuthResponse = try await makeRequest(
             endpoint: .appleLogin,
             method: .POST,
@@ -673,31 +677,32 @@ class NetworkService: ObservableObject {
         LoggerService.shared.info(module: "NetworkService", message: "Apple 登录成功")
         return response
     }
-    
+
     func refreshAccessToken() async throws {
         LoggerService.shared.info(module: "NetworkService", message: "开始刷新 Access Token")
         guard let refreshToken = refreshToken, !refreshToken.isEmpty else {
             LoggerService.shared.error(module: "NetworkService", message: "刷新失败：缺少 Refresh Token")
             throw NetworkError.noRefreshToken
         }
-        
+
         // 加密记录 refreshToken
-        LoggerService.shared.info(module: "NetworkService", message: "使用 Refresh Token: \(refreshToken)")
-        
+        LoggerService.shared.info(
+            module: "NetworkService", message: "使用 Refresh Token: \(refreshToken)")
+
         let body = ["refresh_token": refreshToken]
         let bodyData = try JSONEncoder().encode(body)
-        
+
         let response: AuthResponse = try await makeRequest(
             endpoint: .refreshToken,
             method: .POST,
             body: bodyData,
             requiresAuth: false
         )
-        
+
         setTokens(accessToken: response.accessToken, refreshToken: response.refreshToken)
         LoggerService.shared.info(module: "NetworkService", message: "Access Token 刷新成功")
     }
-    
+
     // MARK: - 机场相关
     func getAirports(search: String? = nil) async throws -> [AirportResponse] {
         let endpoint = APIEndpoint.airports
@@ -705,30 +710,28 @@ class NetworkService: ObservableObject {
         let response: [AirportResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getAirport(icao: String) async throws -> AirportResponse {
         let response: AirportResponse = try await makeRequest(endpoint: .airport(icao: icao))
         return response
     }
-    
+
     func getAirportCharts(icao: String) async throws -> [ChartResponse] {
         let response: [ChartResponse] = try await makeRequest(endpoint: .airportCharts(icao: icao))
         return response
     }
-    
+
     // MARK: - 航图相关
     func getChart(id: Int) async throws -> ChartResponse {
         let response: ChartResponse = try await makeRequest(endpoint: .chart(id: id))
         return response
     }
-    
+
     func getChartSignedURL(id: Int) async throws -> SignedURLResponse {
         let response: SignedURLResponse = try await makeRequest(endpoint: .chartSignedURL(id: id))
         return response
     }
-    
-    // MARK: - 航路图相关
-    
+
     // MARK: - 航路图相关
     func getEnrouteCharts(type: String? = nil) async throws -> [ChartResponse] {
         let endpoint = APIEndpoint.enrouteCharts
@@ -740,17 +743,17 @@ class NetworkService: ObservableObject {
         let response: [ChartResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getEnrouteChart(id: Int) async throws -> ChartResponse {
         let response: ChartResponse = try await makeRequest(endpoint: .enrouteChart(id: id))
         return response
     }
-    
+
     func getEnrouteSignedURL(id: Int) async throws -> SignedURLResponse {
         let response: SignedURLResponse = try await makeRequest(endpoint: .enrouteSignedURL(id: id))
         return response
     }
-    
+
     // MARK: - 文档相关
     func getAIPDocuments(category: String? = nil) async throws -> [AIPDocumentResponse] {
         let endpoint = APIEndpoint.aipDocuments
@@ -761,13 +764,13 @@ class NetworkService: ObservableObject {
         let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getAIPDocumentsByICAO(icao: String) async throws -> [AIPDocumentResponse] {
         let endpoint = APIEndpoint.aipDocumentsByICAO(icao: icao)
         let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getSUPDocuments(chapterType: String? = nil) async throws -> [SUPDocumentResponse] {
         let endpoint = APIEndpoint.supDocuments
         if let chapterType = chapterType, !chapterType.isEmpty {
@@ -777,7 +780,7 @@ class NetworkService: ObservableObject {
         let response: [SUPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getAMDTDocuments(chapterType: String? = nil) async throws -> [AMDTDocumentResponse] {
         let endpoint = APIEndpoint.amdtDocuments
         if let chapterType = chapterType, !chapterType.isEmpty {
@@ -787,7 +790,7 @@ class NetworkService: ObservableObject {
         let response: [AMDTDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getNOTAMDocuments(series: String? = nil) async throws -> [NOTAMDocumentResponse] {
         let endpoint = APIEndpoint.notamDocuments
         if let series = series, !series.isEmpty {
@@ -797,17 +800,19 @@ class NetworkService: ObservableObject {
         let response: [NOTAMDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
-    
+
     func getDocument(type: String, id: Int) async throws -> DocumentDetailResponse {
-        let response: DocumentDetailResponse = try await makeRequest(endpoint: .document(type: type, id: id))
+        let response: DocumentDetailResponse = try await makeRequest(
+            endpoint: .document(type: type, id: id))
         return response
     }
-    
+
     func getDocumentSignedURL(type: String, id: Int) async throws -> SignedURLResponse {
-        let response: SignedURLResponse = try await makeRequest(endpoint: .documentSignedURL(type: type, id: id))
+        let response: SignedURLResponse = try await makeRequest(
+            endpoint: .documentSignedURL(type: type, id: id))
         return response
     }
-    
+
     // MARK: - 天气相关
     func getMETAR(icao: String) async throws -> METARResponse {
         struct MetarAPIModel: Codable {
@@ -830,7 +835,11 @@ class NetworkService: ObservableObject {
         let apiModel: MetarAPIModel = try await makeRequest(endpoint: .weatherMETAR(icao: icao))
 
         let station = apiModel.icaoId
-        let observationTime = apiModel.reportTime ?? (apiModel.obsTime.flatMap { Date(timeIntervalSince1970: TimeInterval($0)) }.map { ISO8601DateFormatter().string(from: $0) })
+        let observationTime =
+            apiModel.reportTime
+            ?? (apiModel.obsTime.flatMap { Date(timeIntervalSince1970: TimeInterval($0)) }.map {
+                ISO8601DateFormatter().string(from: $0)
+            })
         let windDirection = apiModel.wdir.map { "\($0)°" }
         let windSpeed = apiModel.wspd.map { String(format: "%.0f MPS", $0) }
         let visibility = apiModel.visib
@@ -857,7 +866,7 @@ class NetworkService: ObservableObject {
             raw: raw
         )
     }
-    
+
     func getTAF(icao: String) async throws -> TAFResponse {
         struct TAFForecastAPI: Codable {
             let timeFrom: Int?
@@ -891,7 +900,8 @@ class NetworkService: ObservableObject {
 
         func formatEpoch(_ epoch: Int?) -> String? {
             guard let epoch = epoch else { return nil }
-            return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: TimeInterval(epoch)))
+            return ISO8601DateFormatter().string(
+                from: Date(timeIntervalSince1970: TimeInterval(epoch)))
         }
 
         func formatWind(dir: Int?, spd: Double?) -> String? {
@@ -943,257 +953,286 @@ class NetworkService: ObservableObject {
             raw: apiModel.rawTAF
         )
     }
-    
+
     // MARK: - AIRAC相关
     func getCurrentAIRAC() async throws -> AIRACResponse {
         let response: AIRACResponse = try await makeRequest(endpoint: .currentAIRAC)
         return response
     }
-    
+
     // MARK: - IAP 相关方法
     /// 验证 JWS 凭证
-    func verifyJWS(transactionJWS: String, appleUserId: String, environment: String? = nil) async throws -> VerifyJWSResponse {
+    func verifyJWS(transactionJWS: String, appleUserId: String, environment: String? = nil)
+        async throws -> VerifyJWSResponse
+    {
         LoggerService.shared.info(module: "NetworkService", message: "开始验证 JWS")
         // 加密记录敏感信息
-        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS: \(transactionJWS)")
-        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)")
-        LoggerService.shared.info(module: "NetworkService", message: "Environment: \(environment ?? "nil")")
-        
+        LoggerService.shared.info(
+            module: "NetworkService", message: "Transaction JWS: \(transactionJWS)")
+        LoggerService.shared.info(
+            module: "NetworkService", message: "Apple User ID: \(appleUserId)")
+        LoggerService.shared.info(
+            module: "NetworkService", message: "Environment: \(environment ?? "nil")")
+
         let request = VerifyJWSRequest(
             transactionJWS: transactionJWS,
             appleUserId: appleUserId,
             environment: environment
         )
         let bodyData = try JSONEncoder().encode(request)
-        
+
         // IAP API 可能返回直接响应或 APIResponse 包装
         var urlRequest = URLRequest(url: APIEndpoint.iapVerify.url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.httpBody = bodyData
-        
+
         if let token = accessToken {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
+
         logRequest(request: urlRequest, body: bodyData)
-        
+
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
             throw NetworkError.invalidResponse
         }
-        
+
         // 处理401错误
         if httpResponse.statusCode == 401 {
             try await refreshAccessToken()
             urlRequest.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResponse) = try await URLSession.shared.data(for: urlRequest)
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                  retryHttpResponse.statusCode == 200 else {
+                retryHttpResponse.statusCode == 200
+            else {
                 throw NetworkError.unauthorized
             }
             logResponse(response: retryHttpResponse, data: retryData, error: nil)
-            
+
             // 尝试直接解析或 APIResponse 格式
             do {
                 return try JSONDecoder().decode(VerifyJWSResponse.self, from: retryData)
             } catch {
-                let apiResponse = try JSONDecoder().decode(APIResponse<VerifyJWSResponse>.self, from: retryData)
+                let apiResponse = try JSONDecoder().decode(
+                    APIResponse<VerifyJWSResponse>.self, from: retryData)
                 guard let responseData = apiResponse.data else {
                     throw NetworkError.noData
                 }
                 return responseData
             }
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             let error = NetworkError.serverError(httpResponse.statusCode)
             logResponse(response: httpResponse, data: data, error: error)
             throw error
         }
-        
+
         logResponse(response: httpResponse, data: data, error: nil)
-        
+
         do {
             return try JSONDecoder().decode(VerifyJWSResponse.self, from: data)
         } catch {
-            let apiResponse = try JSONDecoder().decode(APIResponse<VerifyJWSResponse>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(
+                APIResponse<VerifyJWSResponse>.self, from: data)
             guard let responseData = apiResponse.data else {
                 throw NetworkError.noData
             }
             return responseData
         }
     }
-    
+
     /// 批量同步订阅
-    func syncSubscriptions(transactionJWSList: [String], appleUserId: String, environment: String? = nil) async throws -> SyncSubscriptionResponse {
+    func syncSubscriptions(
+        transactionJWSList: [String], appleUserId: String, environment: String? = nil
+    ) async throws -> SyncSubscriptionResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始批量同步订阅")
         // 加密记录敏感信息
-        LoggerService.shared.info(module: "NetworkService", message: "Transaction JWS List (\(transactionJWSList.count) 个): \(transactionJWSList.joined(separator: ","))")
-        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)")
-        LoggerService.shared.info(module: "NetworkService", message: "Environment: \(environment ?? "nil")")
-        
+        LoggerService.shared.info(
+            module: "NetworkService",
+            message:
+                "Transaction JWS List (\(transactionJWSList.count) 个): \(transactionJWSList.joined(separator: ","))"
+        )
+        LoggerService.shared.info(
+            module: "NetworkService", message: "Apple User ID: \(appleUserId)")
+        LoggerService.shared.info(
+            module: "NetworkService", message: "Environment: \(environment ?? "nil")")
+
         let request = SyncSubscriptionRequest(
             transactionJWSList: transactionJWSList,
             appleUserId: appleUserId,
             environment: environment
         )
         let bodyData = try JSONEncoder().encode(request)
-        
+
         var urlRequest = URLRequest(url: APIEndpoint.iapSync.url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.httpBody = bodyData
-        
+
         if let token = accessToken {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
+
         logRequest(request: urlRequest, body: bodyData)
-        
+
         let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
             throw NetworkError.invalidResponse
         }
-        
+
         // 处理401错误
         if httpResponse.statusCode == 401 {
             try await refreshAccessToken()
             urlRequest.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResponse) = try await URLSession.shared.data(for: urlRequest)
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                  retryHttpResponse.statusCode == 200 else {
+                retryHttpResponse.statusCode == 200
+            else {
                 throw NetworkError.unauthorized
             }
             logResponse(response: retryHttpResponse, data: retryData, error: nil)
-            
+
             do {
                 return try JSONDecoder().decode(SyncSubscriptionResponse.self, from: retryData)
             } catch {
-                let apiResponse = try JSONDecoder().decode(APIResponse<SyncSubscriptionResponse>.self, from: retryData)
+                let apiResponse = try JSONDecoder().decode(
+                    APIResponse<SyncSubscriptionResponse>.self, from: retryData)
                 guard let responseData = apiResponse.data else {
                     throw NetworkError.noData
                 }
                 return responseData
             }
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             let error = NetworkError.serverError(httpResponse.statusCode)
             logResponse(response: httpResponse, data: data, error: error)
             throw error
         }
-        
+
         logResponse(response: httpResponse, data: data, error: nil)
-        
+
         do {
             return try JSONDecoder().decode(SyncSubscriptionResponse.self, from: data)
         } catch {
-            let apiResponse = try JSONDecoder().decode(APIResponse<SyncSubscriptionResponse>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(
+                APIResponse<SyncSubscriptionResponse>.self, from: data)
             guard let responseData = apiResponse.data else {
                 throw NetworkError.noData
             }
             return responseData
         }
     }
-    
+
     /// 查询订阅状态
     func getSubscriptionStatus(appleUserId: String) async throws -> SubscriptionStatusResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始查询订阅状态")
         // 加密记录敏感信息
-        LoggerService.shared.info(module: "NetworkService", message: "Apple User ID: \(appleUserId)")
-        
-        var components = URLComponents(url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!
+        LoggerService.shared.info(
+            module: "NetworkService", message: "Apple User ID: \(appleUserId)")
+
+        var components = URLComponents(
+            url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "apple_user_id", value: appleUserId)]
-        
+
         guard let finalURL = components.url else {
             LoggerService.shared.error(module: "NetworkService", message: "查询订阅状态失败：无效的 URL")
             throw NetworkError.invalidURL
         }
-        
+
         var request = URLRequest(url: finalURL)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
+
         if let token = accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        
+
         logRequest(request: request, body: nil)
-        
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse else {
             logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
             throw NetworkError.invalidResponse
         }
-        
+
         // 处理401错误
         if httpResponse.statusCode == 401 {
             try await refreshAccessToken()
             request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
             let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
             guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                  retryHttpResponse.statusCode == 200 else {
+                retryHttpResponse.statusCode == 200
+            else {
                 throw NetworkError.unauthorized
             }
             logResponse(response: retryHttpResponse, data: retryData, error: nil)
-            
+
             do {
                 return try JSONDecoder().decode(SubscriptionStatusResponse.self, from: retryData)
             } catch {
-                let apiResponse = try JSONDecoder().decode(APIResponse<SubscriptionStatusResponse>.self, from: retryData)
+                let apiResponse = try JSONDecoder().decode(
+                    APIResponse<SubscriptionStatusResponse>.self, from: retryData)
                 guard let responseData = apiResponse.data else {
                     throw NetworkError.noData
                 }
                 return responseData
             }
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             let error = NetworkError.serverError(httpResponse.statusCode)
             logResponse(response: httpResponse, data: data, error: error)
             throw error
         }
-        
+
         logResponse(response: httpResponse, data: data, error: nil)
-        
+
         do {
             return try JSONDecoder().decode(SubscriptionStatusResponse.self, from: data)
         } catch {
-            let apiResponse = try JSONDecoder().decode(APIResponse<SubscriptionStatusResponse>.self, from: data)
+            let apiResponse = try JSONDecoder().decode(
+                APIResponse<SubscriptionStatusResponse>.self, from: data)
             guard let responseData = apiResponse.data else {
                 throw NetworkError.noData
             }
             return responseData
         }
     }
-    
+
     // MARK: - 日志记录方法
     private func logRequest(request: URLRequest, body: Data?) {
         LoggerService.shared.info(module: "NetworkService", message: "===== 网络请求开始 =====")
-        LoggerService.shared.info(module: "NetworkService", message: "方法: \(request.httpMethod ?? "Unknown")")
-        LoggerService.shared.info(module: "NetworkService", message: "URL: \(request.url?.absoluteString ?? "Unknown")")
-        
+        LoggerService.shared.info(
+            module: "NetworkService", message: "方法: \(request.httpMethod ?? "Unknown")")
+        LoggerService.shared.info(
+            module: "NetworkService", message: "URL: \(request.url?.absoluteString ?? "Unknown")")
+
         // 记录请求头
         if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
             for (key, value) in headers {
                 // 敏感信息加密记录
                 if key.lowercased().contains("authorization") {
-                    LoggerService.shared.info(module: "NetworkService", message: "[Authorization] \(key): \(value)")
+                    LoggerService.shared.info(
+                        module: "NetworkService", message: "[Authorization] \(key): \(value)")
                 } else {
-                    LoggerService.shared.info(module: "NetworkService", message: "  \(key): \(value)")
+                    LoggerService.shared.info(
+                        module: "NetworkService", message: "  \(key): \(value)")
                 }
             }
         }
-        
+
         // 记录请求体
         if let body = body {
-            LoggerService.shared.info(module: "NetworkService", message: "请求体大小: \(body.count) bytes")
+            LoggerService.shared.info(
+                module: "NetworkService", message: "请求体大小: \(body.count) bytes")
             if let bodyString = String(data: body, encoding: .utf8) {
                 // 加密记录完整请求体（可能包含敏感信息）
                 LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)")
@@ -1201,34 +1240,40 @@ class NetworkService: ObservableObject {
         }
         LoggerService.shared.info(module: "NetworkService", message: "请求时间: \(Date())")
     }
-    
+
     private func logResponse(response: HTTPURLResponse?, data: Data, error: Error?) {
         LoggerService.shared.info(module: "NetworkService", message: "===== 网络响应 =====")
-        
+
         if let response = response {
-            LoggerService.shared.info(module: "NetworkService", message: "状态码: \(response.statusCode)")
-            LoggerService.shared.info(module: "NetworkService", message: "URL: \(response.url?.absoluteString ?? "Unknown")")
+            LoggerService.shared.info(
+                module: "NetworkService", message: "状态码: \(response.statusCode)")
+            LoggerService.shared.info(
+                module: "NetworkService",
+                message: "URL: \(response.url?.absoluteString ?? "Unknown")")
         }
-        
+
         // 记录响应体
         LoggerService.shared.info(module: "NetworkService", message: "响应体大小: \(data.count) bytes")
         if let responseString = String(data: data, encoding: .utf8) {
             // 限制日志长度，避免过长的响应
             let maxLength = 2000
-            let truncatedResponse = responseString.count > maxLength 
+            let truncatedResponse =
+                responseString.count > maxLength
                 ? String(responseString.prefix(maxLength)) + "... (截断)"
                 : responseString
             // 响应可能包含敏感信息，加密记录
-            LoggerService.shared.info(module: "NetworkService", message: "响应内容: \(truncatedResponse)")
+            LoggerService.shared.info(
+                module: "NetworkService", message: "响应内容: \(truncatedResponse)")
         }
-        
+
         // 记录错误
         if let error = error {
-            LoggerService.shared.error(module: "NetworkService", message: "错误: \(error.localizedDescription)")
+            LoggerService.shared.error(
+                module: "NetworkService", message: "错误: \(error.localizedDescription)")
         } else {
             LoggerService.shared.info(module: "NetworkService", message: "请求成功")
         }
-        
+
         LoggerService.shared.info(module: "NetworkService", message: "响应时间: \(Date())")
         LoggerService.shared.info(module: "NetworkService", message: "===== 网络响应结束 =====")
     }
@@ -1251,7 +1296,7 @@ enum NetworkError: Error, LocalizedError {
     case serverError(Int, message: String? = nil)
     case noRefreshToken
     case decodingError
-    
+
     var errorDescription: String? {
         switch self {
         case .invalidURL:

@@ -1,17 +1,17 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // MARK: - 文档视图
 struct DocumentsView: View {
     @State private var selectedDocumentType: DocumentCategory = .aip
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // 文档类型选择器
                 DocumentTypeSelector(selectedType: $selectedDocumentType)
                     .padding(.horizontal)
-                
+
                 // 文档内容
                 Group {
                     switch selectedDocumentType {
@@ -38,7 +38,7 @@ struct DocumentsView: View {
 // MARK: - 文档类型选择器（使用SwiftUI原生样式）
 struct DocumentTypeSelector: View {
     @Binding var selectedType: DocumentCategory
-    
+
     var body: some View {
         Picker("文档类型", selection: $selectedType) {
             ForEach(DocumentCategory.allCases, id: \.self) { type in
@@ -60,7 +60,7 @@ struct AIPDocumentsView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedCategory: AIPCategory = .all
-    
+
     // 过滤后的文档列表
     private var filteredDocuments: [AIPDocumentResponse] {
         if selectedCategory == .all {
@@ -69,7 +69,7 @@ struct AIPDocumentsView: View {
             return documents.filter { $0.category == selectedCategory.rawValue }
         }
     }
-    
+
     var body: some View {
         VStack {
             // AIP 分类选择器 - HStack 按钮样式
@@ -95,7 +95,7 @@ struct AIPDocumentsView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            
+
             if isLoading {
                 ProgressView("加载AIP文档...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,7 +119,9 @@ struct AIPDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            LoggerService.shared.info(module: "AIPDocumentsView", message: "点击文档: ID=\(document.id), Name=\(document.nameCn)")
+                            LoggerService.shared.info(
+                                module: "AIPDocumentsView",
+                                message: "点击文档: ID=\(document.id), Name=\(document.nameCn)")
                             // 转换为 ChartResponse，使用 "AIP" 作为 chartType
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -162,44 +164,57 @@ struct AIPDocumentsView: View {
             await loadAIPDocuments()
         }
     }
-    
+
     private func loadAIPDocuments() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "DocumentsView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Documents", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Documents", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             let category = selectedCategory == .all ? nil : selectedCategory.rawValue
-            let cacheKey = category != nil ? "aip_\(category!)" : PDFCacheService.DataType.aipDocuments
-            
+            let cacheKey =
+                category != nil ? "aip_\(category!)" : PDFCacheService.DataType.aipDocuments
+
             // 1. 先尝试从缓存加载
             if let cachedDocuments = PDFCacheService.shared.loadCachedData(
                 [AIPDocumentResponse].self,
@@ -212,19 +227,19 @@ struct AIPDocumentsView: View {
                 isLoading = false
                 return
             }
-            
+
             LoggerService.shared.info(module: "AIPDocumentsView", message: "从网络下载 AIP 文档列表")
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAIPDocuments(category: category)
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: cacheKey
             )
-            
+
             await MainActor.run {
                 self.documents = response
             }
@@ -233,7 +248,7 @@ struct AIPDocumentsView: View {
                 self.errorMessage = "加载AIP文档失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
 }
@@ -245,7 +260,7 @@ struct SUPDocumentsView: View {
     @State private var documents: [SUPDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    
+
     var body: some View {
         VStack {
             if isLoading {
@@ -271,7 +286,10 @@ struct SUPDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            LoggerService.shared.info(module: "SUPDocumentsView", message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)")
+                            LoggerService.shared.info(
+                                module: "SUPDocumentsView",
+                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                            )
                             // 创建简化的 ChartResponse
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -314,41 +332,53 @@ struct SUPDocumentsView: View {
             await loadSUPDocuments()
         }
     }
-    
+
     private func loadSUPDocuments() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "DocumentsView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Documents", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Documents", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 1. 先尝试从缓存加载
             if let cachedDocuments = PDFCacheService.shared.loadCachedData(
                 [SUPDocumentResponse].self,
@@ -361,17 +391,17 @@ struct SUPDocumentsView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getSUPDocuments()
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: PDFCacheService.DataType.supDocuments
             )
-            
+
             await MainActor.run {
                 self.documents = response
             }
@@ -380,7 +410,7 @@ struct SUPDocumentsView: View {
                 self.errorMessage = "加载SUP文档失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
 }
@@ -392,7 +422,7 @@ struct AMDTDocumentsView: View {
     @State private var documents: [AMDTDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    
+
     var body: some View {
         VStack {
             if isLoading {
@@ -418,7 +448,10 @@ struct AMDTDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            LoggerService.shared.info(module: "AMDTDocumentsView", message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)")
+                            LoggerService.shared.info(
+                                module: "AMDTDocumentsView",
+                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                            )
                             // 创建简化的 ChartResponse
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -461,41 +494,53 @@ struct AMDTDocumentsView: View {
             await loadAMDTDocuments()
         }
     }
-    
+
     private func loadAMDTDocuments() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "DocumentsView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Documents", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Documents", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 1. 先尝试从缓存加载
             if let cachedDocuments = PDFCacheService.shared.loadCachedData(
                 [AMDTDocumentResponse].self,
@@ -508,17 +553,17 @@ struct AMDTDocumentsView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAMDTDocuments()
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: PDFCacheService.DataType.amdtDocuments
             )
-            
+
             await MainActor.run {
                 self.documents = response
             }
@@ -527,7 +572,7 @@ struct AMDTDocumentsView: View {
                 self.errorMessage = "加载AMDT文档失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
 }
@@ -539,7 +584,7 @@ struct NOTAMDocumentsView: View {
     @State private var documents: [NOTAMDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    
+
     var body: some View {
         VStack {
             if isLoading {
@@ -565,7 +610,9 @@ struct NOTAMDocumentsView: View {
                     if let binding = selectedChartBinding {
                         // iPad 模式
                         Button {
-                            LoggerService.shared.info(module: "NOTAMDocumentsView", message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
+                            LoggerService.shared.info(
+                                module: "NOTAMDocumentsView",
+                                message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
                             // 创建简化的 ChartResponse
                             binding.wrappedValue = ChartResponse(
                                 id: document.id,
@@ -608,41 +655,53 @@ struct NOTAMDocumentsView: View {
             await loadNOTAMDocuments()
         }
     }
-    
+
     private func loadNOTAMDocuments() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "DocumentsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "DocumentsView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Documents", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Documents", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Documents", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 1. 先尝试从缓存加载
             if let cachedDocuments = PDFCacheService.shared.loadCachedData(
                 [NOTAMDocumentResponse].self,
@@ -655,17 +714,17 @@ struct NOTAMDocumentsView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getNOTAMDocuments()
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: PDFCacheService.DataType.notamDocuments
             )
-            
+
             await MainActor.run {
                 self.documents = response
             }
@@ -674,7 +733,7 @@ struct NOTAMDocumentsView: View {
                 self.errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
 }
@@ -684,19 +743,19 @@ struct NOTAMDocumentsView: View {
 // MARK: - 文档行视图
 struct AIPDocumentRowView: View {
     let document: AIPDocumentResponse
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(document.nameCn)
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .lineLimit(2)
-            
+
             Text(document.name)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-            
+
             HStack {
                 Text(document.category)
                     .font(.caption2)
@@ -704,17 +763,17 @@ struct AIPDocumentRowView: View {
                     .padding(.vertical, 2)
                     .background(.blue.opacity(0.2), in: Capsule())
                     .foregroundColor(.blue)
-                
+
                 Text("AIRAC \(document.airacVersion)")
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
+
                 if document.isModified == true {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
                 }
-                
+
                 Spacer()
             }
         }
@@ -724,7 +783,7 @@ struct AIPDocumentRowView: View {
 
 struct SUPDocumentRowView: View {
     let document: SUPDocumentResponse
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -734,26 +793,26 @@ struct SUPDocumentRowView: View {
                     .padding(.vertical, 2)
                     .background(.orange.opacity(0.2), in: Capsule())
                     .foregroundColor(.orange)
-                
+
                 if (document.isModified ?? false) || (document.hasUpdate ?? false) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
                 }
-                
+
                 Spacer()
             }
-            
+
             Text(document.localSubject)
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .lineLimit(2)
-            
+
             Text(document.subject)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-            
+
             if let effectiveTime = document.effectiveTime {
                 Text("生效时间: \(effectiveTime)")
                     .font(.caption2)
@@ -766,7 +825,7 @@ struct SUPDocumentRowView: View {
 
 struct AMDTDocumentRowView: View {
     let document: AMDTDocumentResponse
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -776,26 +835,26 @@ struct AMDTDocumentRowView: View {
                     .padding(.vertical, 2)
                     .background(.green.opacity(0.2), in: Capsule())
                     .foregroundColor(.green)
-                
+
                 if (document.isModified ?? false) || (document.hasUpdate ?? false) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
                 }
-                
+
                 Spacer()
             }
-            
+
             Text(document.localSubject)
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .lineLimit(2)
-            
+
             Text(document.subject)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-            
+
             if let effectiveTime = document.effectiveTime {
                 Text("生效时间: \(effectiveTime)")
                     .font(.caption2)
@@ -808,7 +867,7 @@ struct AMDTDocumentRowView: View {
 
 struct NOTAMDocumentRowView: View {
     let document: NOTAMDocumentResponse
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -818,14 +877,14 @@ struct NOTAMDocumentRowView: View {
                     .padding(.vertical, 2)
                     .background(.red.opacity(0.2), in: Capsule())
                     .foregroundColor(.red)
-                
+
                 Spacer()
             }
-            
+
             Text("航行通告 \(document.seriesName) 系列")
                 .font(.subheadline)
                 .fontWeight(.medium)
-            
+
             Text("生成时间: \(document.generateTime)")
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -839,7 +898,7 @@ enum DocumentCategory: String, CaseIterable {
     case aip = "aip"
     case sup = "sup"
     case notam = "notam"
-    
+
     var displayName: String {
         switch self {
         case .aip: return "AIP"
@@ -853,7 +912,7 @@ enum AIPCategory: String, CaseIterable {
     case all = "ALL"
     case gen = "GEN"
     case enr = "ENR"
-    
+
     var displayName: String {
         switch self {
         case .all: return "全部"

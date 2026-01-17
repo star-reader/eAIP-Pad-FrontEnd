@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import Foundation
+import SwiftData
+import SwiftUI
 
 // MARK: - 机场详情视图
 struct AirportDetailView: View {
@@ -11,26 +11,26 @@ struct AirportDetailView: View {
     @State private var errorMessage: String?
     @State private var selectedChartType: ChartType = .all
     @State private var showWeatherSheet = false
-    
+
     // 过滤后的航图列表
     private var filteredCharts: [ChartResponse] {
         // 过滤掉 OTHERS 类型
         let nonOthersCharts = charts.filter { $0.chartType != "OTHERS" }
-        
+
         if selectedChartType == .all {
             return nonOthersCharts
         } else {
             return nonOthersCharts.filter { $0.chartType == selectedChartType.rawValue }
         }
     }
-    
+
     // 按类型分组的航图
     private var groupedCharts: [ChartType: [ChartResponse]] {
         Dictionary(grouping: filteredCharts) { chart in
             ChartType(rawValue: chart.chartType) ?? .others
         }
     }
-    
+
     var body: some View {
         VStack {
             if isLoading {
@@ -57,12 +57,12 @@ struct AirportDetailView: View {
                     AirportInfoCard(airport: airport) {
                         showWeatherSheet = true
                     }
-                        .padding()
-                    
+                    .padding()
+
                     // 使用原生 Picker 作为分段控制器
                     Picker("航图类型", selection: $selectedChartType) {
                         ForEach(ChartType.allCases, id: \.self) { type in
-                            if (type != .others) {
+                            if type != .others {
                                 Text(type.displayName).tag(type)
                             }
                         }
@@ -70,7 +70,7 @@ struct AirportDetailView: View {
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
                     .padding(.bottom, 8)
-                    
+
                     // 航图列表
                     List {
                         if selectedChartType == .all {
@@ -98,13 +98,14 @@ struct AirportDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showWeatherSheet) {
-            WeatherSheetView(icao: airport.icao, airportNameCn: airport.nameCn, airportNameEn: airport.nameEn)
+            WeatherSheetView(
+                icao: airport.icao, airportNameCn: airport.nameCn, airportNameEn: airport.nameEn)
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
                     PinboardToolbarButton()
-                    
+
                     Button {
                         Task {
                             await loadCharts()
@@ -120,44 +121,56 @@ struct AirportDetailView: View {
             await loadCharts()
         }
     }
-    
+
     private func loadCharts() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "AirportDetailView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "AirportDetailView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "AirportDetailView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "AirportDetailView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "AirportDetail", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "AirportDetail", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "AirportDetail", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "AirportDetail", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 使用机场 ICAO 作为缓存键
             let cacheKey = "charts_\(airport.icao)"
-            
+
             // 1. 先尝试从缓存加载
             if let cachedCharts = PDFCacheService.shared.loadCachedData(
                 [ChartResponse].self,
@@ -171,20 +184,20 @@ struct AirportDetailView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAirportCharts(icao: airport.icao)
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: cacheKey
             )
-            
+
             await MainActor.run {
                 self.charts = response
-                
+
                 // 同步到本地 SwiftData
                 syncChartsToLocal(response)
             }
@@ -193,10 +206,10 @@ struct AirportDetailView: View {
                 self.errorMessage = "加载航图数据失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
-    
+
     private func syncChartsToLocal(_ charts: [ChartResponse]) {
         for chartResponse in charts {
             // 检查是否已存在
@@ -205,7 +218,7 @@ struct AirportDetailView: View {
                     predicate: #Predicate { $0.documentID == chartResponse.documentId }
                 )
             )
-            
+
             if existingCharts?.isEmpty ?? true {
                 let chart = LocalChart(
                     chartID: "chart_\(chartResponse.id)",
@@ -223,11 +236,11 @@ struct AirportDetailView: View {
                 chart.htmlEnPath = chartResponse.htmlEnPath
                 chart.isModified = chartResponse.isModified
                 chart.isOpened = chartResponse.isOpened ?? false
-                
+
                 modelContext.insert(chart)
             }
         }
-        
+
         try? modelContext.save()
     }
 }
@@ -236,7 +249,7 @@ struct AirportDetailView: View {
 struct AirportInfoCard: View {
     let airport: AirportResponse
     let onWeatherTap: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 12) {
             HStack {
@@ -247,9 +260,9 @@ struct AirportInfoCard: View {
                         //     .fontWeight(.bold)
 
                         Text(airport.nameCn)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                        
+                            .font(.headline)
+                            .foregroundColor(.primary)
+
                         // 更新提示 - 橙色小圆点
                         if airport.isModified == true {
                             Circle()
@@ -257,18 +270,18 @@ struct AirportInfoCard: View {
                                 .frame(width: 8, height: 8)
                         }
                     }
-                    
+
                     Text(airport.nameEn)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 VStack(spacing: 8) {
                     Button("天气") { onWeatherTap() }
-                    .buttonStyle(.bordered)
-                    .font(.caption)
+                        .buttonStyle(.bordered)
+                        .font(.caption)
                 }
             }
         }
@@ -277,28 +290,30 @@ struct AirportInfoCard: View {
     }
 }
 
-
 // MARK: - 航图行视图
 struct ChartRowView: View {
     let chart: ChartResponse
     @Environment(\.modelContext) private var modelContext
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @Query private var pinnedCharts: [PinnedChart]
-    
+
     private var isPinned: Bool {
         pinnedCharts.contains { $0.chartID == "chart_\(chart.id)" }
     }
-    
+
     private var chartTypeColor: Color {
         ChartType(rawValue: chart.chartType)?.color ?? .gray
     }
-    
+
     var body: some View {
         Group {
             if let binding = selectedChartBinding {
                 // iPad 侧边栏模式：点击设置环境中的 selectedChart
                 Button {
-                    LoggerService.shared.info(module: "AirportDetailView", message: "点击航图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
+                    LoggerService.shared.info(
+                        module: "AirportDetailView",
+                        message:
+                            "点击航图: ID=\(chart.id), Type=\(chart.chartType), Name=\(chart.nameCn)")
                     binding.wrappedValue = chart
                 } label: {
                     chartRowContent
@@ -320,66 +335,66 @@ struct ChartRowView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private var chartRowContent: some View {
-            HStack(spacing: 0) {
-                // 左侧颜色边框
-                Rectangle()
-                    .fill(chartTypeColor)
-                    .frame(width: 4)
-                
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text(chart.nameCn)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .lineLimit(2)
-                            
-                            // 更新提示 - 橙色小圆点
-                            if chart.isModified {
-                                Circle()
-                                    .fill(.orange)
-                                    .frame(width: 6, height: 6)
-                            }
+        HStack(spacing: 0) {
+            // 左侧颜色边框
+            Rectangle()
+                .fill(chartTypeColor)
+                .frame(width: 4)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(chart.nameCn)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(2)
+
+                        // 更新提示 - 橙色小圆点
+                        if chart.isModified {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 6, height: 6)
                         }
-                        
-                        Text(chart.nameEn)
-                            .font(.caption)
+                    }
+
+                    Text(chart.nameEn)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                    HStack {
+                        Text(chart.chartType)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(chartTypeColor.opacity(0.2), in: Capsule())
+                            .foregroundColor(chartTypeColor)
+
+                        Text("AIRAC \(chart.airacVersion)")
+                            .font(.caption2)
                             .foregroundColor(.secondary)
-                            .lineLimit(1)
-                        
-                        HStack {
-                            Text(chart.chartType)
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(chartTypeColor.opacity(0.2), in: Capsule())
-                                .foregroundColor(chartTypeColor)
-                            
-                            Text("AIRAC \(chart.airacVersion)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                        }
+
+                        Spacer()
                     }
-                    .padding(.leading, 12)
-                    
-                    Spacer()
-                    
-                    Button {
-                        togglePin()
-                    } label: {
-                        Image(systemName: isPinned ? "pin.fill" : "pin")
-                            .foregroundColor(isPinned ? .orange : .secondary)
-                    }
-                    .buttonStyle(.plain)
                 }
+                .padding(.leading, 12)
+
+                Spacer()
+
+                Button {
+                    togglePin()
+                } label: {
+                    Image(systemName: isPinned ? "pin.fill" : "pin")
+                        .foregroundColor(isPinned ? .orange : .secondary)
+                }
+                .buttonStyle(.plain)
             }
+        }
     }
-    
+
     private func togglePin() {
         if isPinned {
             // 移除收藏
@@ -398,7 +413,7 @@ struct ChartRowView: View {
             )
             modelContext.insert(newPin)
         }
-        
+
         try? modelContext.save()
     }
 }
@@ -411,7 +426,7 @@ enum ChartType: String, CaseIterable {
     case app = "APP"
     case apt = "APT"
     case others = "OTHERS"
-    
+
     var displayName: String {
         switch self {
         case .all: return "全部"
@@ -422,7 +437,7 @@ enum ChartType: String, CaseIterable {
         case .others: return "OTHER"
         }
     }
-    
+
     var color: Color {
         switch self {
         case .all: return .gray
@@ -433,7 +448,7 @@ enum ChartType: String, CaseIterable {
         case .others: return .brown
         }
     }
-    
+
     var lightColor: Color {
         return color.opacity(0.2)
     }
@@ -441,14 +456,15 @@ enum ChartType: String, CaseIterable {
 
 #Preview {
     NavigationStack {
-        AirportDetailView(airport: AirportResponse(
-            icao: "ZBAA",
-            nameEn: "Beijing Capital International Airport",
-            nameCn: "北京首都国际机场",
-            hasTerminalCharts: true,
-            createdAt: "2024-01-01T00:00:00Z",
-            isModified: false
-        ))
+        AirportDetailView(
+            airport: AirportResponse(
+                icao: "ZBAA",
+                nameEn: "Beijing Capital International Airport",
+                nameCn: "北京首都国际机场",
+                hasTerminalCharts: true,
+                createdAt: "2024-01-01T00:00:00Z",
+                isModified: false
+            ))
     }
     .modelContainer(for: PinnedChart.self, inMemory: true)
 }

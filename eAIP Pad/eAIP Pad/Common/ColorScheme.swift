@@ -6,20 +6,20 @@ import UIKit
 
 // MARK: - 应用配色方案（蓝色主题）
 extension Color {
-    // 主色调 - 蓝色系
-    static let primaryBlue = Color(red: 0.0, green: 0.48, blue: 1.0)        // #007AFF - iOS 系统蓝
-    static let secondaryBlue = Color(red: 0.2, green: 0.6, blue: 0.9)       // #3399E6 - 浅蓝
-    static let darkBlue = Color(red: 0.0, green: 0.32, blue: 0.8)           // #0052CC - 深蓝
-    static let lightBlue = Color(red: 0.9, green: 0.95, blue: 1.0)          // #E6F3FF - 极浅蓝
+    // 主色调
+    static let primaryBlue = Color(red: 0.0, green: 0.48, blue: 1.0)
+    static let secondaryBlue = Color(red: 0.2, green: 0.6, blue: 0.9)
+    static let darkBlue = Color(red: 0.0, green: 0.32, blue: 0.8)
+    static let lightBlue = Color(red: 0.9, green: 0.95, blue: 1.0)
     
     // 辅助色
-    static let accentBlue = Color(red: 0.1, green: 0.7, blue: 1.0)          // #1AB3FF - 强调蓝
-    static let mutedBlue = Color(red: 0.4, green: 0.6, blue: 0.8)           // #6699CC - 柔和蓝
+    static let accentBlue = Color(red: 0.1, green: 0.7, blue: 1.0)
+    static let mutedBlue = Color(red: 0.4, green: 0.6, blue: 0.8)
     
     // 功能色
-    static let successGreen = Color(red: 0.2, green: 0.8, blue: 0.4)        // #34CC66 - 成功绿
-    static let warningOrange = Color(red: 1.0, green: 0.6, blue: 0.0)       // #FF9900 - 警告橙
-    static let errorRed = Color(red: 1.0, green: 0.3, blue: 0.3)            // #FF4D4D - 错误红
+    static let successGreen = Color(red: 0.2, green: 0.8, blue: 0.4)
+    static let warningOrange = Color(red: 1.0, green: 0.6, blue: 0.0)
+    static let errorRed = Color(red: 1.0, green: 0.3, blue: 0.3)
     
     // 中性色
     static let textPrimary = Color.primary
@@ -34,8 +34,8 @@ extension Color {
     #endif
     
     // 航空专用色
-    static let aviationBlue = Color(red: 0.0, green: 0.4, blue: 0.8)        // #0066CC - 航空蓝
-    static let skyBlue = Color(red: 0.5, green: 0.8, blue: 1.0)             // #80CCFF - 天空蓝
+    static let aviationBlue = Color(red: 0.0, green: 0.4, blue: 0.8)
+    static let skyBlue = Color(red: 0.5, green: 0.8, blue: 1.0)
 }
 
 // MARK: - 渐变色定义

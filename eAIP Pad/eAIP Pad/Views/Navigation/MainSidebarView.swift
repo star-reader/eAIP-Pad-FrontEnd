@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // MARK: - 环境键：用于在 iPad 侧边栏模式下传递选中的航图和机场
 private struct SelectedChartKey: EnvironmentKey {
@@ -19,12 +19,12 @@ extension EnvironmentValues {
         get { self[SelectedChartKey.self] }
         set { self[SelectedChartKey.self] = newValue }
     }
-    
+
     var selectedAirportBinding: Binding<AirportResponse?>? {
         get { self[SelectedAirportKey.self] }
         set { self[SelectedAirportKey.self] = newValue }
     }
-    
+
     var columnVisibilityBinding: Binding<NavigationSplitViewVisibility>? {
         get { self[ColumnVisibilityKey.self] }
         set { self[ColumnVisibilityKey.self] = newValue }
@@ -37,7 +37,7 @@ struct MainSidebarView: View {
     @State private var selectedChart: ChartResponse?
     @State private var selectedAirport: AirportResponse?
     @State private var columnVisibility = NavigationSplitViewVisibility.doubleColumn
-    
+
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // 第一栏：侧边栏（缩小宽度以节省空间）
@@ -57,13 +57,19 @@ struct MainSidebarView: View {
                 .onChange(of: item) { oldValue, newValue in
                     // 切换页面时清空选中的航图和机场
                     if oldValue != newValue {
-                        LoggerService.shared.info(module: "MainSidebarView", message: "切换页面: \(oldValue.title) -> \(newValue.title)")
+                        LoggerService.shared.info(
+                            module: "MainSidebarView",
+                            message: "切换页面: \(oldValue.title) -> \(newValue.title)")
                         selectedChart = nil
                         selectedAirport = nil
                     }
                 }
                 .onChange(of: selectedChart) { oldValue, newValue in
-                    LoggerService.shared.info(module: "MainSidebarView", message: "selectedChart 变化: ID从 \(oldValue?.id ?? -1) -> \(newValue?.id ?? -1), Type: \(newValue?.chartType ?? "nil")")
+                    LoggerService.shared.info(
+                        module: "MainSidebarView",
+                        message:
+                            "selectedChart 变化: ID从 \(oldValue?.id ?? -1) -> \(newValue?.id ?? -1), Type: \(newValue?.chartType ?? "nil")"
+                    )
                 }
             } else {
                 ContentUnavailableView(
@@ -93,9 +99,9 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case regulations = "regulations"
     case documents = "documents"
     case profile = "profile"
-    
+
     var id: String { rawValue }
-    
+
     var title: String {
         switch self {
         case .airports: return "机场"
@@ -105,7 +111,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .profile: return "个人"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .airports: return "airplane.circle.fill"
@@ -120,22 +126,22 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 // MARK: - 侧边栏视图
 struct SidebarView: View {
     @Binding var selectedItem: SidebarItem?
-    
+
     var body: some View {
         List(selection: $selectedItem) {
             Section("") {
                 Label("机场", systemImage: "airplane.circle.fill")
                     .tag(SidebarItem.airports)
-                
+
                 Label("航路", systemImage: "map.fill")
                     .tag(SidebarItem.enroute)
-                
+
                 Label("细则", systemImage: "doc.text.fill")
                     .tag(SidebarItem.regulations)
-                
+
                 Label("文档", systemImage: "folder.fill")
                     .tag(SidebarItem.documents)
-                
+
                 Label("个人", systemImage: "person.fill")
                     .tag(SidebarItem.profile)
             }
@@ -150,7 +156,7 @@ struct ContentListView: View {
     let selectedItem: SidebarItem
     @Binding var selectedAirport: AirportResponse?
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
-    
+
     var body: some View {
         Group {
             switch selectedItem {
@@ -193,45 +199,45 @@ struct ContentListView: View {
 struct DetailView: View {
     let selectedItem: SidebarItem?
     let selectedChart: ChartResponse?
-    
+
     @ViewBuilder
     var body: some View {
-            // 个人中心页面不在右侧显示，留空
-            if selectedItem == .profile {
-                placeholderView
-            } else if let chart = selectedChart {
-                // 显示选中的 PDF
-                let documentType: DocumentType = {
-                    switch chart.chartType {
-                    case "AD":
-                        return .ad  // AD 细则（来自 RegulationsView）
-                    case "AIP":
-                        return .aip  // AIP 文档
-                    case "ENROUTE", "AREA":
-                        return .enroute  // 航路图
-                    case "SUP":
-                        return .sup
-                    case "AMDT":
-                        return .amdt
-                    case "NOTAM":
-                        return .notam
-                    default:
-                        return .chart  // 机场航图（SID、STAR、APP 等）
-                    }
-                }()
-                
-                PDFReaderView(
-                    chartID: "\(chart.chartType.lowercased())_\(chart.id)",
-                    displayName: chart.nameCn,
-                    documentType: documentType
-                )
-                .id("\(documentType.rawValue)_\(chart.chartType)_\(chart.id)")  // 包含 documentType 确保唯一
-            } else {
-                // 占位符
-                placeholderView
-            }
+        // 个人中心页面不在右侧显示，留空
+        if selectedItem == .profile {
+            placeholderView
+        } else if let chart = selectedChart {
+            // 显示选中的 PDF
+            let documentType: DocumentType = {
+                switch chart.chartType {
+                case "AD":
+                    return .ad  // AD 细则（来自 RegulationsView）
+                case "AIP":
+                    return .aip  // AIP 文档
+                case "ENROUTE", "AREA":
+                    return .enroute  // 航路图
+                case "SUP":
+                    return .sup
+                case "AMDT":
+                    return .amdt
+                case "NOTAM":
+                    return .notam
+                default:
+                    return .chart  // 机场航图（SID、STAR、APP 等）
+                }
+            }()
+
+            PDFReaderView(
+                chartID: "\(chart.chartType.lowercased())_\(chart.id)",
+                displayName: chart.nameCn,
+                documentType: documentType
+            )
+            .id("\(documentType.rawValue)_\(chart.chartType)_\(chart.id)")  // 包含 documentType 确保唯一
+        } else {
+            // 占位符
+            placeholderView
+        }
     }
-    
+
     @ViewBuilder
     private var placeholderView: some View {
         if let item = selectedItem {

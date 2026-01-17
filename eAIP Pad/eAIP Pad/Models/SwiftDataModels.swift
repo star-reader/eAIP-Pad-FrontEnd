@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import Foundation
+import SwiftData
+import SwiftUI
 
 // MARK: - 用户收藏的航图
 @Model
@@ -8,13 +8,16 @@ final class PinnedChart {
     @Attribute(.unique) var chartID: String
     var displayName: String
     var icao: String
-    var type: String // SID, STAR, APP, APT, OTHERS
+    var type: String  // SID, STAR, APP, APT, OTHERS
     var pinnedAt: Date = Date()
-    var thumbnailData: Data? // 预览图缓存
-    var documentType: String // chart, enroute, aip, sup, amdt, notam
+    var thumbnailData: Data?  // 预览图缓存
+    var documentType: String  // chart, enroute, aip, sup, amdt, notam
     var airacVersion: String
-    
-    init(chartID: String, displayName: String, icao: String, type: String, documentType: String, airacVersion: String) {
+
+    init(
+        chartID: String, displayName: String, icao: String, type: String, documentType: String,
+        airacVersion: String
+    ) {
         self.chartID = chartID
         self.displayName = displayName
         self.icao = icao
@@ -27,13 +30,13 @@ final class PinnedChart {
 // MARK: - 航图标注数据
 @Model
 final class ChartAnnotation {
-    @Attribute(.unique) var compositeID: String // "chartID_page"
+    @Attribute(.unique) var compositeID: String  // "chartID_page"
     var chartID: String
     var pageNumber: Int
-    var pathsJSON: String // 矢量路径 JSON 字符串
+    var pathsJSON: String  // 矢量路径 JSON 字符串
     var updatedAt: Date = Date()
-    var documentType: String // chart, enroute, aip, sup, amdt, notam
-    
+    var documentType: String  // chart, enroute, aip, sup, amdt, notam
+
     init(chartID: String, pageNumber: Int, pathsJSON: String, documentType: String) {
         self.chartID = chartID
         self.pageNumber = pageNumber
@@ -46,13 +49,13 @@ final class ChartAnnotation {
 // MARK: - AIRAC 版本管理
 @Model
 final class AIRACVersion {
-    @Attribute(.unique) var version: String // "2510"
+    @Attribute(.unique) var version: String  // "2510"
     var effectiveDate: Date
     var isCurrent: Bool = false
     var downloadedCharts: Int = 0
     var totalCharts: Int = 0
     var createdAt: Date = Date()
-    
+
     init(version: String, effectiveDate: Date, isCurrent: Bool = false) {
         self.version = version
         self.effectiveDate = effectiveDate
@@ -66,10 +69,10 @@ final class UserSettings {
     @Attribute(.unique) var id: String = "singleton"
     var isDarkMode: Bool = false  // 默认浅色模式
     var followSystemAppearance: Bool = true  // 默认跟随系统外观
-    var pinboardStyle: String = "compact" // compact, preview, grid
+    var pinboardStyle: String = "compact"  // compact, preview, grid
     var lastSyncDate: Date?
     var isFirstLaunch: Bool = true
-    
+
     init() {
         // 单例模式，默认设置
     }
@@ -91,25 +94,27 @@ final class LocalChart {
     var airacVersion: String
     var isModified: Bool = false
     var isOpened: Bool = false
-    var documentType: String // chart, enroute, aip, sup, amdt, notam
-    var category: String? // 用于 AIP 文档分类
-    var serialNumber: String? // 用于 SUP/AMDT
-    var subject: String? // 用于 SUP/AMDT
-    var localSubject: String? // 用于 SUP/AMDT 中文主题
-    var chapterType: String? // 用于 SUP/AMDT
-    var effectiveTime: String? // 用于 SUP/AMDT
-    var outDate: String? // 用于 SUP/AMDT
-    var pubDate: String? // 用于 SUP/AMDT
-    var seriesName: String? // 用于 NOTAM
-    var generateTime: String? // 用于 NOTAM
-    var generateTimeEn: String? // 用于 NOTAM
+    var documentType: String  // chart, enroute, aip, sup, amdt, notam
+    var category: String?  // 用于 AIP 文档分类
+    var serialNumber: String?  // 用于 SUP/AMDT
+    var subject: String?  // 用于 SUP/AMDT
+    var localSubject: String?  // 用于 SUP/AMDT 中文主题
+    var chapterType: String?  // 用于 SUP/AMDT
+    var effectiveTime: String?  // 用于 SUP/AMDT
+    var outDate: String?  // 用于 SUP/AMDT
+    var pubDate: String?  // 用于 SUP/AMDT
+    var seriesName: String?  // 用于 NOTAM
+    var generateTime: String?  // 用于 NOTAM
+    var generateTimeEn: String?  // 用于 NOTAM
     var createdAt: Date = Date()
-    
+
     // 机场关联关系
     @Relationship var airport: Airport?
-    
-    init(chartID: String, documentID: String, nameEn: String, nameCn: String, 
-         chartType: String, airacVersion: String, documentType: String) {
+
+    init(
+        chartID: String, documentID: String, nameEn: String, nameCn: String,
+        chartType: String, airacVersion: String, documentType: String
+    ) {
         self.chartID = chartID
         self.documentID = documentID
         self.nameEn = nameEn
@@ -129,12 +134,15 @@ final class Airport {
     var hasTerminalCharts: Bool = true
     var isModified: Bool = false
     var createdAt: Date = Date()
-    
+
     // 关联的航图
     @Relationship(deleteRule: .cascade, inverse: \LocalChart.airport)
     var charts: [LocalChart] = []
-    
-    init(icao: String, nameEn: String, nameCn: String, hasTerminalCharts: Bool = true, isModified: Bool = false) {
+
+    init(
+        icao: String, nameEn: String, nameCn: String, hasTerminalCharts: Bool = true,
+        isModified: Bool = false
+    ) {
         self.icao = icao
         self.nameEn = nameEn
         self.nameCn = nameCn
@@ -150,7 +158,7 @@ enum PinboardStyle: String, CaseIterable {
     case compact = "compact"
     case preview = "preview"
     case grid = "grid"
-    
+
     var displayName: String {
         switch self {
         case .compact: return "紧凑模式"
@@ -169,7 +177,7 @@ enum DocumentType: String, CaseIterable {
     case sup = "sup"
     case amdt = "amdt"
     case notam = "notam"
-    
+
     var displayName: String {
         switch self {
         case .chart: return "机场航图"

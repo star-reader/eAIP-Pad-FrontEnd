@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // MARK: - 航路图视图
 struct EnrouteView: View {
@@ -9,7 +9,7 @@ struct EnrouteView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedChartType: EnrouteChartType = .enroute
-    
+
     // 过滤后的航路图列表
     private var filteredCharts: [ChartResponse] {
         switch selectedChartType {
@@ -21,7 +21,7 @@ struct EnrouteView: View {
             return enrouteCharts.filter { $0.chartType == "OTHERS" }
         }
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -53,7 +53,7 @@ struct EnrouteView: View {
                         }
                         .pickerStyle(.segmented)
                         .padding()
-                        
+
                         // 航路图列表
                         if filteredCharts.isEmpty {
                             ContentUnavailableView(
@@ -103,41 +103,52 @@ struct EnrouteView: View {
             await loadEnrouteCharts()
         }
     }
-    
+
     private func loadEnrouteCharts() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "EnrouteView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "EnrouteView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "EnrouteView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "EnrouteView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Enroute", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Enroute", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Enroute", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Enroute", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 1. 先尝试从缓存加载
             if let cachedCharts = PDFCacheService.shared.loadCachedData(
                 [ChartResponse].self,
@@ -150,17 +161,17 @@ struct EnrouteView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getEnrouteCharts(type: nil)
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: PDFCacheService.DataType.enrouteCharts
             )
-            
+
             await MainActor.run {
                 self.enrouteCharts = response
             }
@@ -169,7 +180,7 @@ struct EnrouteView: View {
                 self.errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
 }
@@ -179,15 +190,15 @@ struct EnrouteChartRowView: View {
     let chart: ChartResponse
     @Environment(\.modelContext) private var modelContext
     @Query private var pinnedCharts: [PinnedChart]
-    
+
     private var chartID: String {
         "enroute_\(chart.id)"
     }
-    
+
     private var isPinned: Bool {
         pinnedCharts.contains { $0.chartID == chartID }
     }
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
@@ -196,7 +207,7 @@ struct EnrouteChartRowView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(2)
-                    
+
                     // 更新提示 - 橙色小圆点
                     if chart.isModified {
                         Circle()
@@ -204,12 +215,12 @@ struct EnrouteChartRowView: View {
                             .frame(width: 6, height: 6)
                     }
                 }
-                
+
                 Text(chart.nameEn)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
-                
+
                 HStack {
                     Text(chart.chartType)
                         .font(.caption2)
@@ -217,17 +228,17 @@ struct EnrouteChartRowView: View {
                         .padding(.vertical, 2)
                         .background(.orange.opacity(0.2), in: Capsule())
                         .foregroundColor(.orange)
-                    
+
                     Text("AIRAC \(chart.airacVersion)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
-                    
+
                     Spacer()
                 }
             }
-            
+
             Spacer()
-            
+
             Button {
                 togglePin()
             } label: {
@@ -237,7 +248,7 @@ struct EnrouteChartRowView: View {
             .buttonStyle(.plain)
         }
     }
-    
+
     private func togglePin() {
         if isPinned {
             // 移除收藏
@@ -256,7 +267,7 @@ struct EnrouteChartRowView: View {
             )
             modelContext.insert(newPin)
         }
-        
+
         try? modelContext.save()
     }
 }
@@ -266,7 +277,7 @@ enum EnrouteChartType: String, CaseIterable {
     case enroute = "ENROUTE"
     case area = "AREA"
     case others = "OTHERS"
-    
+
     var displayName: String {
         switch self {
         case .enroute: return "航路图"

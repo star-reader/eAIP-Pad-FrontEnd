@@ -1,38 +1,38 @@
-import SwiftUI
 import Foundation
+import SwiftUI
 
 struct WeatherSheetView: View {
     let icao: String
     let airportNameCn: String
     let airportNameEn: String
-    
-    @State private var selection: Int = 0 // 0: METAR, 1: TAF
+
+    @State private var selection: Int = 0  // 0: METAR, 1: TAF
     @State private var isLoadingMetar = true
     @State private var isLoadingTaf = true
     @State private var metarError: String?
     @State private var tafError: String?
     @State private var metar: METARResponse?
     @State private var taf: TAFResponse?
-    
+
     var body: some View {
         VStack(spacing: 0) {
-                header
-                
-                Picker("Weather", selection: $selection) {
-                    Text("METAR").tag(0)
-                    Text("TAF").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 8)
-                
-                // 添加内容视图
-                TabView(selection: $selection) {
-                    metarView.tag(0)
-                    tafView.tag(1)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.default, value: selection)
+            header
+
+            Picker("Weather", selection: $selection) {
+                Text("METAR").tag(0)
+                Text("TAF").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.top, 8)
+
+            // 添加内容视图
+            TabView(selection: $selection) {
+                metarView.tag(0)
+                tafView.tag(1)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .animation(.default, value: selection)
         }
         .onAppear {
             Task { await loadMETAR() }
@@ -40,7 +40,7 @@ struct WeatherSheetView: View {
         }
         .presentationDetents([.medium, .large])
     }
-    
+
     private var header: some View {
         HStack(alignment: .center) {
             // VStack(alignment: .leading, spacing: 4) {
@@ -66,7 +66,7 @@ struct WeatherSheetView: View {
         .padding(.top, 12)
         .padding(.bottom, 4)
     }
-    
+
     private var metarView: some View {
         Group {
             if isLoadingMetar {
@@ -88,7 +88,7 @@ struct WeatherSheetView: View {
                             }
                         }
                         .padding(.horizontal)
-                        
+
                         // 详细列表
                         let baseItems: [(String, String?)] = [
                             ("风向", clean(metar.windDirection)),
@@ -97,7 +97,7 @@ struct WeatherSheetView: View {
                             ("温度", clean(metar.temperature)),
                             ("露点", clean(metar.dewpoint)),
                             ("QNH", clean(metar.qnh)),
-                            ("天气现象", clean(metar.weather))
+                            ("天气现象", clean(metar.weather)),
                         ]
                         let cloudItems: [(String, String?)] = (metar.clouds ?? [])
                             .compactMap { clean($0) }
@@ -110,7 +110,7 @@ struct WeatherSheetView: View {
                             EmptyStateView(title: "暂无 METAR 数据")
                                 .padding(.horizontal)
                         }
-                        
+
                         // 原始报文
                         if let raw = clean(metar.raw) {
                             WeatherRawSection(title: "原始报文", raw: raw)
@@ -123,7 +123,7 @@ struct WeatherSheetView: View {
             }
         }
     }
-    
+
     private var tafView: some View {
         Group {
             if isLoadingTaf {
@@ -150,24 +150,26 @@ struct WeatherSheetView: View {
                             .foregroundColor(.secondary)
                         }
                         .padding(.horizontal)
-                        
+
                         // 分时段预报
                         if let forecasts = taf.forecasts, !forecasts.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 ForEach(forecasts, id: \.self) { period in
                                     let timeFrom = clean(period.timeFrom)
                                     let timeTo = clean(period.timeTo)
-                                    let items: [(String, String?)] = [
-                                        ("风", clean(period.wind)),
-                                        ("能见度", clean(period.visibility)),
-                                        ("天气现象", clean(period.weather))
-                                    ] + (period.clouds ?? [])
+                                    let items: [(String, String?)] =
+                                        [
+                                            ("风", clean(period.wind)),
+                                            ("能见度", clean(period.visibility)),
+                                            ("天气现象", clean(period.weather)),
+                                        ]
+                                        + (period.clouds ?? [])
                                         .compactMap { clean($0) }
                                         .enumerated()
                                         .map { (idx, val) in ("云况\(idx+1)", val) }
                                     let hasAny = items.contains { ($0.1 ?? "").isEmpty == false }
                                     if hasAny || timeFrom != nil || timeTo != nil {
-                                    VStack(alignment: .leading, spacing: 6) {
+                                        VStack(alignment: .leading, spacing: 6) {
                                             if let tf = timeFrom, let tt = timeTo {
                                                 Text("\(tf) → \(tt)")
                                                     .font(.subheadline).bold()
@@ -178,9 +180,11 @@ struct WeatherSheetView: View {
                                             if hasAny {
                                                 WeatherDetailList(items: items)
                                             }
-                                    }
-                                    .padding()
-                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+                                        }
+                                        .padding()
+                                        .background(
+                                            .ultraThinMaterial,
+                                            in: RoundedRectangle(cornerRadius: 10))
                                     }
                                 }
                             }
@@ -189,7 +193,7 @@ struct WeatherSheetView: View {
                             EmptyStateView(title: "暂无 TAF 数据")
                                 .padding(.horizontal)
                         }
-                        
+
                         // 原始报文
                         if let raw = clean(taf.raw) {
                             WeatherRawSection(title: "原始报文", raw: raw)
@@ -202,7 +206,7 @@ struct WeatherSheetView: View {
             }
         }
     }
-    
+
     private func loadMETAR() async {
         await MainActor.run {
             isLoadingMetar = true
@@ -221,7 +225,7 @@ struct WeatherSheetView: View {
         }
         await MainActor.run { self.isLoadingMetar = false }
     }
-    
+
     private func loadTAF() async {
         await MainActor.run {
             isLoadingTaf = true
@@ -254,7 +258,7 @@ private func clean(_ value: String?) -> String? {
 
 private struct WeatherDetailList: View {
     let items: [(String, String?)]
-    
+
     var body: some View {
         VStack(spacing: 0) {
             ForEach(items.indices, id: \.self) { idx in
@@ -279,7 +283,7 @@ private struct WeatherDetailList: View {
 
 private struct EmptyStateView: View {
     let title: String
-    
+
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "cloud.fill").font(.largeTitle).foregroundColor(.secondary)
@@ -293,7 +297,7 @@ private struct EmptyStateView: View {
 private struct WeatherRawSection: View {
     let title: String
     let raw: String
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.headline)
@@ -311,7 +315,7 @@ private struct WeatherRawSection: View {
 private struct ErrorStateView: View {
     let message: String
     let onRetry: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "cloud.bolt.rain.fill").font(.largeTitle).foregroundColor(.orange)
@@ -323,5 +327,3 @@ private struct ErrorStateView: View {
         .padding()
     }
 }
-
-

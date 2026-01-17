@@ -1,5 +1,5 @@
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 // MARK: - 细则导航项
 struct RegulationNavigation: Identifiable, Hashable {
@@ -19,27 +19,27 @@ struct RegulationsView: View {
     @State private var errorMessage: String?
     @State private var selectedRegulation: RegulationNavigation?
     @State private var isLoadingRegulation = false
-    
+
     // 过滤后的机场列表
     private var filteredAirports: [AirportResponse] {
         if searchText.isEmpty {
             return airports
         } else {
             return airports.filter { airport in
-                airport.icao.localizedCaseInsensitiveContains(searchText) ||
-                airport.nameEn.localizedCaseInsensitiveContains(searchText) ||
-                airport.nameCn.localizedCaseInsensitiveContains(searchText)
+                airport.icao.localizedCaseInsensitiveContains(searchText)
+                    || airport.nameEn.localizedCaseInsensitiveContains(searchText)
+                    || airport.nameCn.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // 搜索栏
                 SearchBar(text: $searchText, placeholder: "搜索机场...")
                     .padding()
-                
+
                 // 机场列表
                 if isLoading {
                     ProgressView("加载机场数据...")
@@ -87,7 +87,7 @@ struct RegulationsView: View {
                     ZStack {
                         Color.black.opacity(0.3)
                             .ignoresSafeArea()
-                        
+
                         VStack(spacing: 12) {
                             ProgressView()
                                 .scaleEffect(1.2)
@@ -127,44 +127,56 @@ struct RegulationsView: View {
             }
         }
     }
-    
+
     // MARK: - 加载机场数据
     private func loadAirports() async {
         // 若未认证则等待，不启动加载流程
         guard authService.authenticationState == .authenticated else { return }
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "RegulationsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "RegulationsView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Regulations", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Regulations", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Regulations", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Regulations", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 1. 先尝试从缓存加载
             if let cachedAirports = PDFCacheService.shared.loadCachedData(
                 [AirportResponse].self,
@@ -177,17 +189,17 @@ struct RegulationsView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAirports()
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: PDFCacheService.DataType.airports
             )
-            
+
             await MainActor.run {
                 self.airports = response
             }
@@ -196,17 +208,18 @@ struct RegulationsView: View {
                 self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
-    
+
     // MARK: - 打开第一个细则
     private func openFirstRegulation(for airport: AirportResponse) async {
         isLoadingRegulation = true
-        
+
         do {
-            let regulations = try await NetworkService.shared.getAIPDocumentsByICAO(icao: airport.icao)
-            
+            let regulations = try await NetworkService.shared.getAIPDocumentsByICAO(
+                icao: airport.icao)
+
             await MainActor.run {
                 if let firstRegulation = regulations.first {
                     if let binding = selectedChartBinding {
@@ -251,7 +264,7 @@ struct RegulationsView: View {
 // MARK: - 机场细则行视图
 struct AirportRegulationRowView: View {
     let airport: AirportResponse
-    
+
     var body: some View {
         HStack {
             // 机场图标
@@ -259,18 +272,18 @@ struct AirportRegulationRowView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.blue.opacity(0.1))
                     .frame(width: 40, height: 40)
-                
+
                 Image(systemName: "doc.text")
                     .foregroundColor(.blue)
                     .font(.title3)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(airport.icao)
                         .font(.headline)
                         .fontWeight(.semibold)
-                    
+
                     Text("AD细则")
                         .font(.caption2)
                         .padding(.horizontal, 6)
@@ -278,17 +291,17 @@ struct AirportRegulationRowView: View {
                         .background(.blue.opacity(0.2), in: Capsule())
                         .foregroundColor(.blue)
                 }
-                
+
                 Text(airport.nameCn)
                     .font(.subheadline)
                     .foregroundColor(.primary)
-                
+
                 Text(airport.nameEn)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
-            
+
             Spacer()
         }
         .padding(.vertical, 4)
@@ -302,7 +315,7 @@ struct AirportRegulationsView: View {
     @State private var regulations: [AIPDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    
+
     var body: some View {
         VStack {
             if isLoading {
@@ -351,44 +364,56 @@ struct AirportRegulationsView: View {
             await loadRegulations()
         }
     }
-    
+
     private func loadRegulations() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "RegulationsView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "RegulationsView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "Regulations", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "Regulations", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "Regulations", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "Regulations", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 使用机场 ICAO 作为缓存键
             let cacheKey = "ad_\(airport.icao)"
-            
+
             // 1. 先尝试从缓存加载
             if let cachedRegulations = PDFCacheService.shared.loadCachedData(
                 [AIPDocumentResponse].self,
@@ -403,14 +428,14 @@ struct AirportRegulationsView: View {
             }
             // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAIPDocumentsByICAO(icao: airport.icao)
-            
+
             // 3. 保存到缓存
             try? PDFCacheService.shared.cacheData(
                 response,
                 airacVersion: currentAIRAC,
                 dataType: cacheKey
             )
-            
+
             await MainActor.run {
                 self.regulations = response
             }
@@ -419,7 +444,7 @@ struct AirportRegulationsView: View {
                 self.errorMessage = "加载AD细则失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
 }
@@ -427,19 +452,19 @@ struct AirportRegulationsView: View {
 // MARK: - 细则文档行视图
 struct RegulationDocumentRowView: View {
     let regulation: AIPDocumentResponse
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(regulation.nameCn)
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .lineLimit(2)
-            
+
             Text(regulation.name)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .lineLimit(1)
-            
+
             HStack {
                 Text(regulation.category)
                     .font(.caption2)
@@ -447,17 +472,17 @@ struct RegulationDocumentRowView: View {
                     .padding(.vertical, 2)
                     .background(.blue.opacity(0.2), in: Capsule())
                     .foregroundColor(.blue)
-                
+
                 Text("AIRAC \(regulation.airacVersion)")
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
+
                 if (regulation.isModified ?? false) || (regulation.hasUpdate ?? false) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
                 }
-                
+
                 Spacer()
             }
         }
@@ -469,15 +494,15 @@ struct RegulationDocumentRowView: View {
 struct SearchBar: View {
     @Binding var text: String
     let placeholder: String
-    
+
     var body: some View {
         HStack {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
-            
+
             TextField(placeholder, text: $text)
                 .textFieldStyle(PlainTextFieldStyle())
-            
+
             if !text.isEmpty {
                 Button {
                     text = ""

@@ -1,12 +1,12 @@
-import SwiftUI
-import SwiftData
 import Foundation
+import SwiftData
+import SwiftUI
 
 // MARK: - iPhone 主导航 TabView
 struct MainTabView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedTab = 0
-    
+
     var body: some View {
         if #available(iOS 26.0, *) {
             TabView(selection: $selectedTab) {
@@ -17,7 +17,7 @@ struct MainTabView: View {
                         Text("机场")
                     }
                     .tag(0)
-                
+
                 // 航路模块
                 EnrouteView()
                     .tabItem {
@@ -25,7 +25,7 @@ struct MainTabView: View {
                         Text("航路")
                     }
                     .tag(1)
-                
+
                 // 细则模块
                 RegulationsView()
                     .tabItem {
@@ -33,7 +33,7 @@ struct MainTabView: View {
                         Text("细则")
                     }
                     .tag(2)
-                
+
                 // 文档模块
                 DocumentsView()
                     .tabItem {
@@ -41,7 +41,7 @@ struct MainTabView: View {
                         Text("文档")
                     }
                     .tag(3)
-                
+
                 // 个人中心
                 NavigationStack {
                     ProfileView()
@@ -52,7 +52,7 @@ struct MainTabView: View {
                 }
                 .tag(4)
             }
-            .tint(.primaryBlue) // 蓝色主题
+            .tint(.primaryBlue)  // 蓝色主题
             .tabBarMinimizeBehavior(.onScrollDown)
         } else {
             TabView(selection: $selectedTab) {
@@ -63,7 +63,7 @@ struct MainTabView: View {
                         Text("机场")
                     }
                     .tag(0)
-                
+
                 // 航路模块
                 EnrouteView()
                     .tabItem {
@@ -71,7 +71,7 @@ struct MainTabView: View {
                         Text("航路")
                     }
                     .tag(1)
-                
+
                 // 细则模块
                 RegulationsView()
                     .tabItem {
@@ -79,7 +79,7 @@ struct MainTabView: View {
                         Text("细则")
                     }
                     .tag(2)
-                
+
                 // 文档模块
                 DocumentsView()
                     .tabItem {
@@ -87,7 +87,7 @@ struct MainTabView: View {
                         Text("文档")
                     }
                     .tag(3)
-                
+
                 // 个人中心
                 NavigationStack {
                     ProfileView()
@@ -98,7 +98,7 @@ struct MainTabView: View {
                 }
                 .tag(4)
             }
-            .tint(.primaryBlue) // 蓝色主题
+            .tint(.primaryBlue)  // 蓝色主题
         }
     }
 }

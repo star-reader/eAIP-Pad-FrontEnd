@@ -1,5 +1,5 @@
-import SwiftUI
 import StoreKit
+import SwiftUI
 
 /// 统一订阅页面
 struct UnifiedSubscriptionView: View {
@@ -7,31 +7,31 @@ struct UnifiedSubscriptionView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var isLoading = false
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
                 // 背景
                 Color.primaryBlue.opacity(0.05)
                     .ignoresSafeArea()
-                
+
                 ScrollView {
                     VStack(spacing: 32) {
                         Spacer(minLength: 40)
-                        
+
                         // 标题和图标
                         VStack(spacing: 16) {
                             VStack(spacing: 8) {
                                 Text("订阅 eAIP Pad 专业版")
                                     .font(.title)
                                     .fontWeight(.bold)
-                                
+
                                 Text("解锁所有航图和专业功能")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                             }
                         }
-                        
+
                         // 功能列表
                         VStack(spacing: 16) {
                             FeatureRow(icon: "map.fill", text: "完整航图库")
@@ -41,20 +41,21 @@ struct UnifiedSubscriptionView: View {
                             FeatureRow(icon: "icloud.fill", text: "云端同步")
                         }
                         .padding(.horizontal)
-                        
+
                         // 价格信息卡片
                         if let product = subscriptionService.monthlyProduct {
                             VStack(spacing: 16) {
                                 VStack(spacing: 8) {
                                     // 检查是否有试用期优惠且用户未使用过试用期
                                     if let subscription = product.subscription,
-                                       subscription.introductoryOffer != nil,
-                                       !subscriptionService.hasUsedTrial {
+                                        subscription.introductoryOffer != nil,
+                                        !subscriptionService.hasUsedTrial
+                                    {
                                         Text("首月免费")
                                             .font(.title2)
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
-                                        
+
                                         Text("然后 \(product.displayPrice)/月")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
@@ -64,14 +65,15 @@ struct UnifiedSubscriptionView: View {
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
                                     }
-                                    
+
                                     Text("自动续费订阅")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
                                 .padding()
                                 .frame(maxWidth: .infinity)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                                .background(
+                                    .regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                             }
                             .padding(.horizontal)
                         } else {
@@ -86,7 +88,7 @@ struct UnifiedSubscriptionView: View {
                             }
                             .padding()
                         }
-                        
+
                         // 订阅按钮
                         VStack(spacing: 12) {
                             Button {
@@ -97,12 +99,17 @@ struct UnifiedSubscriptionView: View {
                                 HStack {
                                     if isLoading || subscriptionService.isLoading {
                                         ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .progressViewStyle(
+                                                CircularProgressViewStyle(tint: .white)
+                                            )
                                             .scaleEffect(0.8)
                                     }
-                                    
-                                    Text(isLoading || subscriptionService.isLoading ? "处理中..." : "开始订阅")
-                                        .fontWeight(.semibold)
+
+                                    Text(
+                                        isLoading || subscriptionService.isLoading
+                                            ? "处理中..." : "开始订阅"
+                                    )
+                                    .fontWeight(.semibold)
                                 }
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -111,7 +118,7 @@ struct UnifiedSubscriptionView: View {
                                 .cornerRadius(12)
                             }
                             .disabled(isLoading || subscriptionService.isLoading)
-                            
+
                             Button {
                                 Task {
                                     await restorePurchases()
@@ -121,19 +128,21 @@ struct UnifiedSubscriptionView: View {
                                     .foregroundColor(.secondary)
                             }
                             .disabled(isLoading || subscriptionService.isLoading)
-                            
+
                             if let product = subscriptionService.monthlyProduct {
-                                Text(subscriptionService.hasUsedTrial 
-                                    ? "订阅可随时取消，按 \(product.displayPrice)/月 自动续费"
-                                    : "订阅可随时取消，首月免费后按 \(product.displayPrice)/月 自动续费")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
+                                Text(
+                                    subscriptionService.hasUsedTrial
+                                        ? "订阅可随时取消，按 \(product.displayPrice)/月 自动续费"
+                                        : "订阅可随时取消，首月免费后按 \(product.displayPrice)/月 自动续费"
+                                )
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
                             }
                         }
                         .padding(.horizontal)
-                        
+
                         Spacer(minLength: 40)
                     }
                 }
@@ -154,14 +163,14 @@ struct UnifiedSubscriptionView: View {
             }
         }
     }
-    
+
     // MARK: - 购买订阅
     private func purchaseSubscription() async {
         isLoading = true
         errorMessage = ""
-        
+
         let success = await subscriptionService.purchaseMonthlySubscription()
-        
+
         await MainActor.run {
             if success {
                 // 购买成功，显示成功提示并关闭页面
@@ -175,14 +184,14 @@ struct UnifiedSubscriptionView: View {
             isLoading = false
         }
     }
-    
+
     // MARK: - 恢复购买
     private func restorePurchases() async {
         isLoading = true
         errorMessage = ""
-        
+
         await subscriptionService.restorePurchases()
-        
+
         if let error = subscriptionService.errorMessage {
             await MainActor.run {
                 errorMessage = error
@@ -191,7 +200,7 @@ struct UnifiedSubscriptionView: View {
         } else {
             LoggerService.shared.info(module: "UnifiedSubscriptionView", message: "恢复购买成功")
         }
-        
+
         isLoading = false
     }
 }
@@ -200,20 +209,20 @@ struct UnifiedSubscriptionView: View {
 struct FeatureRow: View {
     let icon: String
     let text: String
-    
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundColor(Color.primaryBlue)
                 .frame(width: 24)
-            
+
             Text(text)
                 .font(.subheadline)
                 .foregroundColor(.primary)
-            
+
             Spacer()
-            
+
             Image(systemName: "checkmark")
                 .font(.caption)
                 .foregroundColor(.green)

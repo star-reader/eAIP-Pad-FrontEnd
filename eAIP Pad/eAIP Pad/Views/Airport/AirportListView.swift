@@ -1,6 +1,6 @@
-import SwiftUI
-import SwiftData
 import Foundation
+import SwiftData
+import SwiftUI
 
 // MARK: - 机场列表视图
 struct AirportListView: View {
@@ -12,20 +12,20 @@ struct AirportListView: View {
     @State private var airports: [AirportResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
-    
+
     // 过滤后的机场列表
     private var filteredAirports: [AirportResponse] {
         if searchText.isEmpty {
             return airports
         } else {
             return airports.filter { airport in
-                airport.icao.localizedCaseInsensitiveContains(searchText) ||
-                airport.nameEn.localizedCaseInsensitiveContains(searchText) ||
-                airport.nameCn.localizedCaseInsensitiveContains(searchText)
+                airport.icao.localizedCaseInsensitiveContains(searchText)
+                    || airport.nameEn.localizedCaseInsensitiveContains(searchText)
+                    || airport.nameCn.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -77,7 +77,7 @@ struct AirportListView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
                         PinboardToolbarButton()
-                        
+
                         Button {
                             Task {
                                 await loadAirports()
@@ -101,42 +101,54 @@ struct AirportListView: View {
             }
         }
     }
-    
+
     private func loadAirports() async {
         guard authService.authenticationState == .authenticated else { return }
         isLoading = true
         errorMessage = nil
-        
+
         do {
             // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-            
+            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+
             // 如果本地没有 AIRAC 版本，尝试从 API 获取
             if currentAIRAC == nil {
-                LoggerService.shared.warning(module: "AirportListView", message: "本地无 AIRAC 版本，从 API 获取")
+                LoggerService.shared.warning(
+                    module: "AirportListView", message: "本地无 AIRAC 版本，从 API 获取")
                 do {
                     let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
                     currentAIRAC = airacResponse.version
-                    
+
                     // 保存到本地数据库
                     let newVersion = AIRACVersion(
                         version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
+                        effectiveDate: ISO8601DateFormatter().date(
+                            from: airacResponse.effectiveDate) ?? Date(),
                         isCurrent: true
                     )
                     modelContext.insert(newVersion)
                     try? modelContext.save()
-                    
-                    LoggerService.shared.info(module: "AirportListView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
+
+                    LoggerService.shared.info(
+                        module: "AirportListView",
+                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
                 } catch {
-                    throw NSError(domain: "AirportList", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本: \(error.localizedDescription)"])
+                    throw NSError(
+                        domain: "AirportList", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
+                        ])
                 }
             }
-            
+
             guard let currentAIRAC = currentAIRAC else {
-                throw NSError(domain: "AirportList", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                throw NSError(
+                    domain: "AirportList", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-            
+
             // 1. 先尝试从缓存加载
             if let cachedAirports = PDFCacheService.shared.loadCachedData(
                 [AirportResponse].self,
@@ -150,10 +162,11 @@ struct AirportListView: View {
                 isLoading = false
                 return
             }
-            
+
             // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getAirports(search: searchText.isEmpty ? nil : searchText)
-            
+            let response = try await NetworkService.shared.getAirports(
+                search: searchText.isEmpty ? nil : searchText)
+
             // 3. 保存到缓存（只有非搜索状态才缓存完整列表）
             if searchText.isEmpty {
                 try? PDFCacheService.shared.cacheData(
@@ -162,10 +175,10 @@ struct AirportListView: View {
                     dataType: PDFCacheService.DataType.airports
                 )
             }
-            
+
             await MainActor.run {
                 self.airports = response
-                
+
                 // 同步到本地 SwiftData
                 syncAirportsToLocal(response)
             }
@@ -174,10 +187,10 @@ struct AirportListView: View {
                 self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
             }
         }
-        
+
         isLoading = false
     }
-    
+
     private func syncAirportsToLocal(_ airports: [AirportResponse]) {
         for airportResponse in airports {
             // 检查是否已存在
@@ -186,7 +199,7 @@ struct AirportListView: View {
                     predicate: #Predicate { $0.icao == airportResponse.icao }
                 )
             )
-            
+
             if existingAirports?.isEmpty ?? true {
                 let airport = Airport(
                     icao: airportResponse.icao,
@@ -198,7 +211,7 @@ struct AirportListView: View {
                 modelContext.insert(airport)
             }
         }
-        
+
         try? modelContext.save()
     }
 }
@@ -206,7 +219,7 @@ struct AirportListView: View {
 // MARK: - 机场行视图
 struct AirportRowView: View {
     let airport: AirportResponse
-    
+
     var body: some View {
         HStack {
             // 机场图标
@@ -214,18 +227,18 @@ struct AirportRowView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(.orange.opacity(0.1))
                     .frame(width: 40, height: 40)
-                
+
                 Image(systemName: "airplane")
                     .foregroundColor(.orange)
                     .font(.title3)
             }
-            
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(airport.icao)
                         .font(.headline)
                         .fontWeight(.semibold)
-                    
+
                     // 更新提示 - 橙色小圆点
                     if airport.isModified == true {
                         Circle()
@@ -233,17 +246,17 @@ struct AirportRowView: View {
                             .frame(width: 6, height: 6)
                     }
                 }
-                
+
                 Text(airport.nameCn)
                     .font(.subheadline)
                     .foregroundColor(.primary)
-                
+
                 Text(airport.nameEn)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
-            
+
             Spacer()
         }
         .padding(.vertical, 4)

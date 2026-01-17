@@ -64,3 +64,4 @@ fastlane/test_output
 .cursor
 
 SharedKey.swift
+.DS_Store

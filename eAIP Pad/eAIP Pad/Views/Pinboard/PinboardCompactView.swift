@@ -1,16 +1,16 @@
-import SwiftUI
-import SwiftData
 import Foundation
+import SwiftData
+import SwiftUI
 
 #if canImport(UIKit)
-import UIKit
+    import UIKit
 #endif
 
 // MARK: - Pinboard 导航栏按钮
 struct PinboardToolbarButton: View {
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
     @State private var showingPinboard = false
-    
+
     var body: some View {
         if !pinnedCharts.isEmpty {
             Button {
@@ -30,7 +30,7 @@ struct PinboardToolbarButton: View {
                                 .offset(x: 6, y: -6)
                         }
                     }
-                    .padding(8) // 增加内边距，给角标留出空间
+                    .padding(8)  // 增加内边距，给角标留出空间
             }
             .sheet(isPresented: $showingPinboard) {
                 PinboardCompactView()
@@ -45,7 +45,7 @@ struct PinboardCompactView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
     @AppStorage("pinboardStyle") private var selectedStyle: PinboardStyle = .compact
-    
+
     var body: some View {
         NavigationStack {
             Group {
@@ -75,7 +75,7 @@ struct PinboardCompactView: View {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Picker("显示方式", selection: $selectedStyle) {
@@ -93,7 +93,7 @@ struct PinboardCompactView: View {
             }
         }
     }
-    
+
     // MARK: - 紧凑列表视图
     private var compactListView: some View {
         List {
@@ -118,14 +118,16 @@ struct PinboardCompactView: View {
         }
         .listStyle(.insetGrouped)
     }
-    
+
     // MARK: - 预览网格视图
     private var previewGridView: some View {
         ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 16),
-                GridItem(.flexible(), spacing: 16)
-            ], spacing: 16) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 16),
+                    GridItem(.flexible(), spacing: 16),
+                ], spacing: 16
+            ) {
                 ForEach(pinnedCharts) { pin in
                     NavigationLink {
                         PDFReaderView(
@@ -147,15 +149,17 @@ struct PinboardCompactView: View {
             .padding()
         }
     }
-    
+
     // MARK: - 任务平铺视图
     private var taskGridView: some View {
         ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ], spacing: 12) {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12),
+                    GridItem(.flexible(), spacing: 12),
+                ], spacing: 12
+            ) {
                 ForEach(pinnedCharts) { pin in
                     NavigationLink {
                         PDFReaderView(
@@ -182,25 +186,25 @@ struct PinboardCompactView: View {
 // MARK: - 紧凑列表行
 struct PinCompactListRow: View {
     let pin: PinnedChart
-    
+
     private var chartTypeColor: Color {
         ChartType(rawValue: pin.type)?.color ?? .gray
     }
-    
+
     var body: some View {
         HStack(spacing: 0) {
             // 左侧颜色边框
             Rectangle()
                 .fill(chartTypeColor)
                 .frame(width: 4)
-            
+
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pin.displayName)
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                    
+
                     HStack(spacing: 8) {
                         if !pin.icao.isEmpty {
                             Text(pin.icao)
@@ -210,14 +214,14 @@ struct PinCompactListRow: View {
                                 .padding(.vertical, 2)
                                 .background(chartTypeColor.opacity(0.15), in: Capsule())
                         }
-                        
+
                         Text(pin.type)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
                 .padding(.leading, 12)
-                
+
                 Spacer()
             }
         }
@@ -230,15 +234,15 @@ struct PinboardFullView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var userSettings: [UserSettings]
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
-    
+
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
     }
-    
+
     private var pinboardStyle: PinboardStyle {
         PinboardStyle(rawValue: currentSettings.pinboardStyle) ?? .compact
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack {
@@ -248,11 +252,11 @@ struct PinboardFullView: View {
                         Image(systemName: "pin")
                             .font(.system(size: 60))
                             .foregroundColor(.secondary)
-                        
+
                         Text("暂无收藏")
                             .font(.title2)
                             .fontWeight(.medium)
-                        
+
                         Text("在航图页面点击收藏按钮来添加快速访问")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
@@ -279,7 +283,7 @@ struct PinboardFullView: View {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         ForEach(PinboardStyle.allCases, id: \.self) { style in
@@ -308,7 +312,7 @@ struct PinboardFullView: View {
 struct PinboardListView: View {
     let pins: [PinnedChart]
     @Environment(\.modelContext) private var modelContext
-    
+
     var body: some View {
         List {
             ForEach(pins) { pin in
@@ -338,7 +342,7 @@ struct PinboardListView: View {
 struct PinboardPreviewView: View {
     let pins: [PinnedChart]
     @Environment(\.modelContext) private var modelContext
-    
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 16) {
@@ -369,11 +373,11 @@ struct PinboardPreviewView: View {
 struct PinboardGridView: View {
     let pins: [PinnedChart]
     @Environment(\.modelContext) private var modelContext
-    
+
     private let columns = [
         GridItem(.adaptive(minimum: 150), spacing: 16)
     ]
-    
+
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 16) {
@@ -403,36 +407,36 @@ struct PinboardGridView: View {
 // MARK: - 列表行视图
 struct PinListRow: View {
     let pin: PinnedChart
-    
+
     private var chartTypeColor: Color {
         ChartType(rawValue: pin.type)?.color ?? .gray
     }
-    
+
     var body: some View {
         HStack(spacing: 0) {
             // 左侧颜色边框
             Rectangle()
                 .fill(chartTypeColor)
                 .frame(width: 4)
-            
+
             HStack {
                 // 文档类型图标
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(chartTypeColor.opacity(0.1))
                         .frame(width: 40, height: 40)
-                    
+
                     Image(systemName: iconForDocumentType(pin.documentType))
                         .foregroundColor(chartTypeColor)
                         .font(.title3)
                 }
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pin.displayName)
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(2)
-                    
+
                     HStack {
                         if !pin.icao.isEmpty {
                             Text(pin.icao)
@@ -442,26 +446,26 @@ struct PinListRow: View {
                                 .background(chartTypeColor.opacity(0.2), in: Capsule())
                                 .foregroundColor(chartTypeColor)
                         }
-                        
+
                         Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
+
                         Spacer()
-                        
+
                         Text(pin.pinnedAt.formatted(.relative(presentation: .named)))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 Spacer()
             }
             .padding(.leading, 12)
         }
         .padding(.vertical, 4)
     }
-    
+
     private func iconForDocumentType(_ type: String) -> String {
         switch type {
         case "chart": return "airplane"
@@ -478,27 +482,28 @@ struct PinListRow: View {
 // MARK: - 预览卡片视图
 struct PinPreviewCard: View {
     let pin: PinnedChart
-    
+
     private var chartTypeColor: Color {
         ChartType(rawValue: pin.type)?.color ?? .gray
     }
-    
+
     var body: some View {
         HStack(spacing: 0) {
             // 左侧颜色边框
             Rectangle()
                 .fill(chartTypeColor)
                 .frame(width: 4)
-            
+
             HStack(spacing: 12) {
                 // 小图标
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(chartTypeColor.opacity(0.1))
                         .frame(width: 44, height: 44)
-                    
+
                     if let thumbnailData = pin.thumbnailData,
-                       let uiImage = UIImage(data: thumbnailData) {
+                        let uiImage = UIImage(data: thumbnailData)
+                    {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
@@ -511,14 +516,14 @@ struct PinPreviewCard: View {
                             .font(.title3)
                     }
                 }
-                
+
                 VStack(alignment: .leading, spacing: 6) {
                     Text(pin.displayName)
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    
+
                     HStack(spacing: 6) {
                         if !pin.icao.isEmpty {
                             Text(pin.icao)
@@ -528,17 +533,17 @@ struct PinPreviewCard: View {
                                 .background(chartTypeColor.opacity(0.15), in: Capsule())
                                 .foregroundColor(chartTypeColor)
                         }
-                        
+
                         Text(DocumentType(rawValue: pin.documentType)?.displayName ?? pin.type)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Text(pin.pinnedAt.formatted(.relative(presentation: .named)))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer(minLength: 0)
             }
             .padding(12)
@@ -546,7 +551,7 @@ struct PinPreviewCard: View {
         .frame(height: 90)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
-    
+
     private func iconForDocumentType(_ type: String) -> String {
         switch type {
         case "chart": return "airplane"
@@ -563,27 +568,28 @@ struct PinPreviewCard: View {
 // MARK: - 网格卡片视图
 struct PinGridCard: View {
     let pin: PinnedChart
-    
+
     private var chartTypeColor: Color {
         ChartType(rawValue: pin.type)?.color ?? .gray
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // 顶部颜色边框
             Rectangle()
                 .fill(chartTypeColor)
                 .frame(height: 4)
-            
+
             VStack(spacing: 10) {
                 // 小图标区域
                 ZStack {
                     Circle()
                         .fill(chartTypeColor.opacity(0.1))
                         .frame(width: 50, height: 50)
-                    
+
                     if let thumbnailData = pin.thumbnailData,
-                       let uiImage = UIImage(data: thumbnailData) {
+                        let uiImage = UIImage(data: thumbnailData)
+                    {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
@@ -596,7 +602,7 @@ struct PinGridCard: View {
                     }
                 }
                 .padding(.top, 8)
-                
+
                 VStack(alignment: .center, spacing: 6) {
                     Text(pin.displayName)
                         .font(.caption)
@@ -604,7 +610,7 @@ struct PinGridCard: View {
                         .lineLimit(3)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                    
+
                     if !pin.icao.isEmpty {
                         Text(pin.icao)
                             .font(.caption2)
@@ -621,7 +627,7 @@ struct PinGridCard: View {
         .frame(height: 140)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
-    
+
     private func iconForDocumentType(_ type: String) -> String {
         switch type {
         case "chart": return "airplane"
