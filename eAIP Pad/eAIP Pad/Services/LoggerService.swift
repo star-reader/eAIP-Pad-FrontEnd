@@ -4,9 +4,19 @@ import SwiftUI
 
 // MARK: - Log Types
 enum LogType: String, Codable {
+    case debug = "DEBUG"
     case info = "INFO"
     case warning = "WARNING"
     case error = "ERROR"
+    
+    var priority: Int {
+        switch self {
+        case .debug: return 0
+        case .info: return 1
+        case .warning: return 2
+        case .error: return 3
+        }
+    }
 }
 
 // MARK: - Log Entry
@@ -52,10 +62,16 @@ class LoggerService {
 
     /// 记录日志
     /// - Parameters:
-    ///   - type: 日志类型 (info, warning, error)
+    ///   - type: 日志类型 (debug, info, warning, error)
     ///   - module: 模块名称
     ///   - message: 日志消息
     func log(type: LogType, module: String, message: String) {
+        // 根据当前日志级别过滤
+        let currentLevel = AppEnvironment.currentLogLevel
+        guard type.priority >= currentLevel.rawValue else {
+            return
+        }
+        
         queue.async { [weak self] in
             guard let self = self else { return }
 
@@ -72,6 +88,8 @@ class LoggerService {
             }
 
             switch type {
+            case .debug:
+                self.osLog.debug("[\(module)] \(message)")
             case .info:
                 self.osLog.info("[\(module)] \(message)")
             case .warning:
@@ -82,6 +100,11 @@ class LoggerService {
         }
     }
 
+    /// 便捷方法：记录 debug 日志（仅在 DEBUG 模式下记录）
+    func debug(module: String, message: String) {
+        log(type: .debug, module: module, message: message)
+    }
+    
     /// 便捷方法：记录 info 日志
     func info(module: String, message: String) {
         log(type: .info, module: module, message: message)

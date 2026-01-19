@@ -104,4 +104,14 @@ enum LogLevel: Int, Comparable {
     }
 }
 
+extension AppEnvironment {
+    static var currentLogLevel: LogLevel {
+        #if DEBUG
+        return .verbose
+        #else
+        return .info
+        #endif
+    }
+}
+
 // 注意：NetworkConfig 将在 NetworkService.swift 中被更新以使用 AppEnvironment

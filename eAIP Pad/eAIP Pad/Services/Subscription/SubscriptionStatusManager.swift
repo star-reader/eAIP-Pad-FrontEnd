@@ -10,48 +10,24 @@ class SubscriptionStatusManager {
     private(set) var trialStartDate: Date?
     private(set) var daysLeft: Int = 0
     
-    /// 从 VerifyJWSResponse 更新状态
-    func updateStatus(from response: VerifyJWSResponse) {
+    /// 通用更新方法（使用协议）
+    func updateStatus(from response: SubscriptionResponseProtocol) {
         subscriptionStatus = AppSubscriptionStatus(from: response.subscriptionStatus)
-
-        if let endDateString = response.subscriptionEndDate {
-            let formatter = ISO8601DateFormatter()
-            subscriptionEndDate = formatter.date(from: endDateString)
-            updateDaysLeft()
-        }
-    }
-    
-    /// 从 SyncSubscriptionResponse 更新状态
-    func updateStatus(from response: SyncSubscriptionResponse) {
-        subscriptionStatus = AppSubscriptionStatus(from: response.subscriptionStatus)
-
-        if let endDateString = response.subscriptionEndDate {
-            let formatter = ISO8601DateFormatter()
-            subscriptionEndDate = formatter.date(from: endDateString)
-            updateDaysLeft()
-        }
-    }
-    
-    /// 从 SubscriptionStatusResponse 更新状态
-    func updateStatus(from response: SubscriptionStatusResponse) {
-        subscriptionStatus = AppSubscriptionStatus(from: response.status)
-
+        
         let formatter = ISO8601DateFormatter()
-
+        
         if let startDateString = response.subscriptionStartDate {
             subscriptionStartDate = formatter.date(from: startDateString)
         }
-
+        
         if let endDateString = response.subscriptionEndDate {
             subscriptionEndDate = formatter.date(from: endDateString)
         }
-
+        
         if let trialDateString = response.trialStartDate {
             trialStartDate = formatter.date(from: trialDateString)
-        } else {
-            trialStartDate = nil
         }
-
+        
         if let days = response.daysLeft {
             daysLeft = days
         } else {

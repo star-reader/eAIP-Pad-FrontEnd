@@ -17,14 +17,11 @@ class AuthenticationService: NSObject, ObservableObject {
     @Published var currentUser: AuthenticatedUser?
 
     // 用户信息
-    var accessToken: String?
-    var refreshToken: String?
     var isNewUser = false
     var appleUserId: String?  // Apple 用户 ID（用于订阅验证）
 
-    // Token 自动刷新定时器
-    private var tokenRefreshTimer: Timer?
-    private let tokenRefreshInterval: TimeInterval = 3600
+    // Token 管理器
+    private let tokenManager = TokenManager()
 
     private override init() {
         super.init()
@@ -34,43 +31,39 @@ class AuthenticationService: NSObject, ObservableObject {
     }
 
     deinit {
-        // deinit 不能是 async，但我们可以在主线程上停止定时器
-        if Thread.isMainThread {
-            tokenRefreshTimer?.invalidate()
-            tokenRefreshTimer = nil
-        } else {
-            DispatchQueue.main.sync {
-                self.tokenRefreshTimer?.invalidate()
-                self.tokenRefreshTimer = nil
-            }
-        }
+        // deinit 不能是 async，直接移除观察者
+        // tokenManager 的定时器会在其自己的 deinit 中清理
         removeAppLifecycleObservers()
     }
 
     // MARK: - 检查存储的凭据
     private func checkStoredCredentials() {
         LoggerService.shared.info(module: "AuthenticationService", message: "检查存储的凭据")
-        // 从 Keychain 检查存储的 token
-        let storedAccessToken = try? KeychainService.shared.load(key: KeychainService.Keys.accessToken)
-        let storedRefreshToken = try? KeychainService.shared.load(key: KeychainService.Keys.refreshToken)
-        self.appleUserId = try? KeychainService.shared.load(key: KeychainService.Keys.appleUserId)
+        
+        // 从 Keychain 加载 tokens
+        let (storedAccessToken, storedRefreshToken) = tokenManager.loadStoredTokens()
+        
+        do {
+            self.appleUserId = try KeychainService.shared.load(key: KeychainService.Keys.appleUserId)
+        } catch {
+            LoggerService.shared.debug(module: "AuthenticationService", 
+                message: "未找到 Apple User ID: \(error.localizedDescription)")
+        }
 
         guard let storedAccessToken = storedAccessToken else {
             LoggerService.shared.info(module: "AuthenticationService", message: "未找到存储的凭据")
             return
         }
 
-        self.accessToken = storedAccessToken
-        self.refreshToken = storedRefreshToken
-
         // 立即设置为已认证状态，避免闪现登录页面
         self.authenticationState = .authenticated
         self.currentUser = AuthenticatedUser(accessToken: storedAccessToken)
-        // 使用脱敏后的信息记录日志
+        
         let maskedUserId = appleUserId?.maskedAppleUserId ?? "未知"
         LoggerService.shared.info(
             module: "AuthenticationService",
             message: "找到存储的凭据，设置为已认证状态，userId: \(maskedUserId)")
+        
         NetworkService.shared.setTokens(
             accessToken: storedAccessToken, refreshToken: storedRefreshToken ?? "")
 
@@ -93,14 +86,16 @@ class AuthenticationService: NSObject, ObservableObject {
 
     // MARK: - 刷新 Token（如果需要）
     private func refreshTokenIfNeeded() async {
-        guard let refreshToken = refreshToken else {
+        guard let refreshToken = tokenManager.currentRefreshToken else {
             // 没有 refresh_token，验证现有的 access_token
             await validateStoredTokens()
             return
         }
 
         // 设置网络服务的 token（用于刷新请求）
-        NetworkService.shared.setTokens(accessToken: accessToken ?? "", refreshToken: refreshToken)
+        NetworkService.shared.setTokens(
+            accessToken: tokenManager.currentAccessToken ?? "", 
+            refreshToken: refreshToken)
 
         do {
             // 尝试刷新 access token
@@ -111,17 +106,14 @@ class AuthenticationService: NSObject, ObservableObject {
                 let newRefreshToken = NetworkService.shared.getCurrentRefreshToken()
 
                 await MainActor.run {
-                    self.accessToken = newAccessToken
-                    if let newRefreshToken = newRefreshToken {
-                        self.refreshToken = newRefreshToken
-                        try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: newRefreshToken)
-                    }
-                    try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: newAccessToken)
+                    tokenManager.updateAccessToken(newAccessToken, refreshToken: newRefreshToken)
                     self.authenticationState = .authenticated
                     self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
 
                     // 启动自动刷新定时器
-                    self.startTokenRefreshTimer()
+                    tokenManager.startTokenRefreshTimer { [weak self] in
+                        await self?.performTokenRefresh()
+                    }
                 }
                 LoggerService.shared.info(module: "AuthenticationService", message: "Token 刷新成功")
                 return
@@ -138,7 +130,7 @@ class AuthenticationService: NSObject, ObservableObject {
     // MARK: - 验证存储的 tokens
     private func validateStoredTokens() async {
         LoggerService.shared.info(module: "AuthenticationService", message: "开始验证存储的 token")
-        guard let accessToken = accessToken else {
+        guard let accessToken = tokenManager.currentAccessToken else {
             await MainActor.run {
                 self.authenticationState = .notAuthenticated
             }
@@ -148,7 +140,9 @@ class AuthenticationService: NSObject, ObservableObject {
         }
 
         // 设置网络服务的 token
-        NetworkService.shared.setTokens(accessToken: accessToken, refreshToken: refreshToken ?? "")
+        NetworkService.shared.setTokens(
+            accessToken: accessToken, 
+            refreshToken: tokenManager.currentRefreshToken ?? "")
 
         do {
             // 通过调用需要认证的 API 来验证 token 是否有效
@@ -160,14 +154,16 @@ class AuthenticationService: NSObject, ObservableObject {
                 self.currentUser = AuthenticatedUser(accessToken: accessToken)
 
                 // 如果有 refresh_token，启动自动刷新定时器
-                if self.refreshToken != nil {
-                    self.startTokenRefreshTimer()
+                if tokenManager.currentRefreshToken != nil {
+                    tokenManager.startTokenRefreshTimer { [weak self] in
+                        await self?.performTokenRefresh()
+                    }
                 }
             }
             LoggerService.shared.info(module: "AuthenticationService", message: "Token 验证成功")
         } catch {
             // Token 无效（401）或网络错误，尝试刷新 token
-            if refreshToken != nil {
+            if tokenManager.currentRefreshToken != nil {
                 do {
                     // 尝试刷新 access token
                     try await NetworkService.shared.refreshAccessToken()
@@ -176,15 +172,12 @@ class AuthenticationService: NSObject, ObservableObject {
                         // 更新 refresh token
                         let newRefreshToken = NetworkService.shared.getCurrentRefreshToken()
                         await MainActor.run {
-                            self.accessToken = newAccessToken
-                            if let newRefreshToken = newRefreshToken {
-                                self.refreshToken = newRefreshToken
-                                try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: newRefreshToken)
-                            }
-                            try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: newAccessToken)
+                            tokenManager.updateAccessToken(newAccessToken, refreshToken: newRefreshToken)
                             self.authenticationState = .authenticated
                             self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
-                            self.startTokenRefreshTimer()
+                            tokenManager.startTokenRefreshTimer { [weak self] in
+                                await self?.performTokenRefresh()
+                            }
                         }
                         LoggerService.shared.info(
                             module: "AuthenticationService", message: "Token 验证失败后刷新成功")
@@ -248,26 +241,22 @@ class AuthenticationService: NSObject, ObservableObject {
 
             await MainActor.run {
                 // 存储 tokens
-                self.accessToken = response.accessToken
-                self.refreshToken = response.refreshToken
+                tokenManager.setTokens(accessToken: response.accessToken, refreshToken: response.refreshToken)
                 self.isNewUser = response.isNewUser
                 self.appleUserId = appleUserId
 
-                // 保存到 Keychain（安全存储）
-                try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: response.accessToken)
-                try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: response.refreshToken)
-                try? KeychainService.shared.save(key: KeychainService.Keys.appleUserId, value: appleUserId)
+                // 保存 Apple User ID 到 Keychain
+                do {
+                    try KeychainService.shared.save(key: KeychainService.Keys.appleUserId, value: appleUserId)
+                } catch {
+                    LoggerService.shared.error(module: "AuthenticationService", 
+                        message: "保存 Apple User ID 失败: \(error.localizedDescription)")
+                }
                 
                 // 非敏感信息可以存储在 UserDefaults
                 UserDefaults.standard.set(response.isNewUser, forKey: "is_new_user")
                 
                 LoggerService.shared.info(module: "AuthenticationService", message: "已保存登录凭据到 Keychain")
-
-                // 设置网络服务的 token
-                NetworkService.shared.setTokens(
-                    accessToken: response.accessToken,
-                    refreshToken: response.refreshToken
-                )
 
                 // 创建用户对象
                 self.currentUser = AuthenticatedUser(
@@ -278,7 +267,9 @@ class AuthenticationService: NSObject, ObservableObject {
                 self.authenticationState = .authenticated
 
                 // 启动自动刷新定时器
-                self.startTokenRefreshTimer()
+                tokenManager.startTokenRefreshTimer { [weak self] in
+                    await self?.performTokenRefresh()
+                }
             }
             LoggerService.shared.info(module: "AuthenticationService", message: "Apple 登录成功，用户认证完成")
         } catch {
@@ -295,9 +286,10 @@ class AuthenticationService: NSObject, ObservableObject {
     // MARK: - 登出
     func signOut() {
         LoggerService.shared.info(module: "AuthenticationService", message: "用户登出")
-        stopTokenRefreshTimer()
+        Task { @MainActor in
+            tokenManager.stopTokenRefreshTimer()
+        }
         clearStoredCredentials()
-        NetworkService.shared.clearTokens()
 
         currentUser = nil
         authenticationState = .notAuthenticated
@@ -305,14 +297,16 @@ class AuthenticationService: NSObject, ObservableObject {
 
     // MARK: - 清除存储的凭据
     private func clearStoredCredentials() {
-        accessToken = nil
-        refreshToken = nil
+        tokenManager.clearTokens()
         appleUserId = nil
 
-        // 从 Keychain 删除敏感信息
-        try? KeychainService.shared.delete(key: KeychainService.Keys.accessToken)
-        try? KeychainService.shared.delete(key: KeychainService.Keys.refreshToken)
-        try? KeychainService.shared.delete(key: KeychainService.Keys.appleUserId)
+        // 从 Keychain 删除 Apple User ID
+        do {
+            try KeychainService.shared.delete(key: KeychainService.Keys.appleUserId)
+        } catch {
+            LoggerService.shared.debug(module: "AuthenticationService", 
+                message: "删除 Apple User ID 失败: \(error.localizedDescription)")
+        }
         
         // 从 UserDefaults 删除非敏感信息
         UserDefaults.standard.removeObject(forKey: "is_new_user")
@@ -333,60 +327,26 @@ class AuthenticationService: NSObject, ObservableObject {
         return nil
     }
 
-    // MARK: - Token 自动刷新定时器
-    @MainActor
-    private func startTokenRefreshTimer() {
-        stopTokenRefreshTimer()  // 先停止现有的定时器
-
-        guard refreshToken != nil else {
-            return
-        }
-
-        // 在主线程上创建定时器
-        tokenRefreshTimer = Timer.scheduledTimer(
-            withTimeInterval: tokenRefreshInterval, repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                await self?.performTokenRefresh()
-            }
-        }
-
-        // 将定时器添加到 RunLoop
-        if let timer = tokenRefreshTimer {
-            RunLoop.main.add(timer, forMode: .common)
-        }
-    }
-
-    // 非 MainActor 版本的启动方法，用于在异步上下文中调用
-    private func startTokenRefreshTimerAsync() async {
-        await MainActor.run {
-            startTokenRefreshTimer()
-        }
-    }
-
-    @MainActor
-    private func stopTokenRefreshTimer() {
-        tokenRefreshTimer?.invalidate()
-        tokenRefreshTimer = nil
-    }
-
+    // MARK: - Token 自动刷新
     @MainActor
     private func performTokenRefresh() async {
-        guard let refreshToken = refreshToken else {
-            stopTokenRefreshTimer()
+        guard let refreshToken = tokenManager.currentRefreshToken else {
+            tokenManager.stopTokenRefreshTimer()
             return
         }
 
         // 确保已登录状态
         guard authenticationState == .authenticated else {
-            stopTokenRefreshTimer()
+            tokenManager.stopTokenRefreshTimer()
             return
         }
 
         LoggerService.shared.info(module: "AuthenticationService", message: "开始自动刷新 access_token")
 
         // 设置网络服务的 token
-        NetworkService.shared.setTokens(accessToken: accessToken ?? "", refreshToken: refreshToken)
+        NetworkService.shared.setTokens(
+            accessToken: tokenManager.currentAccessToken ?? "", 
+            refreshToken: refreshToken)
 
         do {
             // 尝试刷新 access token
@@ -395,13 +355,7 @@ class AuthenticationService: NSObject, ObservableObject {
             // 刷新成功，获取新的 token
             if let newAccessToken = NetworkService.shared.getCurrentAccessToken() {
                 let newRefreshToken = NetworkService.shared.getCurrentRefreshToken()
-
-                self.accessToken = newAccessToken
-                if let newRefreshToken = newRefreshToken {
-                    self.refreshToken = newRefreshToken
-                    UserDefaults.standard.set(newRefreshToken, forKey: "refresh_token")
-                }
-                UserDefaults.standard.set(newAccessToken, forKey: "access_token")
+                tokenManager.updateAccessToken(newAccessToken, refreshToken: newRefreshToken)
                 self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
 
                 LoggerService.shared.info(module: "AuthenticationService", message: "Token 自动刷新成功")
@@ -453,7 +407,7 @@ class AuthenticationService: NSObject, ObservableObject {
             }
 
             Task {
-                if refreshToken != nil {
+                if tokenManager.currentRefreshToken != nil {
                     LoggerService.shared.info(
                         module: "AuthenticationService", message: "App 回到前台，开始刷新 token")
                     await refreshTokenIfNeeded()

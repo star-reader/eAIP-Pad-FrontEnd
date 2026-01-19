@@ -16,8 +16,13 @@ class TokenManager {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
         
-        try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: accessToken)
-        try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: refreshToken)
+        do {
+            try KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: accessToken)
+            try KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: refreshToken)
+        } catch {
+            LoggerService.shared.error(module: "TokenManager", 
+                message: "保存 tokens 到 Keychain 失败: \(error.localizedDescription)")
+        }
         
         NetworkService.shared.setTokens(accessToken: accessToken, refreshToken: refreshToken)
     }
@@ -25,11 +30,18 @@ class TokenManager {
     /// 更新 access token
     func updateAccessToken(_ newAccessToken: String, refreshToken newRefreshToken: String?) {
         self.accessToken = newAccessToken
-        if let newRefreshToken = newRefreshToken {
-            self.refreshToken = newRefreshToken
-            try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: newRefreshToken)
+        
+        do {
+            try KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: newAccessToken)
+            
+            if let newRefreshToken = newRefreshToken {
+                self.refreshToken = newRefreshToken
+                try KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: newRefreshToken)
+            }
+        } catch {
+            LoggerService.shared.error(module: "TokenManager", 
+                message: "更新 tokens 到 Keychain 失败: \(error.localizedDescription)")
         }
-        try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: newAccessToken)
     }
     
     /// 清除 tokens
@@ -37,16 +49,41 @@ class TokenManager {
         accessToken = nil
         refreshToken = nil
         
-        try? KeychainService.shared.delete(key: KeychainService.Keys.accessToken)
-        try? KeychainService.shared.delete(key: KeychainService.Keys.refreshToken)
+        do {
+            try KeychainService.shared.delete(key: KeychainService.Keys.accessToken)
+        } catch {
+            LoggerService.shared.debug(module: "TokenManager", 
+                message: "删除 access token 失败: \(error.localizedDescription)")
+        }
+        
+        do {
+            try KeychainService.shared.delete(key: KeychainService.Keys.refreshToken)
+        } catch {
+            LoggerService.shared.debug(module: "TokenManager", 
+                message: "删除 refresh token 失败: \(error.localizedDescription)")
+        }
         
         NetworkService.shared.clearTokens()
     }
     
     /// 从 Keychain 加载 tokens
     func loadStoredTokens() -> (accessToken: String?, refreshToken: String?) {
-        let storedAccessToken = try? KeychainService.shared.load(key: KeychainService.Keys.accessToken)
-        let storedRefreshToken = try? KeychainService.shared.load(key: KeychainService.Keys.refreshToken)
+        var storedAccessToken: String?
+        var storedRefreshToken: String?
+        
+        do {
+            storedAccessToken = try KeychainService.shared.load(key: KeychainService.Keys.accessToken)
+        } catch {
+            LoggerService.shared.debug(module: "TokenManager", 
+                message: "加载 access token 失败: \(error.localizedDescription)")
+        }
+        
+        do {
+            storedRefreshToken = try KeychainService.shared.load(key: KeychainService.Keys.refreshToken)
+        } catch {
+            LoggerService.shared.debug(module: "TokenManager", 
+                message: "加载 refresh token 失败: \(error.localizedDescription)")
+        }
         
         self.accessToken = storedAccessToken
         self.refreshToken = storedRefreshToken

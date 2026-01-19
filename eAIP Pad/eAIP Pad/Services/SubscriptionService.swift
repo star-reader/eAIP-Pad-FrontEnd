@@ -82,7 +82,7 @@ class SubscriptionService: ObservableObject {
                     LoggerService.shared.info(
                         module: "SubscriptionService", message: "交易验证成功，准备发送到服务器")
                     let transactionJWS = verificationResult.jwsRepresentation
-                    LoggerService.shared.info(
+                    LoggerService.shared.debug(
                         module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)")
                     
                     let success = await verifyTransactionWithServer(
@@ -159,7 +159,7 @@ class SubscriptionService: ObservableObject {
                 environment: environment
             )
 
-            syncStatusFromManager(statusManager: statusManager, response: response)
+            syncStatusFromManager(response: response)
 
             if response.status == "success" {
                 LoggerService.shared.info(
@@ -211,7 +211,7 @@ class SubscriptionService: ObservableObject {
                 LoggerService.shared.info(module: "SubscriptionService", message: "无本地交易，查询服务器状态")
                 await querySubscriptionStatus()
             } else {
-                LoggerService.shared.info(
+                LoggerService.shared.debug(
                     module: "SubscriptionService",
                     message: "交易 JWS 列表: \(jwsList.joined(separator: ","))")
                 let environment = JWSParser.extractEnvironment(from: jwsList.first ?? "")
@@ -221,7 +221,7 @@ class SubscriptionService: ObservableObject {
                     environment: environment
                 )
 
-                syncStatusFromManager(statusManager: statusManager, response: response)
+                syncStatusFromManager(response: response)
 
                 if response.status == "success" {
                     LoggerService.shared.info(
@@ -257,7 +257,7 @@ class SubscriptionService: ObservableObject {
 
         do {
             let response = try await networkService.getSubscriptionStatus(appleUserId: appleUserId)
-            syncStatusFromManager(statusManager: statusManager, response: response)
+            syncStatusFromManager(response: response)
             LoggerService.shared.info(
                 module: "SubscriptionService",
                 message: "查询订阅状态成功，状态: \(subscriptionStatus.rawValue)")
@@ -269,25 +269,7 @@ class SubscriptionService: ObservableObject {
     }
 
     // MARK: - 同步状态管理器的数据到发布属性
-    private func syncStatusFromManager(statusManager: SubscriptionStatusManager, response: VerifyJWSResponse) {
-        statusManager.updateStatus(from: response)
-        self.subscriptionStatus = statusManager.subscriptionStatus
-        self.subscriptionStartDate = statusManager.subscriptionStartDate
-        self.subscriptionEndDate = statusManager.subscriptionEndDate
-        self.trialStartDate = statusManager.trialStartDate
-        self.daysLeft = statusManager.daysLeft
-    }
-    
-    private func syncStatusFromManager(statusManager: SubscriptionStatusManager, response: SyncSubscriptionResponse) {
-        statusManager.updateStatus(from: response)
-        self.subscriptionStatus = statusManager.subscriptionStatus
-        self.subscriptionStartDate = statusManager.subscriptionStartDate
-        self.subscriptionEndDate = statusManager.subscriptionEndDate
-        self.trialStartDate = statusManager.trialStartDate
-        self.daysLeft = statusManager.daysLeft
-    }
-    
-    private func syncStatusFromManager(statusManager: SubscriptionStatusManager, response: SubscriptionStatusResponse) {
+    private func syncStatusFromManager(response: SubscriptionResponseProtocol) {
         statusManager.updateStatus(from: response)
         self.subscriptionStatus = statusManager.subscriptionStatus
         self.subscriptionStartDate = statusManager.subscriptionStartDate
@@ -319,7 +301,7 @@ class SubscriptionService: ObservableObject {
                 }
 
                 await MainActor.run {
-                    LoggerService.shared.info(
+                    LoggerService.shared.debug(
                         module: "SubscriptionService", message: "更新交易 JWS: \(transactionJWS)")
                 }
 
@@ -376,33 +358,16 @@ class SubscriptionService: ObservableObject {
         isLoading = false
     }
 
-    // MARK: - 计算属性
+    // MARK: - 计算属性（代理到 statusManager）
     var hasValidSubscription: Bool {
-        return subscriptionStatus.isValid
+        return statusManager.hasValidSubscription
     }
 
     var hasUsedTrial: Bool {
-        return trialStartDate != nil
+        return statusManager.hasUsedTrial
     }
 
     var subscriptionDescription: String {
-        switch subscriptionStatus {
-        case .active:
-            if daysLeft > 0 {
-                return "已订阅 - 剩余 \(daysLeft) 天"
-            } else {
-                return "已订阅"
-            }
-        case .trial:
-            if daysLeft > 0 {
-                return "试用期 - 剩余 \(daysLeft) 天"
-            } else {
-                return "试用期"
-            }
-        case .expired:
-            return "订阅已过期"
-        case .inactive:
-            return "未订阅"
-        }
+        return statusManager.subscriptionDescription
     }
 }
