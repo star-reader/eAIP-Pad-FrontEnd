@@ -533,11 +533,11 @@ class NetworkService: ObservableObject {
         async throws -> VerifyJWSResponse
     {
         LoggerService.shared.info(module: "NetworkService", message: "开始验证 JWS")
-        // 加密记录敏感信息
-        LoggerService.shared.info(
+        // 敏感信息只在 DEBUG 模式记录
+        LoggerService.shared.debug(
             module: "NetworkService", message: "Transaction JWS: \(transactionJWS)")
         LoggerService.shared.info(
-            module: "NetworkService", message: "Apple User ID: \(appleUserId)")
+            module: "NetworkService", message: "Apple User ID: \(appleUserId.maskedAppleUserId)")
         LoggerService.shared.info(
             module: "NetworkService", message: "Environment: \(environment ?? "nil")")
 
@@ -616,15 +616,15 @@ class NetworkService: ObservableObject {
     func syncSubscriptions(
         transactionJWSList: [String], appleUserId: String, environment: String? = nil
     ) async throws -> SyncSubscriptionResponse {
-        LoggerService.shared.info(module: "NetworkService", message: "开始批量同步订阅")
-        // 加密记录敏感信息
         LoggerService.shared.info(
+            module: "NetworkService", 
+            message: "开始批量同步订阅，共 \(transactionJWSList.count) 个交易")
+        // 敏感信息只在 DEBUG 模式记录
+        LoggerService.shared.debug(
             module: "NetworkService",
-            message:
-                "Transaction JWS List (\(transactionJWSList.count) 个): \(transactionJWSList.joined(separator: ","))"
-        )
+            message: "Transaction JWS List: \(transactionJWSList.joined(separator: ","))")
         LoggerService.shared.info(
-            module: "NetworkService", message: "Apple User ID: \(appleUserId)")
+            module: "NetworkService", message: "Apple User ID: \(appleUserId.maskedAppleUserId)")
         LoggerService.shared.info(
             module: "NetworkService", message: "Environment: \(environment ?? "nil")")
 
@@ -700,9 +700,9 @@ class NetworkService: ObservableObject {
     /// 查询订阅状态
     func getSubscriptionStatus(appleUserId: String) async throws -> SubscriptionStatusResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始查询订阅状态")
-        // 加密记录敏感信息
+        // 敏感信息脱敏记录
         LoggerService.shared.info(
-            module: "NetworkService", message: "Apple User ID: \(appleUserId)")
+            module: "NetworkService", message: "Apple User ID: \(appleUserId.maskedAppleUserId)")
 
         var components = URLComponents(
             url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!

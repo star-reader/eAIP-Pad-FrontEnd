@@ -80,7 +80,8 @@ class SubscriptionService: ObservableObject {
                 switch verificationResult {
                 case .verified(let transaction):
                     LoggerService.shared.info(
-                        module: "SubscriptionService", message: "交易验证成功，准备发送到服务器")
+                        module: "SubscriptionService", 
+                        message: "交易验证成功，产品: \(transaction.productID), 交易ID: \(transaction.id)")
                     let transactionJWS = verificationResult.jwsRepresentation
                     LoggerService.shared.debug(
                         module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)")
@@ -145,7 +146,8 @@ class SubscriptionService: ObservableObject {
         }
 
         LoggerService.shared.info(
-            module: "SubscriptionService", message: "Apple 用户 ID: \(appleUserId)")
+            module: "SubscriptionService", 
+            message: "验证交易 - 用户: \(appleUserId.maskedAppleUserId), 产品: \(transaction.productID)")
 
         let environment = JWSParser.extractEnvironment(from: transactionJWS)
         LoggerService.shared.info(
@@ -169,14 +171,15 @@ class SubscriptionService: ObservableObject {
             } else {
                 errorMessage = response.message ?? "订阅验证失败"
                 LoggerService.shared.warning(
-                    module: "SubscriptionService", message: "服务器验证失败: \(response.message ?? "未知错误")"
-                )
+                    module: "SubscriptionService", 
+                    message: "服务器验证失败: \(response.message ?? "未知错误"), 状态: \(response.status)")
                 return false
             }
         } catch {
             errorMessage = "服务器验证失败: \(error.localizedDescription)"
             LoggerService.shared.error(
-                module: "SubscriptionService", message: "服务器验证失败: \(error.localizedDescription)")
+                module: "SubscriptionService", 
+                message: "服务器验证失败: \(error.localizedDescription), 错误类型: \(type(of: error))")
             return false
         }
     }
@@ -194,18 +197,37 @@ class SubscriptionService: ObservableObject {
         isLoading = true
 
         do {
+            // 使用 Transaction.all 获取所有交易历史（包括过期的）
+            // 这样可以确保后端能够正确验证用户的订阅状态
             var jwsList: [String] = []
-            for await result in Transaction.currentEntitlements {
-                if let jws = JWSParser.getJWSString(from: result), !jws.isEmpty {
-                    jwsList.append(jws)
-                } else {
+            var validJWSCount = 0
+            var expiredJWSCount = 0
+            
+            for await result in Transaction.all {
+                guard case .verified(let transaction) = result else {
                     LoggerService.shared.warning(
-                        module: "SubscriptionService", message: "无法获取交易 JWS，跳过该交易")
+                        module: "SubscriptionService", message: "交易验证失败，跳过")
+                    continue
+                }
+                
+                // 只处理订阅类型的交易
+                if transaction.productType == .autoRenewable {
+                    if let jws = JWSParser.getJWSString(from: result), !jws.isEmpty {
+                        jwsList.append(jws)
+                        
+                        // 统计有效和过期的交易
+                        if transaction.expirationDate ?? Date.distantPast > Date() {
+                            validJWSCount += 1
+                        } else {
+                            expiredJWSCount += 1
+                        }
+                    }
                 }
             }
 
             LoggerService.shared.info(
-                module: "SubscriptionService", message: "找到 \(jwsList.count) 个本地交易")
+                module: "SubscriptionService", 
+                message: "找到 \(jwsList.count) 个订阅交易（有效: \(validJWSCount), 过期: \(expiredJWSCount)）")
 
             if jwsList.isEmpty {
                 LoggerService.shared.info(module: "SubscriptionService", message: "无本地交易，查询服务器状态")
@@ -213,7 +235,7 @@ class SubscriptionService: ObservableObject {
             } else {
                 LoggerService.shared.debug(
                     module: "SubscriptionService",
-                    message: "交易 JWS 列表: \(jwsList.joined(separator: ","))")
+                    message: "准备同步 \(jwsList.count) 个交易到服务器")
                 let environment = JWSParser.extractEnvironment(from: jwsList.first ?? "")
                 let response = try await networkService.syncSubscriptions(
                     transactionJWSList: jwsList,
@@ -231,12 +253,14 @@ class SubscriptionService: ObservableObject {
                     LoggerService.shared.warning(
                         module: "SubscriptionService",
                         message: "订阅同步失败: \(response.message ?? "未知错误")")
+                    // 同步失败时仍然查询服务器状态作为后备
                     await querySubscriptionStatus()
                 }
             }
         } catch {
             LoggerService.shared.error(
                 module: "SubscriptionService", message: "同步订阅失败: \(error.localizedDescription)")
+            // 发生错误时查询服务器状态作为后备
             await querySubscriptionStatus()
         }
 

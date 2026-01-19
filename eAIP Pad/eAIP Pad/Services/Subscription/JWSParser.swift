@@ -43,11 +43,16 @@ struct JWSParser {
         }
     }
     
-    /// 获取默认环境（基于编译配置）
+    /// 获取默认环境（基于编译配置和运行环境）
     private static func defaultEnvironment() -> String {
         #if DEBUG
             return "Sandbox"
         #else
+            // Release 模式下，检查是否是 TestFlight
+            // TestFlight 构建应该使用 Sandbox 环境
+            if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
+                return "Sandbox"
+            }
             return "Production"
         #endif
     }
