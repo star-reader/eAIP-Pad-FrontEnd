@@ -4,64 +4,30 @@ import StoreKit
 import SwiftData
 import SwiftUI
 
-// 自定义订阅状态枚举
-enum AppSubscriptionStatus: String, CaseIterable {
-    case inactive = "inactive"
-    case trial = "trial"
-    case active = "active"
-    case expired = "expired"
-
-    var isValid: Bool {
-        return self == .trial || self == .active
-    }
-
-    var displayName: String {
-        switch self {
-        case .trial: return "试用期"
-        case .active: return "已订阅"
-        case .expired: return "已过期"
-        case .inactive: return "未订阅"
-        }
-    }
-
-    init(from string: String?) {
-        guard let string = string else {
-            self = .inactive
-            return
-        }
-        self = AppSubscriptionStatus(rawValue: string.lowercased()) ?? .inactive
-    }
-}
-
-// MARK: - 订阅服务
+// MARK: - 订阅服务（重构版）
 @MainActor
 class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
 
-    // 产品ID
     private let monthlyProductID = "com.usagijin.eaip.monthly"
 
-    // 订阅状态
     @Published var subscriptionStatus: AppSubscriptionStatus = .inactive
     @Published var subscriptionStartDate: Date?
     @Published var subscriptionEndDate: Date?
     @Published var trialStartDate: Date?
     @Published var daysLeft: Int = 0
-
-    // StoreKit 产品
     @Published var monthlyProduct: Product?
     @Published var isLoading = false
     @Published var errorMessage: String?
-    // 首次同步完成标记：用于避免主界面与订阅界面在启动时来回闪烁
     @Published var hasLoadedOnce = false
 
     private var updateListenerTask: Task<Void, Error>?
     private let networkService = NetworkService.shared
     private let authService = AuthenticationService.shared
+    private let statusManager = SubscriptionStatusManager()
 
     private init() {
         LoggerService.shared.info(module: "SubscriptionService", message: "订阅服务初始化")
-        // 启动时开始监听交易更新
         updateListenerTask = listenForTransactions()
     }
 
@@ -115,17 +81,14 @@ class SubscriptionService: ObservableObject {
                 case .verified(let transaction):
                     LoggerService.shared.info(
                         module: "SubscriptionService", message: "交易验证成功，准备发送到服务器")
-                    // 交易验证成功，从 verificationResult 获取 JWS 字符串
                     let transactionJWS = verificationResult.jwsRepresentation
-                    // 加密记录 JWS（敏感信息）
                     LoggerService.shared.info(
                         module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)")
-                    // 发送到服务器验证
+                    
                     let success = await verifyTransactionWithServer(
                         transactionJWS: transactionJWS, transaction: transaction)
                     if success {
                         await transaction.finish()
-                        // 更新订阅状态
                         await updateSubscriptionStatus()
                         LoggerService.shared.info(
                             module: "SubscriptionService", message: "购买成功，订阅已激活")
@@ -171,7 +134,7 @@ class SubscriptionService: ObservableObject {
         }
     }
 
-    // MARK: - 验证交易（发送到服务器）
+    // MARK: - 验证交易
     private func verifyTransactionWithServer(
         transactionJWS: String, transaction: StoreKit.Transaction
     ) async -> Bool {
@@ -181,12 +144,10 @@ class SubscriptionService: ObservableObject {
             return false
         }
 
-        // 加密记录 Apple 用户 ID（敏感信息）
         LoggerService.shared.info(
             module: "SubscriptionService", message: "Apple 用户 ID: \(appleUserId)")
 
-        // 从 JWS 中提取环境信息
-        let environment = extractEnvironment(from: transactionJWS)
+        let environment = JWSParser.extractEnvironment(from: transactionJWS)
         LoggerService.shared.info(
             module: "SubscriptionService", message: "交易环境: \(environment ?? "未知")")
 
@@ -198,8 +159,7 @@ class SubscriptionService: ObservableObject {
                 environment: environment
             )
 
-            // 更新订阅状态
-            updateStatus(from: response)
+            syncStatusFromManager(statusManager: statusManager, response: response)
 
             if response.status == "success" {
                 LoggerService.shared.info(
@@ -221,62 +181,7 @@ class SubscriptionService: ObservableObject {
         }
     }
 
-    // MARK: - 从 VerificationResult 获取原始 JWS 字符串
-    // VerificationResult 有 jwsRepresentation 属性，可以直接获取原始 JWS
-    nonisolated private func getJWSString(from result: VerificationResult<StoreKit.Transaction>)
-        -> String?
-    {
-        // VerificationResult 有 jwsRepresentation 属性，可以直接获取原始 JWS 字符串
-        return result.jwsRepresentation
-    }
-
-    // MARK: - 从 JWS 中提取环境信息
-    private func extractEnvironment(from jws: String) -> String? {
-        // JWS 格式: header.payload.signature
-        let parts = jws.split(separator: ".")
-        guard parts.count >= 2 else {
-            // 如果无法解析，返回基于编译配置的默认值
-            #if DEBUG
-                return "Sandbox"
-            #else
-                return "Production"
-            #endif
-        }
-
-        // 解码 payload (base64url)
-        let payloadString = String(parts[1])
-        let base64 = payloadString.base64URLDecoded
-
-        guard let payloadData = Data(base64Encoded: base64),
-            let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-            let environment = payload["environment"] as? String
-        else {
-            // 如果无法解析，返回基于编译配置的默认值
-            #if DEBUG
-                return "Sandbox"
-            #else
-                return "Production"
-            #endif
-        }
-
-        return normalizeEnvironment(environment)
-    }
-
-    // MARK: - 标准化环境字符串
-    private func normalizeEnvironment(_ environment: String) -> String {
-        switch environment.lowercased() {
-        case "production":
-            return "Production"
-        case "sandbox":
-            return "Sandbox"
-        case "xcode":  // Xcode 测试环境通常对应 Sandbox
-            return "Sandbox"
-        default:
-            return environment.capitalized
-        }
-    }
-
-    // MARK: - 同步订阅状态（App 启动时调用）
+    // MARK: - 同步订阅状态
     func syncSubscriptionStatus() async {
         LoggerService.shared.info(module: "SubscriptionService", message: "开始同步订阅状态")
         guard let appleUserId = authService.appleUserId else {
@@ -285,16 +190,13 @@ class SubscriptionService: ObservableObject {
             return
         }
 
-        // 加密记录 Apple 用户 ID
         LoggerService.shared.info(module: "SubscriptionService", message: "同步用户 ID: \(appleUserId)")
         isLoading = true
 
         do {
-            // 获取当前有效的交易
             var jwsList: [String] = []
             for await result in Transaction.currentEntitlements {
-                // 直接从 VerificationResult 获取原始 JWS 字符串
-                if let jws = getJWSString(from: result), !jws.isEmpty {
+                if let jws = JWSParser.getJWSString(from: result), !jws.isEmpty {
                     jwsList.append(jws)
                 } else {
                     LoggerService.shared.warning(
@@ -306,23 +208,20 @@ class SubscriptionService: ObservableObject {
                 module: "SubscriptionService", message: "找到 \(jwsList.count) 个本地交易")
 
             if jwsList.isEmpty {
-                // 没有本地交易，直接查询服务器状态
                 LoggerService.shared.info(module: "SubscriptionService", message: "无本地交易，查询服务器状态")
                 await querySubscriptionStatus()
             } else {
-                // 加密记录交易列表
                 LoggerService.shared.info(
                     module: "SubscriptionService",
                     message: "交易 JWS 列表: \(jwsList.joined(separator: ","))")
-                // 批量同步交易
-                let environment = extractEnvironment(from: jwsList.first ?? "")
+                let environment = JWSParser.extractEnvironment(from: jwsList.first ?? "")
                 let response = try await networkService.syncSubscriptions(
                     transactionJWSList: jwsList,
                     appleUserId: appleUserId,
                     environment: environment
                 )
 
-                updateStatus(from: response)
+                syncStatusFromManager(statusManager: statusManager, response: response)
 
                 if response.status == "success" {
                     LoggerService.shared.info(
@@ -332,19 +231,16 @@ class SubscriptionService: ObservableObject {
                     LoggerService.shared.warning(
                         module: "SubscriptionService",
                         message: "订阅同步失败: \(response.message ?? "未知错误")")
-                    // 同步失败时，尝试查询状态
                     await querySubscriptionStatus()
                 }
             }
         } catch {
             LoggerService.shared.error(
                 module: "SubscriptionService", message: "同步订阅失败: \(error.localizedDescription)")
-            // 同步失败时，尝试查询状态
             await querySubscriptionStatus()
         }
 
         isLoading = false
-        // 标记已完成至少一次同步
         hasLoadedOnce = true
     }
 
@@ -357,16 +253,14 @@ class SubscriptionService: ObservableObject {
         }
 
         LoggerService.shared.info(module: "SubscriptionService", message: "开始查询订阅状态")
-        // 加密记录 Apple 用户 ID
         LoggerService.shared.info(module: "SubscriptionService", message: "查询用户 ID: \(appleUserId)")
 
         do {
             let response = try await networkService.getSubscriptionStatus(appleUserId: appleUserId)
-            updateStatus(from: response)
+            syncStatusFromManager(statusManager: statusManager, response: response)
             LoggerService.shared.info(
                 module: "SubscriptionService",
                 message: "查询订阅状态成功，状态: \(subscriptionStatus.rawValue)")
-            // 标记已完成至少一次查询
             hasLoadedOnce = true
         } catch {
             LoggerService.shared.error(
@@ -374,66 +268,32 @@ class SubscriptionService: ObservableObject {
         }
     }
 
-    // MARK: - 更新订阅状态（从响应）
-    private func updateStatus(from response: VerifyJWSResponse) {
-        subscriptionStatus = AppSubscriptionStatus(from: response.subscriptionStatus)
-
-        if let endDateString = response.subscriptionEndDate {
-            let formatter = ISO8601DateFormatter()
-            subscriptionEndDate = formatter.date(from: endDateString)
-            updateDaysLeft()
-        }
+    // MARK: - 同步状态管理器的数据到发布属性
+    private func syncStatusFromManager(statusManager: SubscriptionStatusManager, response: VerifyJWSResponse) {
+        statusManager.updateStatus(from: response)
+        self.subscriptionStatus = statusManager.subscriptionStatus
+        self.subscriptionStartDate = statusManager.subscriptionStartDate
+        self.subscriptionEndDate = statusManager.subscriptionEndDate
+        self.trialStartDate = statusManager.trialStartDate
+        self.daysLeft = statusManager.daysLeft
     }
-
-    private func updateStatus(from response: SyncSubscriptionResponse) {
-        subscriptionStatus = AppSubscriptionStatus(from: response.subscriptionStatus)
-
-        if let endDateString = response.subscriptionEndDate {
-            let formatter = ISO8601DateFormatter()
-            subscriptionEndDate = formatter.date(from: endDateString)
-            updateDaysLeft()
-        }
+    
+    private func syncStatusFromManager(statusManager: SubscriptionStatusManager, response: SyncSubscriptionResponse) {
+        statusManager.updateStatus(from: response)
+        self.subscriptionStatus = statusManager.subscriptionStatus
+        self.subscriptionStartDate = statusManager.subscriptionStartDate
+        self.subscriptionEndDate = statusManager.subscriptionEndDate
+        self.trialStartDate = statusManager.trialStartDate
+        self.daysLeft = statusManager.daysLeft
     }
-
-    private func updateStatus(from response: SubscriptionStatusResponse) {
-        subscriptionStatus = AppSubscriptionStatus(from: response.status)
-
-        let formatter = ISO8601DateFormatter()
-
-        // 保存订阅开始日期
-        if let startDateString = response.subscriptionStartDate {
-            subscriptionStartDate = formatter.date(from: startDateString)
-        }
-
-        // 保存订阅结束日期
-        if let endDateString = response.subscriptionEndDate {
-            subscriptionEndDate = formatter.date(from: endDateString)
-        }
-
-        // 保存试用期开始日期
-        if let trialDateString = response.trialStartDate {
-            trialStartDate = formatter.date(from: trialDateString)
-        } else {
-            // 如果后端返回 null，表示从未使用过试用期
-            trialStartDate = nil
-        }
-
-        if let days = response.daysLeft {
-            daysLeft = days
-        } else {
-            updateDaysLeft()
-        }
-    }
-
-    // MARK: - 更新剩余天数
-    private func updateDaysLeft() {
-        guard let endDate = subscriptionEndDate else {
-            daysLeft = 0
-            return
-        }
-
-        let days = Calendar.current.dateComponents([.day], from: Date(), to: endDate).day ?? 0
-        daysLeft = max(0, days)
+    
+    private func syncStatusFromManager(statusManager: SubscriptionStatusManager, response: SubscriptionStatusResponse) {
+        statusManager.updateStatus(from: response)
+        self.subscriptionStatus = statusManager.subscriptionStatus
+        self.subscriptionStartDate = statusManager.subscriptionStartDate
+        self.subscriptionEndDate = statusManager.subscriptionEndDate
+        self.trialStartDate = statusManager.trialStartDate
+        self.daysLeft = statusManager.daysLeft
     }
 
     // MARK: - 监听交易更新
@@ -450,8 +310,7 @@ class SubscriptionService: ObservableObject {
                     LoggerService.shared.info(module: "SubscriptionService", message: "收到交易更新通知")
                 }
 
-                // 直接从 VerificationResult 获取原始 JWS 字符串
-                guard let transactionJWS = self.getJWSString(from: result) else {
+                guard let transactionJWS = JWSParser.getJWSString(from: result) else {
                     await MainActor.run {
                         LoggerService.shared.warning(
                             module: "SubscriptionService", message: "无法获取交易 JWS，跳过该交易")
@@ -459,13 +318,11 @@ class SubscriptionService: ObservableObject {
                     continue
                 }
 
-                // 加密记录交易 JWS
                 await MainActor.run {
                     LoggerService.shared.info(
                         module: "SubscriptionService", message: "更新交易 JWS: \(transactionJWS)")
                 }
 
-                // 获取 Transaction 对象用于后续操作
                 let transaction: StoreKit.Transaction
                 switch result {
                 case .verified(let verifiedTransaction):
@@ -479,14 +336,10 @@ class SubscriptionService: ObservableObject {
                     continue
                 }
 
-                // 验证并更新状态
                 let success = await self.verifyTransactionWithServer(
                     transactionJWS: transactionJWS, transaction: transaction)
                 if success {
-                    // 完成交易
                     await transaction.finish()
-
-                    // 更新订阅状态
                     await self.updateSubscriptionStatus()
 
                     await MainActor.run {
@@ -498,7 +351,7 @@ class SubscriptionService: ObservableObject {
         }
     }
 
-    // MARK: - 更新订阅状态（从服务器）
+    // MARK: - 更新订阅状态
     private func updateSubscriptionStatus() async {
         await querySubscriptionStatus()
     }
@@ -512,7 +365,6 @@ class SubscriptionService: ObservableObject {
         do {
             try await AppStore.sync()
             LoggerService.shared.info(module: "SubscriptionService", message: "AppStore 同步成功")
-            // 同步订阅状态
             await syncSubscriptionStatus()
             LoggerService.shared.info(module: "SubscriptionService", message: "恢复购买成功")
         } catch {
@@ -529,8 +381,6 @@ class SubscriptionService: ObservableObject {
         return subscriptionStatus.isValid
     }
 
-    /// 判断用户是否已使用过试用期
-    /// 如果 trialStartDate 不为 nil，说明用户曾经使用过试用期
     var hasUsedTrial: Bool {
         return trialStartDate != nil
     }
@@ -554,24 +404,5 @@ class SubscriptionService: ObservableObject {
         case .inactive:
             return "未订阅"
         }
-    }
-}
-
-// MARK: - String 扩展（Base64URL 解码）
-extension String {
-    var base64URLDecoded: String {
-        var base64 =
-            self
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-
-        // 添加填充
-        let remainder = base64.count % 4
-        if remainder > 0 {
-            base64 = base64.padding(
-                toLength: base64.count + 4 - remainder, withPad: "=", startingAt: 0)
-        }
-
-        return base64
     }
 }

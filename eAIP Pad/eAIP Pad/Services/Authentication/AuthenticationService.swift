@@ -8,14 +8,6 @@ import SwiftUI
     import UIKit
 #endif
 
-// MARK: - 认证状态枚举
-enum AuthenticationState: Equatable {
-    case notAuthenticated  // 未登录
-    case authenticating  // 登录中
-    case authenticated  // 已登录
-    case error(String)  // 登录错误
-}
-
 // MARK: - 认证管理服务
 class AuthenticationService: NSObject, ObservableObject {
     static let shared = AuthenticationService()
@@ -58,10 +50,10 @@ class AuthenticationService: NSObject, ObservableObject {
     // MARK: - 检查存储的凭据
     private func checkStoredCredentials() {
         LoggerService.shared.info(module: "AuthenticationService", message: "检查存储的凭据")
-        // 从 Keychain 或 UserDefaults 检查存储的 token
-        let storedAccessToken = UserDefaults.standard.string(forKey: "access_token")
-        let storedRefreshToken = UserDefaults.standard.string(forKey: "refresh_token")
-        self.appleUserId = UserDefaults.standard.string(forKey: "apple_user_id")
+        // 从 Keychain 检查存储的 token
+        let storedAccessToken = try? KeychainService.shared.load(key: KeychainService.Keys.accessToken)
+        let storedRefreshToken = try? KeychainService.shared.load(key: KeychainService.Keys.refreshToken)
+        self.appleUserId = try? KeychainService.shared.load(key: KeychainService.Keys.appleUserId)
 
         guard let storedAccessToken = storedAccessToken else {
             LoggerService.shared.info(module: "AuthenticationService", message: "未找到存储的凭据")
@@ -74,9 +66,11 @@ class AuthenticationService: NSObject, ObservableObject {
         // 立即设置为已认证状态，避免闪现登录页面
         self.authenticationState = .authenticated
         self.currentUser = AuthenticatedUser(accessToken: storedAccessToken)
+        // 使用脱敏后的信息记录日志
+        let maskedUserId = appleUserId?.maskedAppleUserId ?? "未知"
         LoggerService.shared.info(
             module: "AuthenticationService",
-            message: "找到存储的凭据，设置为已认证状态， useid为\(String(describing: appleUserId))")
+            message: "找到存储的凭据，设置为已认证状态，userId: \(maskedUserId)")
         NetworkService.shared.setTokens(
             accessToken: storedAccessToken, refreshToken: storedRefreshToken ?? "")
 
@@ -120,9 +114,9 @@ class AuthenticationService: NSObject, ObservableObject {
                     self.accessToken = newAccessToken
                     if let newRefreshToken = newRefreshToken {
                         self.refreshToken = newRefreshToken
-                        UserDefaults.standard.set(newRefreshToken, forKey: "refresh_token")
+                        try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: newRefreshToken)
                     }
-                    UserDefaults.standard.set(newAccessToken, forKey: "access_token")
+                    try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: newAccessToken)
                     self.authenticationState = .authenticated
                     self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
 
@@ -185,9 +179,9 @@ class AuthenticationService: NSObject, ObservableObject {
                             self.accessToken = newAccessToken
                             if let newRefreshToken = newRefreshToken {
                                 self.refreshToken = newRefreshToken
-                                UserDefaults.standard.set(newRefreshToken, forKey: "refresh_token")
+                                try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: newRefreshToken)
                             }
-                            UserDefaults.standard.set(newAccessToken, forKey: "access_token")
+                            try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: newAccessToken)
                             self.authenticationState = .authenticated
                             self.currentUser = AuthenticatedUser(accessToken: newAccessToken)
                             self.startTokenRefreshTimer()
@@ -245,7 +239,7 @@ class AuthenticationService: NSObject, ObservableObject {
 
         // 获取 Apple 用户 ID（唯一标识符）
         let appleUserId = credential.user
-        LoggerService.shared.info(module: "AuthenticationService", message: "获取到 Apple 用户 ID")
+        LoggerService.shared.info(module: "AuthenticationService", message: "获取到 Apple 用户 ID: \(appleUserId.maskedAppleUserId)")
 
         do {
             // 调用后端 Apple 登录接口
@@ -259,15 +253,15 @@ class AuthenticationService: NSObject, ObservableObject {
                 self.isNewUser = response.isNewUser
                 self.appleUserId = appleUserId
 
-                // 保存到本地存储
-                UserDefaults.standard.set(response.accessToken, forKey: "access_token")
-                UserDefaults.standard.set(response.refreshToken, forKey: "refresh_token")
+                // 保存到 Keychain（安全存储）
+                try? KeychainService.shared.save(key: KeychainService.Keys.accessToken, value: response.accessToken)
+                try? KeychainService.shared.save(key: KeychainService.Keys.refreshToken, value: response.refreshToken)
+                try? KeychainService.shared.save(key: KeychainService.Keys.appleUserId, value: appleUserId)
+                
+                // 非敏感信息可以存储在 UserDefaults
                 UserDefaults.standard.set(response.isNewUser, forKey: "is_new_user")
-                UserDefaults.standard.set(appleUserId, forKey: "apple_user_id")  // 存储 Apple 用户 ID
-
-                // 强制同步到磁盘
-                UserDefaults.standard.synchronize()
-                LoggerService.shared.info(module: "AuthenticationService", message: "已保存登录凭据到本地存储")
+                
+                LoggerService.shared.info(module: "AuthenticationService", message: "已保存登录凭据到 Keychain")
 
                 // 设置网络服务的 token
                 NetworkService.shared.setTokens(
@@ -289,7 +283,7 @@ class AuthenticationService: NSObject, ObservableObject {
             LoggerService.shared.info(module: "AuthenticationService", message: "Apple 登录成功，用户认证完成")
         } catch {
             await MainActor.run {
-                let errorMessage = self.friendlyBackendErrorMessage(from: error)
+                let errorMessage = AuthenticationErrorHandler.friendlyBackendErrorMessage(from: error)
                 self.authenticationState = .error(errorMessage)
             }
             LoggerService.shared.error(
@@ -315,10 +309,15 @@ class AuthenticationService: NSObject, ObservableObject {
         refreshToken = nil
         appleUserId = nil
 
-        UserDefaults.standard.removeObject(forKey: "access_token")
-        UserDefaults.standard.removeObject(forKey: "refresh_token")
+        // 从 Keychain 删除敏感信息
+        try? KeychainService.shared.delete(key: KeychainService.Keys.accessToken)
+        try? KeychainService.shared.delete(key: KeychainService.Keys.refreshToken)
+        try? KeychainService.shared.delete(key: KeychainService.Keys.appleUserId)
+        
+        // 从 UserDefaults 删除非敏感信息
         UserDefaults.standard.removeObject(forKey: "is_new_user")
-        UserDefaults.standard.removeObject(forKey: "apple_user_id")
+        
+        LoggerService.shared.info(module: "AuthenticationService", message: "已清除所有存储的凭据")
     }
 
     // MARK: - 检查是否已登录
@@ -486,82 +485,10 @@ extension AuthenticationService: ASAuthorizationControllerDelegate {
     ) {
         Task {
             await MainActor.run {
-                let errorMessage = self.friendlyErrorMessage(from: error)
+                let errorMessage = AuthenticationErrorHandler.friendlyErrorMessage(from: error)
                 self.authenticationState = .error(errorMessage)
             }
         }
-    }
-
-    private func friendlyErrorMessage(from error: Error) -> String {
-        let nsError = error as NSError
-        if nsError.domain == "com.apple.AuthenticationServices.AuthorizationError" {
-            switch nsError.code {
-            case 1000:
-                return "登录已取消"
-            case 1001:
-                return "登录请求无效，请重试"
-            case 1002:
-                return "登录请求未被处理"
-            case 1003:
-                return "登录失败，请稍后重试"
-            case 1004:
-                return "当前设备不支持 Apple 登录"
-            default:
-                return "登录失败，请重试"
-            }
-        }
-
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorNotConnectedToInternet:
-                return "网络连接失败，请检查网络设置"
-            case NSURLErrorTimedOut:
-                return "网络请求超时，请重试"
-            case NSURLErrorCannotConnectToHost:
-                return "无法连接到服务器"
-            default:
-                return "网络错误，请检查网络连接"
-            }
-        }
-
-        return "发生未知错误，请稍后重试"
-    }
-
-    private func friendlyBackendErrorMessage(from error: Error) -> String {
-        let nsError = error as NSError
-
-        if nsError.domain == NSURLErrorDomain {
-            switch nsError.code {
-            case NSURLErrorNotConnectedToInternet:
-                return "网络连接失败，请检查网络设置"
-            case NSURLErrorTimedOut:
-                return "服务器响应超时，请稍后重试"
-            case NSURLErrorCannotConnectToHost:
-                return "无法连接到服务器，请检查网络"
-            default:
-                return "网络错误：\(error.localizedDescription)"
-            }
-        }
-
-        let errorDescription = error.localizedDescription
-
-        if errorDescription.contains("Apple 用户不存在") || errorDescription.contains("Apple ID") {
-            return errorDescription
-        }
-
-        if errorDescription.contains("401") {
-            return "身份验证失败，请重新登录"
-        } else if errorDescription.contains("403") {
-            return "访问被拒绝，请联系客服"
-        } else if errorDescription.contains("404") {
-            return "Apple 账号未注册，请先在后台注册"
-        } else if errorDescription.contains("500") || errorDescription.contains("502")
-            || errorDescription.contains("503")
-        {
-            return "服务器繁忙，请稍后重试"
-        }
-
-        return "登录失败：\(errorDescription)"
     }
 }
 
@@ -577,18 +504,5 @@ extension AuthenticationService: ASAuthorizationControllerPresentationContextPro
         #else
             fatalError("UIKit 不可用")
         #endif
-    }
-}
-
-// MARK: - 认证用户模型
-struct AuthenticatedUser {
-    let accessToken: String
-    let isNewUser: Bool
-    let authenticatedAt: Date
-
-    init(accessToken: String, isNewUser: Bool = false) {
-        self.accessToken = accessToken
-        self.isNewUser = isNewUser
-        self.authenticatedAt = Date()
     }
 }

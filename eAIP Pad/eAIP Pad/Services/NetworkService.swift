@@ -2,550 +2,10 @@ import Combine
 import Foundation
 import SwiftUI
 
-// MARK: - 网络配置
-struct NetworkConfig {
-    static let baseURL = "https://api.usagi-jin.top"
-    static let apiVersion = "/eaip/v1"
-
-    static var baseAPIURL: String {
-        return baseURL + apiVersion
-    }
-}
-
-// MARK: - API 端点
-enum APIEndpoint {
-    case appleLogin
-    case refreshToken
-    case airports
-    case airport(icao: String)
-    case airportCharts(icao: String)
-    case chart(id: Int)
-    case chartSignedURL(id: Int)
-    case chartInfo(id: Int)
-    case enrouteCharts
-    case enrouteChart(id: Int)
-    case enrouteSignedURL(id: Int)
-    case aipDocuments
-    case aipDocumentsByICAO(icao: String)
-    case supDocuments
-    case amdtDocuments
-    case notamDocuments
-    case document(type: String, id: Int)
-    case documentSignedURL(type: String, id: Int)
-    case pinboard
-    case addPin
-    case removePin(type: String, id: Int)
-    case annotations(type: String, id: Int)
-    case saveAnnotation(type: String, id: Int)
-    case deleteAnnotation(type: String, id: Int, page: Int)
-    case currentAIRAC
-    // IAP v2 API
-    case iapVerify
-    case iapSync
-    case iapStatus
-    // Weather
-    case weatherMETAR(icao: String)
-    case weatherTAF(icao: String)
-
-    var path: String {
-        switch self {
-        case .appleLogin:
-            return "/auth/apple"
-        case .refreshToken:
-            return "/auth/refresh"
-        case .airports:
-            return "/airports"
-        case .airport(let icao):
-            return "/airports/\(icao)"
-        case .airportCharts(let icao):
-            return "/airports/\(icao)/charts"
-        case .chart(let id):
-            return "/charts/\(id)"
-        case .chartSignedURL(let id):
-            return "/charts/\(id)/signed-url"
-        case .chartInfo(let id):
-            return "/charts/\(id)/info"
-        case .enrouteCharts:
-            return "/enroute"
-        case .enrouteChart(let id):
-            return "/enroute/\(id)"
-        case .enrouteSignedURL(let id):
-            return "/enroute/\(id)/signed-url"
-        case .aipDocuments:
-            return "/documents/aip"
-        case .aipDocumentsByICAO(let icao):
-            return "/documents/aip/ad/\(icao)"
-        case .supDocuments:
-            return "/documents/sup"
-        case .amdtDocuments:
-            return "/documents/amdt"
-        case .notamDocuments:
-            return "/documents/notam"
-        case .document(let type, let id):
-            return "/documents/\(type)/\(id)"
-        case .documentSignedURL(let type, let id):
-            return "/documents/\(type)/\(id)/signed-url"
-        case .pinboard:
-            return "/pinboard"
-        case .addPin:
-            return "/pinboard"
-        case .removePin(let type, let id):
-            return "/pinboard/\(type)/\(id)"
-        case .annotations(let type, let id):
-            return "/annotations/\(type)/\(id)"
-        case .saveAnnotation(let type, let id):
-            return "/annotations/\(type)/\(id)"
-        case .deleteAnnotation(let type, let id, let page):
-            return "/annotations/\(type)/\(id)/\(page)"
-        case .currentAIRAC:
-            return "/airac/current"
-        case .iapVerify:
-            return "/iap/v2/verify"
-        case .iapSync:
-            return "/iap/v2/sync"
-        case .iapStatus:
-            return "/iap/v2/status"
-        case .weatherMETAR(let icao):
-            return "/weather/metar/\(icao)"
-        case .weatherTAF(let icao):
-            return "/weather/taf/\(icao)"
-        }
-    }
-
-    var url: URL {
-        return URL(string: NetworkConfig.baseAPIURL + path)!
-    }
-}
-
-// MARK: - 网络响应模型
-struct APIResponse<T: Codable>: Codable {
-    let message: String
-    let data: T?
-}
-
-// MARK: - 认证响应
-struct AuthResponse: Codable {
-    let accessToken: String
-    let refreshToken: String
-    let expiresIn: Int
-    let isNewUser: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case refreshToken = "refresh_token"
-        case expiresIn = "expires_in"
-        case isNewUser = "is_new_user"
-    }
-}
-
-// MARK: - 机场响应
-struct AirportResponse: Codable, Hashable, Identifiable {
-    let icao: String
-    let nameEn: String
-    let nameCn: String
-    let hasTerminalCharts: Bool
-    let createdAt: String
-    let isModified: Bool?
-
-    var id: String { icao }  // 使用 ICAO 作为唯一标识
-
-    enum CodingKeys: String, CodingKey {
-        case icao
-        case nameEn = "name_en"
-        case nameCn = "name_cn"
-        case hasTerminalCharts = "has_terminal_charts"
-        case createdAt = "created_at"
-        case isModified = "is_modified"
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(icao)
-    }
-
-    static func == (lhs: AirportResponse, rhs: AirportResponse) -> Bool {
-        return lhs.icao == rhs.icao
-    }
-}
-
-// MARK: - 航图响应
-struct ChartResponse: Codable, Hashable, Identifiable {
-    let id: Int
-    let documentId: String
-    let parentId: String?
-    let icao: String?
-    let nameEn: String
-    let nameCn: String
-    let chartType: String
-    let pdfPath: String?
-    let htmlPath: String?
-    let htmlEnPath: String?
-    let airacVersion: String
-    let isModified: Bool
-    let isOpened: Bool?  // 改为可选，因为API可能不返回此字段
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case parentId = "parent_id"
-        case icao
-        case nameEn = "name_en"
-        case nameCn = "name_cn"
-        case chartType = "chart_type"
-        case pdfPath = "pdf_path"
-        case htmlPath = "html_path"
-        case htmlEnPath = "html_en_path"
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-        case isOpened = "is_opened"
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-
-    static func == (lhs: ChartResponse, rhs: ChartResponse) -> Bool {
-        return lhs.id == rhs.id
-    }
-}
-
-// MARK: - 签名URL响应
-struct SignedURLResponse: Codable {
-    let url: String
-    let expiresIn: Int
-    let expire: Int64
-
-    enum CodingKeys: String, CodingKey {
-        case url
-        case expiresIn = "expires_in"
-        case expire
-    }
-}
-
-// MARK: - AIRAC版本响应
-struct AIRACResponse: Codable {
-    let version: String
-    let effectiveDate: String
-    let isCurrent: Bool
-    let createdAt: String
-
-    enum CodingKeys: String, CodingKey {
-        case version
-        case effectiveDate = "effective_date"
-        case isCurrent = "is_current"
-        case createdAt = "created_at"
-    }
-}
-
-// MARK: - AIP文档响应
-struct AIPDocumentResponse: Codable {
-    let id: Int
-    let documentId: String
-    let parentId: String?
-    let name: String
-    let nameCn: String
-    let category: String
-    let airportIcao: String?
-    let pdfPath: String?
-    let htmlPath: String?
-    let htmlEnPath: String?
-    let airacVersion: String
-    let isModified: Bool?
-    let hasUpdate: Bool?
-    let isOpened: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case parentId = "parent_id"
-        case name
-        case nameCn = "name_cn"
-        case category
-        case airportIcao = "airport_icao"
-        case pdfPath = "pdf_path"
-        case htmlPath = "html_path"
-        case htmlEnPath = "html_en_path"
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-        case hasUpdate = "has_update"
-        case isOpened = "is_opened"
-    }
-}
-
-// MARK: - SUP文档响应
-struct SUPDocumentResponse: Codable {
-    let id: Int
-    let documentId: String
-    let serial: String
-    let subject: String
-    let localSubject: String
-    let chapterType: String
-    let pdfPath: String?
-    let effectiveTime: String?
-    let outDate: String?
-    let pubDate: String?
-    let airacVersion: String
-    let isModified: Bool?
-    let hasUpdate: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case serial
-        case subject
-        case localSubject = "local_subject"
-        case chapterType = "chapter_type"
-        case pdfPath = "pdf_path"
-        case effectiveTime = "effective_time"
-        case outDate = "out_date"
-        case pubDate = "pub_date"
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-        case hasUpdate = "has_update"
-    }
-}
-
-// MARK: - AMDT文档响应
-struct AMDTDocumentResponse: Codable {
-    let id: Int
-    let documentId: String
-    let serial: String
-    let subject: String
-    let localSubject: String
-    let chapterType: String
-    let pdfPath: String?
-    let effectiveTime: String?
-    let outDate: String?
-    let pubDate: String?
-    let airacVersion: String
-    let isModified: Bool?
-    let hasUpdate: Bool?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case serial
-        case subject
-        case localSubject = "local_subject"
-        case chapterType = "chapter_type"
-        case pdfPath = "pdf_path"
-        case effectiveTime = "effective_time"
-        case outDate = "out_date"
-        case pubDate = "pub_date"
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-        case hasUpdate = "has_update"
-    }
-}
-
-// MARK: - NOTAM文档响应
-struct NOTAMDocumentResponse: Codable {
-    let id: Int
-    let documentId: String
-    let seriesName: String
-    let pdfPath: String?
-    let generateTime: String
-    let generateTimeEn: String
-    let airacVersion: String
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case seriesName = "series_name"
-        case pdfPath = "pdf_path"
-        case generateTime = "generate_time"
-        case generateTimeEn = "generate_time_en"
-        case airacVersion = "airac_version"
-    }
-}
-
-// MARK: - 天气响应
-struct METARResponse: Codable {
-    let station: String?
-    let observationTime: String?
-    let windDirection: String?
-    let windSpeed: String?
-    let visibility: String?
-    let temperature: String?
-    let dewpoint: String?
-    let qnh: String?
-    let weather: String?
-    let clouds: [String]?
-    let trend: String?
-    let raw: String?
-
-    enum CodingKeys: String, CodingKey {
-        case station
-        case observationTime = "observation_time"
-        case windDirection = "wind_direction"
-        case windSpeed = "wind_speed"
-        case visibility
-        case temperature
-        case dewpoint
-        case qnh
-        case weather
-        case clouds
-        case trend
-        case raw
-    }
-}
-
-struct TAFResponse: Codable {
-    let station: String?
-    let issueTime: String?
-    let validFrom: String?
-    let validTo: String?
-    let forecasts: [TAFPeriod]?
-    let raw: String?
-
-    enum CodingKeys: String, CodingKey {
-        case station
-        case issueTime = "issue_time"
-        case validFrom = "valid_from"
-        case validTo = "valid_to"
-        case forecasts
-        case raw
-    }
-}
-
-struct TAFPeriod: Codable, Hashable, Identifiable {
-    var id: String { (timeFrom ?? "") + "_" + (timeTo ?? UUID().uuidString) }
-    let timeFrom: String?
-    let timeTo: String?
-    let wind: String?
-    let visibility: String?
-    let weather: String?
-    let clouds: [String]?
-
-    enum CodingKeys: String, CodingKey {
-        case timeFrom = "time_from"
-        case timeTo = "time_to"
-        case wind
-        case visibility
-        case weather
-        case clouds
-    }
-}
-
-// MARK: - 通用文档详情响应
-struct DocumentDetailResponse: Codable {
-    let id: Int
-    let documentId: String
-    let name: String
-    let nameCn: String
-    let type: String
-    let airacVersion: String
-    let isModified: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case name
-        case nameCn = "name_cn"
-        case type
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-    }
-}
-
-// MARK: - IAP 请求模型
-struct VerifyJWSRequest: Codable {
-    let transactionJWS: String
-    let appleUserId: String
-    let environment: String?
-
-    enum CodingKeys: String, CodingKey {
-        case transactionJWS = "transaction_jws"
-        case appleUserId = "apple_user_id"
-        case environment
-    }
-}
-
-struct SyncSubscriptionRequest: Codable {
-    let transactionJWSList: [String]
-    let appleUserId: String
-    let environment: String?
-
-    enum CodingKeys: String, CodingKey {
-        case transactionJWSList = "transaction_jws_list"
-        case appleUserId = "apple_user_id"
-        case environment
-    }
-}
-
-// MARK: - IAP 响应模型
-struct VerifyJWSResponse: Codable {
-    let status: String
-    let subscriptionStatus: String?
-    let subscriptionStartDate: String?
-    let subscriptionEndDate: String?
-    let trialStartDate: String?
-    let autoRenew: Bool?
-    let productId: String?
-    let originalTransactionId: String?
-    let message: String?
-
-    enum CodingKeys: String, CodingKey {
-        case status
-        case subscriptionStatus = "subscription_status"
-        case subscriptionStartDate = "subscription_start_date"
-        case subscriptionEndDate = "subscription_end_date"
-        case trialStartDate = "trial_start_date"
-        case autoRenew = "auto_renew"
-        case productId = "product_id"
-        case originalTransactionId = "original_transaction_id"
-        case message
-    }
-}
-
-struct SyncSubscriptionResponse: Codable {
-    let status: String
-    let subscriptionStatus: String?
-    let subscriptionStartDate: String?
-    let subscriptionEndDate: String?
-    let trialStartDate: String?
-    let autoRenew: Bool?
-    let productId: String?
-    let syncedCount: Int?
-    let totalCount: Int?
-    let message: String?
-
-    enum CodingKeys: String, CodingKey {
-        case status
-        case subscriptionStatus = "subscription_status"
-        case subscriptionStartDate = "subscription_start_date"
-        case subscriptionEndDate = "subscription_end_date"
-        case trialStartDate = "trial_start_date"
-        case autoRenew = "auto_renew"
-        case productId = "product_id"
-        case syncedCount = "synced_count"
-        case totalCount = "total_count"
-        case message
-    }
-}
-
-struct SubscriptionStatusResponse: Codable {
-    let status: String
-    let subscriptionStartDate: String?
-    let subscriptionEndDate: String?
-    let trialStartDate: String?
-    let autoRenew: Bool?
-    let productId: String?
-    let originalTransactionId: String?
-    let environment: String?
-    let daysLeft: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case status
-        case subscriptionStartDate = "subscription_start_date"
-        case subscriptionEndDate = "subscription_end_date"
-        case trialStartDate = "trial_start_date"
-        case autoRenew = "auto_renew"
-        case productId = "product_id"
-        case originalTransactionId = "original_transaction_id"
-        case environment
-        case daysLeft = "days_left"
-    }
-}
+// 注意：以下内容已移至独立模块：
+// - NetworkConfig, APIEndpoint, HTTPMethod -> Services/Network/APIEndpoints.swift
+// - 所有响应模型 -> Services/Network/APIModels.swift
+// - BaseNetworkClient -> Services/Network/BaseNetworkClient.swift
 
 // MARK: - 网络服务
 class NetworkService: ObservableObject {
@@ -553,9 +13,17 @@ class NetworkService: ObservableObject {
 
     private var accessToken: String?
     private var refreshToken: String?
+    
+    // 请求任务管理（用于取消）
+    private var activeTasks: [UUID: Task<Any, Error>] = [:]
+    private let taskLock = NSLock()
 
     private init() {
         LoggerService.shared.info(module: "NetworkService", message: "网络服务初始化")
+    }
+    
+    deinit {
+        cancelAllRequests()
     }
 
     // MARK: - 认证相关
@@ -563,12 +31,12 @@ class NetworkService: ObservableObject {
         self.accessToken = accessToken
         // 避免将空字符串当作有效 refresh token 存入
         self.refreshToken = refreshToken.isEmpty ? nil : refreshToken
-        // 加密记录 token（敏感信息）
+        // 使用脱敏后的 token 记录日志
         LoggerService.shared.info(
-            module: "NetworkService", message: "设置 Access Token: \(accessToken)")
+            module: "NetworkService", message: "设置 Access Token: \(accessToken.maskedToken)")
         if !refreshToken.isEmpty {
             LoggerService.shared.info(
-                module: "NetworkService", message: "设置 Refresh Token: \(refreshToken)")
+                module: "NetworkService", message: "设置 Refresh Token: \(refreshToken.maskedToken)")
         }
     }
 
@@ -584,6 +52,105 @@ class NetworkService: ObservableObject {
 
     func getCurrentRefreshToken() -> String? {
         return refreshToken
+    }
+    
+    // MARK: - 请求取消管理
+    func cancelAllRequests() {
+        taskLock.lock()
+        defer { taskLock.unlock() }
+        
+        LoggerService.shared.info(module: "NetworkService", message: "取消所有网络请求 (\(activeTasks.count) 个)")
+        activeTasks.values.forEach { $0.cancel() }
+        activeTasks.removeAll()
+    }
+    
+    private func registerTask<T>(_ task: Task<T, Error>) -> UUID {
+        let taskId = UUID()
+        taskLock.lock()
+        defer { taskLock.unlock() }
+        activeTasks[taskId] = task as? Task<Any, Error>
+        return taskId
+    }
+    
+    private func unregisterTask(_ taskId: UUID) {
+        taskLock.lock()
+        defer { taskLock.unlock() }
+        activeTasks.removeValue(forKey: taskId)
+    }
+
+    // MARK: - 通用请求方法（带重试机制）
+    private func makeRequestWithRetry<T: Codable>(
+        endpoint: APIEndpoint,
+        method: HTTPMethod = .GET,
+        body: Data? = nil,
+        requiresAuth: Bool = true,
+        maxRetries: Int = 3
+    ) async throws -> T {
+        var lastError: Error?
+        
+        for attempt in 0..<maxRetries {
+            do {
+                return try await makeRequest(
+                    endpoint: endpoint,
+                    method: method,
+                    body: body,
+                    requiresAuth: requiresAuth
+                )
+            } catch {
+                lastError = error
+                
+                // 判断是否应该重试
+                let shouldRetry = shouldRetryRequest(error: error, attempt: attempt, maxRetries: maxRetries)
+                
+                if shouldRetry && attempt < maxRetries - 1 {
+                    let delay = NetworkConfig.retryDelay(for: attempt)
+                    LoggerService.shared.warning(
+                        module: "NetworkService",
+                        message: "请求失败，\(delay)秒后重试 (尝试 \(attempt + 1)/\(maxRetries)): \(error.localizedDescription)"
+                    )
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                } else {
+                    break
+                }
+            }
+        }
+        
+        throw lastError ?? NetworkError.unknown(NSError(domain: "NetworkService", code: -1))
+    }
+    
+    private func shouldRetryRequest(error: Error, attempt: Int, maxRetries: Int) -> Bool {
+        // 已达到最大重试次数
+        if attempt >= maxRetries - 1 {
+            return false
+        }
+        
+        // 判断错误类型是否可重试
+        if let networkError = error as? NetworkError {
+            switch networkError {
+            case .timeout, .noConnection:
+                return true
+            case .serverError(let code, _):
+                // 5xx 服务器错误可重试
+                return code >= 500 && code < 600
+            case .unauthorized, .noRefreshToken, .invalidURL, .invalidResponse, .noData, .decodingError:
+                return false
+            case .unknown:
+                return true
+            }
+        }
+        
+        // NSURLError 判断
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorTimedOut, NSURLErrorCannotConnectToHost, NSURLErrorNetworkConnectionLost:
+                return true
+            default:
+                return false
+            }
+        }
+        
+        return false
     }
 
     // MARK: - 通用请求方法
@@ -662,13 +229,13 @@ class NetworkService: ObservableObject {
     // MARK: - 认证方法
     func appleLogin(idToken: String) async throws -> AuthResponse {
         LoggerService.shared.info(module: "NetworkService", message: "开始 Apple 登录")
-        // 加密记录 idToken（敏感信息）
-        LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken)")
+        // 使用脱敏后的 idToken 记录日志
+        LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken.maskedToken)")
 
         let body = ["id_token": idToken]
         let bodyData = try JSONEncoder().encode(body)
 
-        let response: AuthResponse = try await makeRequest(
+        let response: AuthResponse = try await makeRequestWithRetry(
             endpoint: .appleLogin,
             method: .POST,
             body: bodyData,
@@ -1212,16 +779,23 @@ class NetworkService: ObservableObject {
         LoggerService.shared.info(module: "NetworkService", message: "===== 网络请求开始 =====")
         LoggerService.shared.info(
             module: "NetworkService", message: "方法: \(request.httpMethod ?? "Unknown")")
+        
+        // 脱敏 URL 中的敏感参数
+        let urlString = request.url?.absoluteString ?? "Unknown"
+        let maskedURL = DataMasking.maskURLParameters(urlString)
         LoggerService.shared.info(
-            module: "NetworkService", message: "URL: \(request.url?.absoluteString ?? "Unknown")")
+            module: "NetworkService", message: "URL: \(maskedURL)")
 
         // 记录请求头
         if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
             for (key, value) in headers {
-                // 敏感信息加密记录
+                // 脱敏敏感请求头
                 if key.lowercased().contains("authorization") {
+                    let maskedValue = value.hasPrefix("Bearer ") 
+                        ? "Bearer \(String(value.dropFirst(7)).maskedToken)"
+                        : value.maskedToken
                     LoggerService.shared.info(
-                        module: "NetworkService", message: "[Authorization] \(key): \(value)")
+                        module: "NetworkService", message: "  \(key): \(maskedValue)")
                 } else {
                     LoggerService.shared.info(
                         module: "NetworkService", message: "  \(key): \(value)")
@@ -1234,8 +808,12 @@ class NetworkService: ObservableObject {
             LoggerService.shared.info(
                 module: "NetworkService", message: "请求体大小: \(body.count) bytes")
             if let bodyString = String(data: body, encoding: .utf8) {
-                // 加密记录完整请求体（可能包含敏感信息）
-                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(bodyString)")
+                // 脱敏请求体中的敏感字段
+                let maskedBody = DataMasking.maskJSONSensitiveFields(
+                    bodyString, 
+                    sensitiveKeys: ["token", "password", "secret", "key", "id_token", "refresh_token", "access_token"]
+                )
+                LoggerService.shared.info(module: "NetworkService", message: "请求体内容: \(maskedBody)")
             }
         }
         LoggerService.shared.info(module: "NetworkService", message: "请求时间: \(Date())")
@@ -1247,9 +825,12 @@ class NetworkService: ObservableObject {
         if let response = response {
             LoggerService.shared.info(
                 module: "NetworkService", message: "状态码: \(response.statusCode)")
+            
+            // 脱敏响应 URL
+            let urlString = response.url?.absoluteString ?? "Unknown"
+            let maskedURL = DataMasking.maskURLParameters(urlString)
             LoggerService.shared.info(
-                module: "NetworkService",
-                message: "URL: \(response.url?.absoluteString ?? "Unknown")")
+                module: "NetworkService", message: "URL: \(maskedURL)")
         }
 
         // 记录响应体
@@ -1261,9 +842,14 @@ class NetworkService: ObservableObject {
                 responseString.count > maxLength
                 ? String(responseString.prefix(maxLength)) + "... (截断)"
                 : responseString
-            // 响应可能包含敏感信息，加密记录
+            
+            // 脱敏响应体中的敏感字段
+            let maskedResponse = DataMasking.maskJSONSensitiveFields(
+                truncatedResponse,
+                sensitiveKeys: ["token", "password", "secret", "key", "access_token", "refresh_token", "id_token", "transaction_jws"]
+            )
             LoggerService.shared.info(
-                module: "NetworkService", message: "响应内容: \(truncatedResponse)")
+                module: "NetworkService", message: "响应内容: \(maskedResponse)")
         }
 
         // 记录错误
@@ -1276,46 +862,5 @@ class NetworkService: ObservableObject {
 
         LoggerService.shared.info(module: "NetworkService", message: "响应时间: \(Date())")
         LoggerService.shared.info(module: "NetworkService", message: "===== 网络响应结束 =====")
-    }
-}
-
-// MARK: - HTTP方法枚举
-enum HTTPMethod: String {
-    case GET = "GET"
-    case POST = "POST"
-    case PUT = "PUT"
-    case DELETE = "DELETE"
-}
-
-// MARK: - 网络错误
-enum NetworkError: Error, LocalizedError {
-    case invalidURL
-    case invalidResponse
-    case noData
-    case unauthorized
-    case serverError(Int, message: String? = nil)
-    case noRefreshToken
-    case decodingError
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "无效的URL"
-        case .invalidResponse:
-            return "无效的响应"
-        case .noData:
-            return "没有数据"
-        case .unauthorized:
-            return "未授权访问"
-        case .serverError(let code, let message):
-            if let message = message {
-                return "服务器错误 \(code): \(message)"
-            }
-            return "服务器错误: \(code)"
-        case .noRefreshToken:
-            return "没有刷新令牌"
-        case .decodingError:
-            return "数据解析错误"
-        }
     }
 }
