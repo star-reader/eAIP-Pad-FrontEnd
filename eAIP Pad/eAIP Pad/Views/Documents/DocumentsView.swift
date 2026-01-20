@@ -157,14 +157,22 @@ struct AIPDocumentsView: View {
         errorMessage = nil
 
         do {
-            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
-                throw NSError(domain: "DocumentsView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            guard
+                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
+                    modelContext: modelContext)
+            else {
+                throw NSError(
+                    domain: "DocumentsView", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
             let category = selectedCategory == .all ? nil : selectedCategory.rawValue
-            let cacheKey = category != nil ? "aip_\(category!)" : PDFCacheService.DataType.aipDocuments
+            let cacheKey =
+                category != nil ? "aip_\(category!)" : PDFCacheService.DataType.aipDocuments
 
-            if let cached = AIRACHelper.shared.loadCachedData([AIPDocumentResponse].self, airacVersion: airacVersion, dataType: cacheKey) {
+            if let cached = AIRACHelper.shared.loadCachedData(
+                [AIPDocumentResponse].self, airacVersion: airacVersion, dataType: cacheKey)
+            {
                 documents = cached
                 isLoading = false
                 return
@@ -251,18 +259,28 @@ struct SUPDocumentsView: View {
         errorMessage = nil
 
         do {
-            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
-                throw NSError(domain: "DocumentsView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            guard
+                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
+                    modelContext: modelContext)
+            else {
+                throw NSError(
+                    domain: "DocumentsView", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
-            if let cached = AIRACHelper.shared.loadCachedData([SUPDocumentResponse].self, airacVersion: airacVersion, dataType: PDFCacheService.DataType.supDocuments) {
+            if let cached = AIRACHelper.shared.loadCachedData(
+                [SUPDocumentResponse].self, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.supDocuments)
+            {
                 documents = cached
                 isLoading = false
                 return
             }
 
             let response = try await NetworkService.shared.getSUPDocuments()
-            AIRACHelper.shared.cacheData(response, airacVersion: airacVersion, dataType: PDFCacheService.DataType.supDocuments)
+            AIRACHelper.shared.cacheData(
+                response, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.supDocuments)
             documents = response
         } catch {
             errorMessage = "加载SUP文档失败: \(error.localizedDescription)"
@@ -281,71 +299,53 @@ struct AMDTDocumentsView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack {
-            if isLoading {
-                ProgressView("加载AMDT文档...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        Task {
-                            await loadAMDTDocuments()
-                        }
+        LoadingStateView(
+            isLoading: isLoading,
+            errorMessage: errorMessage,
+            loadingMessage: "加载AMDT文档...",
+            retryAction: { await loadAMDTDocuments() }
+        ) {
+            List(documents, id: \.id) { document in
+                if let binding = selectedChartBinding {
+                    Button {
+                        LoggerService.shared.info(
+                            module: "AMDTDocumentsView",
+                            message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                        )
+                        binding.wrappedValue = ChartResponse(
+                            id: document.id,
+                            documentId: "\(document.id)",
+                            parentId: nil,
+                            icao: nil,
+                            nameEn: document.subject,
+                            nameCn: document.localSubject,
+                            chartType: "AMDT",
+                            pdfPath: document.pdfPath,
+                            htmlPath: nil,
+                            htmlEnPath: nil,
+                            airacVersion: document.airacVersion,
+                            isModified: document.isModified ?? false,
+                            isOpened: nil
+                        )
+                    } label: {
+                        AMDTDocumentRowView(document: document)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(documents, id: \.id) { document in
-                    if let binding = selectedChartBinding {
-                        // iPad 模式
-                        Button {
-                            LoggerService.shared.info(
-                                module: "AMDTDocumentsView",
-                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
-                            )
-                            // 创建简化的 ChartResponse
-                            binding.wrappedValue = ChartResponse(
-                                id: document.id,
-                                documentId: "\(document.id)",
-                                parentId: nil,
-                                icao: nil,
-                                nameEn: document.subject,
-                                nameCn: document.localSubject,
-                                chartType: "AMDT",
-                                pdfPath: document.pdfPath,
-                                htmlPath: nil,
-                                htmlEnPath: nil,
-                                airacVersion: document.airacVersion,
-                                isModified: document.isModified ?? false,
-                                isOpened: nil
-                            )
-                        } label: {
-                            AMDTDocumentRowView(document: document)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        // iPhone 模式
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: "amdt_\(document.id)",
-                                displayName: document.localSubject,
-                                documentType: .amdt
-                            )
-                        } label: {
-                            AMDTDocumentRowView(document: document)
-                        }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink {
+                        PDFReaderView(
+                            chartID: "amdt_\(document.id)",
+                            displayName: document.localSubject,
+                            documentType: .amdt
+                        )
+                    } label: {
+                        AMDTDocumentRowView(document: document)
                     }
                 }
-                .listStyle(.insetGrouped)
             }
+            .listStyle(.insetGrouped)
         }
         .task {
             await loadAMDTDocuments()
@@ -357,77 +357,31 @@ struct AMDTDocumentsView: View {
         errorMessage = nil
 
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "DocumentsView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Documents", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
-            }
-
-            guard let currentAIRAC = currentAIRAC else {
+            guard
+                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
+                    modelContext: modelContext)
+            else {
                 throw NSError(
-                    domain: "Documents", code: -1,
+                    domain: "DocumentsView", code: -1,
                     userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
-            // 1. 先尝试从缓存加载
-            if let cachedDocuments = PDFCacheService.shared.loadCachedData(
-                [AMDTDocumentResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.amdtDocuments
-            ) {
-                await MainActor.run {
-                    self.documents = cachedDocuments
-                }
+            if let cached = AIRACHelper.shared.loadCachedData(
+                [AMDTDocumentResponse].self, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.amdtDocuments)
+            {
+                documents = cached
                 isLoading = false
                 return
             }
 
-            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAMDTDocuments()
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.amdtDocuments
-            )
-
-            await MainActor.run {
-                self.documents = response
-            }
+            AIRACHelper.shared.cacheData(
+                response, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.amdtDocuments)
+            documents = response
         } catch {
-            await MainActor.run {
-                self.errorMessage = "加载AMDT文档失败: \(error.localizedDescription)"
-            }
+            errorMessage = "加载AMDT文档失败: \(error.localizedDescription)"
         }
 
         isLoading = false
@@ -443,70 +397,52 @@ struct NOTAMDocumentsView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack {
-            if isLoading {
-                ProgressView("加载NOTAM文档...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        Task {
-                            await loadNOTAMDocuments()
-                        }
+        LoadingStateView(
+            isLoading: isLoading,
+            errorMessage: errorMessage,
+            loadingMessage: "加载NOTAM文档...",
+            retryAction: { await loadNOTAMDocuments() }
+        ) {
+            List(documents, id: \.id) { document in
+                if let binding = selectedChartBinding {
+                    Button {
+                        LoggerService.shared.info(
+                            module: "NOTAMDocumentsView",
+                            message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
+                        binding.wrappedValue = ChartResponse(
+                            id: document.id,
+                            documentId: "\(document.id)",
+                            parentId: nil,
+                            icao: nil,
+                            nameEn: "NOTAM \(document.seriesName)",
+                            nameCn: "NOTAM \(document.seriesName)",
+                            chartType: "NOTAM",
+                            pdfPath: nil,
+                            htmlPath: nil,
+                            htmlEnPath: nil,
+                            airacVersion: document.airacVersion,
+                            isModified: false,
+                            isOpened: nil
+                        )
+                    } label: {
+                        NOTAMDocumentRowView(document: document)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(documents, id: \.id) { document in
-                    if let binding = selectedChartBinding {
-                        // iPad 模式
-                        Button {
-                            LoggerService.shared.info(
-                                module: "NOTAMDocumentsView",
-                                message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
-                            // 创建简化的 ChartResponse
-                            binding.wrappedValue = ChartResponse(
-                                id: document.id,
-                                documentId: "\(document.id)",
-                                parentId: nil,
-                                icao: nil,
-                                nameEn: "NOTAM \(document.seriesName)",
-                                nameCn: "NOTAM \(document.seriesName)",
-                                chartType: "NOTAM",
-                                pdfPath: nil,
-                                htmlPath: nil,
-                                htmlEnPath: nil,
-                                airacVersion: document.airacVersion,
-                                isModified: false,
-                                isOpened: nil
-                            )
-                        } label: {
-                            NOTAMDocumentRowView(document: document)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        // iPhone 模式
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: "notam_\(document.id)",
-                                displayName: "NOTAM \(document.seriesName)",
-                                documentType: .notam
-                            )
-                        } label: {
-                            NOTAMDocumentRowView(document: document)
-                        }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink {
+                        PDFReaderView(
+                            chartID: "notam_\(document.id)",
+                            displayName: "NOTAM \(document.seriesName)",
+                            documentType: .notam
+                        )
+                    } label: {
+                        NOTAMDocumentRowView(document: document)
                     }
                 }
-                .listStyle(.insetGrouped)
             }
+            .listStyle(.insetGrouped)
         }
         .task {
             await loadNOTAMDocuments()
@@ -518,77 +454,31 @@ struct NOTAMDocumentsView: View {
         errorMessage = nil
 
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "DocumentsView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "DocumentsView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Documents", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
-            }
-
-            guard let currentAIRAC = currentAIRAC else {
+            guard
+                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
+                    modelContext: modelContext)
+            else {
                 throw NSError(
-                    domain: "Documents", code: -1,
+                    domain: "DocumentsView", code: -1,
                     userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
-            // 1. 先尝试从缓存加载
-            if let cachedDocuments = PDFCacheService.shared.loadCachedData(
-                [NOTAMDocumentResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.notamDocuments
-            ) {
-                await MainActor.run {
-                    self.documents = cachedDocuments
-                }
+            if let cached = AIRACHelper.shared.loadCachedData(
+                [NOTAMDocumentResponse].self, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.notamDocuments)
+            {
+                documents = cached
                 isLoading = false
                 return
             }
 
-            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getNOTAMDocuments()
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.notamDocuments
-            )
-
-            await MainActor.run {
-                self.documents = response
-            }
+            AIRACHelper.shared.cacheData(
+                response, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.notamDocuments)
+            documents = response
         } catch {
-            await MainActor.run {
-                self.errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
-            }
+            errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
         }
 
         isLoading = false
