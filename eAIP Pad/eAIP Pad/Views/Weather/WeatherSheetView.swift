@@ -281,19 +281,6 @@ private struct WeatherDetailList: View {
     }
 }
 
-private struct EmptyStateView: View {
-    let title: String
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "cloud.fill").font(.largeTitle).foregroundColor(.secondary)
-            Text(title).foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-    }
-}
-
 private struct WeatherRawSection: View {
     let title: String
     let raw: String
@@ -309,21 +296,5 @@ private struct WeatherRawSection: View {
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
         }
         .padding(.horizontal)
-    }
-}
-
-private struct ErrorStateView: View {
-    let message: String
-    let onRetry: () -> Void
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "cloud.bolt.rain.fill").font(.largeTitle).foregroundColor(.orange)
-            Text(message).multilineTextAlignment(.center)
-            Button("重试", action: onRetry)
-                .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 }

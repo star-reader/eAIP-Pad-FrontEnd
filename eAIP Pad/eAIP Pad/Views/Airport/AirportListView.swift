@@ -28,29 +28,21 @@ struct AirportListView: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
-                if isLoading {
-                    ProgressView("加载机场数据...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                        Button("重试") {
-                            Task {
-                                await loadAirports()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LoadingStateView(
+                isLoading: isLoading,
+                errorMessage: errorMessage,
+                loadingMessage: "加载机场数据...",
+                retryAction: { await loadAirports() }
+            ) {
+                if filteredAirports.isEmpty {
+                    EmptyStateView(
+                        title: "暂无机场数据",
+                        systemImage: "airplane.circle",
+                        description: "没有找到相关机场"
+                    )
                 } else {
                     List(filteredAirports, id: \.icao) { airport in
                         if let binding = selectedAirportBinding {
-                            // iPad 模式：点击设置选中的机场
                             Button {
                                 binding.wrappedValue = airport
                             } label: {
@@ -60,7 +52,6 @@ struct AirportListView: View {
                             }
                             .buttonStyle(.plain)
                         } else {
-                            // iPhone 模式：使用 NavigationLink
                             NavigationLink {
                                 AirportDetailView(airport: airport)
                             } label: {
@@ -108,84 +99,27 @@ struct AirportListView: View {
         errorMessage = nil
 
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "AirportListView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "AirportListView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "AirportList", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
+            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "AirportListView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
-            guard let currentAIRAC = currentAIRAC else {
-                throw NSError(
-                    domain: "AirportList", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-
-            // 1. 先尝试从缓存加载
-            if let cachedAirports = PDFCacheService.shared.loadCachedData(
-                [AirportResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.airports
-            ) {
-                await MainActor.run {
-                    self.airports = cachedAirports
-                    syncAirportsToLocal(cachedAirports)
-                }
+            if let cached = AIRACHelper.shared.loadCachedData([AirportResponse].self, airacVersion: airacVersion, dataType: PDFCacheService.DataType.airports) {
+                airports = cached
+                syncAirportsToLocal(cached)
                 isLoading = false
                 return
             }
 
-            // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getAirports(
-                search: searchText.isEmpty ? nil : searchText)
+            let response = try await NetworkService.shared.getAirports(search: searchText.isEmpty ? nil : searchText)
 
-            // 3. 保存到缓存（只有非搜索状态才缓存完整列表）
             if searchText.isEmpty {
-                try? PDFCacheService.shared.cacheData(
-                    response,
-                    airacVersion: currentAIRAC,
-                    dataType: PDFCacheService.DataType.airports
-                )
+                AIRACHelper.shared.cacheData(response, airacVersion: airacVersion, dataType: PDFCacheService.DataType.airports)
             }
 
-            await MainActor.run {
-                self.airports = response
-
-                // 同步到本地 SwiftData
-                syncAirportsToLocal(response)
-            }
+            airports = response
+            syncAirportsToLocal(response)
         } catch {
-            await MainActor.run {
-                self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
-            }
+            errorMessage = "加载机场数据失败: \(error.localizedDescription)"
         }
 
         isLoading = false

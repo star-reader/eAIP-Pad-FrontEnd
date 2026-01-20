@@ -193,6 +193,7 @@ struct MainAppView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var userSettings: [UserSettings]
     @StateObject private var subscriptionService = SubscriptionService.shared
+    @StateObject private var authService = AuthenticationService.shared
 
     private var currentSettings: UserSettings {
         if let settings = userSettings.first {
@@ -206,14 +207,21 @@ struct MainAppView: View {
 
     var body: some View {
         Group {
-            // 启动时在首个订阅状态同步完成前，始终展示主应用，避免闪屏
-            if !subscriptionService.hasLoadedOnce {
+            // 优先级 1: 检查登录状态
+            if authService.authenticationState == .notAuthenticated {
+                // 未登录：显示登录页面
+                LoginView()
+            }
+            // 优先级 2: 启动时在首个订阅状态同步完成前，始终展示主应用，避免闪屏
+            else if !subscriptionService.hasLoadedOnce {
                 contentView
-            } else if subscriptionService.hasValidSubscription {
+            }
+            // 优先级 3: 检查订阅状态
+            else if subscriptionService.hasValidSubscription {
                 // 有订阅：显示主应用内容
                 contentView
             } else {
-                // 没有订阅：直接显示订阅页面
+                // 已登录但没有订阅：显示订阅页面
                 UnifiedSubscriptionView()
             }
         }

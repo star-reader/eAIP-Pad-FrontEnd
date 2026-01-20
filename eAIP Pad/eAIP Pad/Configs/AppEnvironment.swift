@@ -19,11 +19,11 @@ enum AppEnvironment {
     var baseURL: String {
         switch self {
         case .development:
-            return "https://dev-api.usagi-jin.top"
+            return "https://api.jerry-jin.top"
         case .staging:
-            return "https://staging-api.usagi-jin.top"
+            return "https://api.jerry-jin.top"
         case .production:
-            return "https://api.usagi-jin.top"
+            return "https://api.jerry-jin.top"
         }
     }
     

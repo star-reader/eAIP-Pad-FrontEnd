@@ -1,7 +1,6 @@
 import SwiftData
 import SwiftUI
 
-// MARK: - 航路图视图
 struct EnrouteView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.selectedChartBinding) private var selectedChartBinding
@@ -10,7 +9,6 @@ struct EnrouteView: View {
     @State private var errorMessage: String?
     @State private var selectedChartType: EnrouteChartType = .enroute
 
-    // 过滤后的航路图列表
     private var filteredCharts: [ChartResponse] {
         switch selectedChartType {
         case .enroute:
@@ -24,70 +22,51 @@ struct EnrouteView: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
-                if isLoading {
-                    ProgressView("加载航路图数据...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let errorMessage = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                        Button("重试") {
-                            Task {
-                                await loadEnrouteCharts()
-                            }
+            LoadingStateView(
+                isLoading: isLoading,
+                errorMessage: errorMessage,
+                loadingMessage: "加载航路图数据...",
+                retryAction: { await loadEnrouteCharts() }
+            ) {
+                VStack(spacing: 0) {
+                    Picker("航路图类型", selection: $selectedChartType) {
+                        ForEach(EnrouteChartType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
                         }
-                        .buttonStyle(.borderedProminent)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    VStack(spacing: 0) {
-                        // 原生航路图类型选择器
-                        Picker("航路图类型", selection: $selectedChartType) {
-                            ForEach(EnrouteChartType.allCases, id: \.self) { type in
-                                Text(type.displayName).tag(type)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding()
+                    .pickerStyle(.segmented)
+                    .padding()
 
-                        // 航路图列表
-                        if filteredCharts.isEmpty {
-                            ContentUnavailableView(
-                                "暂无\(selectedChartType.displayName)",
-                                systemImage: "map",
-                                description: Text("该分类暂无航路图数据")
-                            )
-                        } else {
-                            List(filteredCharts, id: \.id) { chart in
-                                if let binding = selectedChartBinding {
-                                    // iPad 模式
-                                    Button {
-                                        binding.wrappedValue = chart
-                                    } label: {
-                                        EnrouteChartRowView(chart: chart)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                } else {
-                                    // iPhone 模式
-                                    NavigationLink {
-                                        PDFReaderView(
-                                            chartID: "enroute_\(chart.id)",
-                                            displayName: chart.nameCn,
-                                            documentType: .enroute
-                                        )
-                                    } label: {
-                                        EnrouteChartRowView(chart: chart)
-                                    }
+                    if filteredCharts.isEmpty {
+                        EmptyStateView(
+                            title: "暂无\(selectedChartType.displayName)",
+                            systemImage: "map",
+                            description: "该分类暂无航路图数据"
+                        )
+                    } else {
+                        List(filteredCharts, id: \.id) { chart in
+                            if let binding = selectedChartBinding {
+                                Button {
+                                    binding.wrappedValue = chart
+                                } label: {
+                                    EnrouteChartRowView(chart: chart)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                NavigationLink {
+                                    PDFReaderView(
+                                        chartID: "enroute_\(chart.id)",
+                                        displayName: chart.nameCn,
+                                        documentType: .enroute
+                                    )
+                                } label: {
+                                    EnrouteChartRowView(chart: chart)
                                 }
                             }
-                            .listStyle(.insetGrouped)
                         }
+                        .listStyle(.insetGrouped)
                     }
                 }
             }
@@ -103,84 +82,29 @@ struct EnrouteView: View {
             await loadEnrouteCharts()
         }
     }
-
+    
     private func loadEnrouteCharts() async {
         isLoading = true
         errorMessage = nil
-
+        
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "EnrouteView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "EnrouteView", message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Enroute", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
+            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "EnrouteView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
-
-            guard let currentAIRAC = currentAIRAC else {
-                throw NSError(
-                    domain: "Enroute", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-
-            // 1. 先尝试从缓存加载
-            if let cachedCharts = PDFCacheService.shared.loadCachedData(
-                [ChartResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.enrouteCharts
-            ) {
-                await MainActor.run {
-                    self.enrouteCharts = cachedCharts
-                }
+            
+            if let cached = AIRACHelper.shared.loadCachedData([ChartResponse].self, airacVersion: airacVersion, dataType: PDFCacheService.DataType.enrouteCharts) {
+                enrouteCharts = cached
                 isLoading = false
                 return
             }
-
-            // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getEnrouteCharts(type: nil)
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.enrouteCharts
-            )
-
-            await MainActor.run {
-                self.enrouteCharts = response
-            }
+            
+            let charts = try await NetworkService.shared.getEnrouteCharts(type: nil)
+            AIRACHelper.shared.cacheData(charts, airacVersion: airacVersion, dataType: PDFCacheService.DataType.enrouteCharts)
+            enrouteCharts = charts
         } catch {
-            await MainActor.run {
-                self.errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
-            }
+            errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
         }
-
+        
         isLoading = false
     }
 }

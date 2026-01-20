@@ -32,67 +32,52 @@ struct AirportDetailView: View {
     }
 
     var body: some View {
-        VStack {
-            if isLoading {
-                ProgressView("加载航图数据...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        Task {
-                            await loadCharts()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
+        LoadingStateView(
+            isLoading: isLoading,
+            errorMessage: errorMessage,
+            loadingMessage: "加载航图数据...",
+            retryAction: { await loadCharts() }
+        ) {
+            VStack(spacing: 0) {
+                // 机场信息卡片
+                AirportInfoCard(airport: airport) {
+                    showWeatherSheet = true
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                VStack(spacing: 0) {
-                    // 机场信息卡片
-                    AirportInfoCard(airport: airport) {
-                        showWeatherSheet = true
-                    }
-                    .padding()
+                .padding()
 
-                    // 使用原生 Picker 作为分段控制器
-                    Picker("航图类型", selection: $selectedChartType) {
-                        ForEach(ChartType.allCases, id: \.self) { type in
-                            if type != .others {
-                                Text(type.displayName).tag(type)
-                            }
+                // 使用原生 Picker 作为分段控制器
+                Picker("航图类型", selection: $selectedChartType) {
+                    ForEach(ChartType.allCases, id: \.self) { type in
+                        if type != .others {
+                            Text(type.displayName).tag(type)
                         }
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
 
-                    // 航图列表
-                    List {
-                        if selectedChartType == .all {
-                            // 分组显示
-                            ForEach(ChartType.allCases.filter { $0 != .all }, id: \.self) { type in
-                                if let chartsForType = groupedCharts[type], !chartsForType.isEmpty {
-                                    Section(type.displayName) {
-                                        ForEach(chartsForType, id: \.id) { chart in
-                                            ChartRowView(chart: chart)
-                                        }
+                // 航图列表
+                List {
+                    if selectedChartType == .all {
+                        // 分组显示
+                        ForEach(ChartType.allCases.filter { $0 != .all }, id: \.self) { type in
+                            if let chartsForType = groupedCharts[type], !chartsForType.isEmpty {
+                                Section(type.displayName) {
+                                    ForEach(chartsForType, id: \.id) { chart in
+                                        ChartRowView(chart: chart)
                                     }
                                 }
                             }
-                        } else {
-                            // 单一类型显示
-                            ForEach(filteredCharts, id: \.id) { chart in
-                                ChartRowView(chart: chart)
-                            }
+                        }
+                    } else {
+                        // 单一类型显示
+                        ForEach(filteredCharts, id: \.id) { chart in
+                            ChartRowView(chart: chart)
                         }
                     }
-                    .listStyle(.insetGrouped)
                 }
+                .listStyle(.insetGrouped)
             }
         }
         .navigationTitle("")
@@ -127,84 +112,25 @@ struct AirportDetailView: View {
         errorMessage = nil
 
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "AirportDetailView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "AirportDetailView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "AirportDetail", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
+            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
+                throw NSError(domain: "AirportDetailView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
-            guard let currentAIRAC = currentAIRAC else {
-                throw NSError(
-                    domain: "AirportDetail", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-
-            // 使用机场 ICAO 作为缓存键
             let cacheKey = "charts_\(airport.icao)"
 
-            // 1. 先尝试从缓存加载
-            if let cachedCharts = PDFCacheService.shared.loadCachedData(
-                [ChartResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: cacheKey
-            ) {
-                await MainActor.run {
-                    self.charts = cachedCharts
-                    syncChartsToLocal(cachedCharts)
-                }
+            if let cached = AIRACHelper.shared.loadCachedData([ChartResponse].self, airacVersion: airacVersion, dataType: cacheKey) {
+                charts = cached
+                syncChartsToLocal(cached)
                 isLoading = false
                 return
             }
 
-            // 2. 缓存未命中，从网络获取
             let response = try await NetworkService.shared.getAirportCharts(icao: airport.icao)
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: cacheKey
-            )
-
-            await MainActor.run {
-                self.charts = response
-
-                // 同步到本地 SwiftData
-                syncChartsToLocal(response)
-            }
+            AIRACHelper.shared.cacheData(response, airacVersion: airacVersion, dataType: cacheKey)
+            charts = response
+            syncChartsToLocal(response)
         } catch {
-            await MainActor.run {
-                self.errorMessage = "加载航图数据失败: \(error.localizedDescription)"
-            }
+            errorMessage = "加载航图数据失败: \(error.localizedDescription)"
         }
 
         isLoading = false
