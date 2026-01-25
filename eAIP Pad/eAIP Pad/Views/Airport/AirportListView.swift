@@ -99,21 +99,32 @@ struct AirportListView: View {
         errorMessage = nil
 
         do {
-            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
-                throw NSError(domain: "AirportListView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            guard
+                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
+                    modelContext: modelContext)
+            else {
+                throw NSError(
+                    domain: "AirportListView", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
             }
 
-            if let cached = AIRACHelper.shared.loadCachedData([AirportResponse].self, airacVersion: airacVersion, dataType: PDFCacheService.DataType.airports) {
+            if let cached = AIRACHelper.shared.loadCachedData(
+                [AirportResponse].self, airacVersion: airacVersion,
+                dataType: PDFCacheService.DataType.airports)
+            {
                 airports = cached
                 syncAirportsToLocal(cached)
                 isLoading = false
                 return
             }
 
-            let response = try await NetworkService.shared.getAirports(search: searchText.isEmpty ? nil : searchText)
+            let response = try await NetworkService.shared.getAirports(
+                search: searchText.isEmpty ? nil : searchText)
 
             if searchText.isEmpty {
-                AIRACHelper.shared.cacheData(response, airacVersion: airacVersion, dataType: PDFCacheService.DataType.airports)
+                AIRACHelper.shared.cacheData(
+                    response, airacVersion: airacVersion,
+                    dataType: PDFCacheService.DataType.airports)
             }
 
             airports = response
