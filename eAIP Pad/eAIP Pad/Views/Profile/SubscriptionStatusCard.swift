@@ -3,6 +3,7 @@ import SwiftUI
 struct SubscriptionStatusCard: View {
     @ObservedObject var subscriptionService: SubscriptionService
     let onSubscribe: () -> Void
+    @State private var isRefreshing = false
     
     var body: some View {
         VStack(spacing: 12) {
@@ -18,6 +19,23 @@ struct SubscriptionStatusCard: View {
                 }
                 
                 Spacer()
+                
+                // 刷新按钮
+                Button {
+                    Task {
+                        isRefreshing = true
+                        await subscriptionService.querySubscriptionStatus()
+                        isRefreshing = false
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                        .animation(isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshing)
+                }
+                .disabled(isRefreshing || subscriptionService.isLoading)
+                .padding(.trailing, 4)
                 
                 VStack(alignment: .trailing, spacing: 4) {
                     Image(systemName: subscriptionService.hasValidSubscription ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
@@ -67,11 +85,6 @@ struct SubscriptionStatusCard: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .frame(maxWidth: .infinity)
-            }
-        }
-        .onAppear {
-            Task {
-                await subscriptionService.querySubscriptionStatus()
             }
         }
     }
