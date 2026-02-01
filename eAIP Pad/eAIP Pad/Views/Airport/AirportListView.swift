@@ -34,33 +34,52 @@ struct AirportListView: View {
                 loadingMessage: "加载机场数据...",
                 retryAction: { await loadAirports() }
             ) {
-                if filteredAirports.isEmpty {
-                    EmptyStateView(
-                        title: "暂无机场数据",
-                        systemImage: "airplane.circle",
-                        description: "没有找到相关机场"
-                    )
-                } else {
-                    List(filteredAirports, id: \.icao) { airport in
-                        if let binding = selectedAirportBinding {
-                            Button {
-                                binding.wrappedValue = airport
-                            } label: {
-                                AirportRowView(airport: airport)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
+                List {
+                    if filteredAirports.isEmpty {
+                        // 搜索无结果时显示空状态，但保持 List 和搜索栏可见
+                        VStack(spacing: 16) {
+                            Image(systemName: "airplane.circle")
+                                .font(.system(size: 60))
+                                .foregroundColor(.secondary)
+                            
+                            VStack(spacing: 8) {
+                                Text(searchText.isEmpty ? "暂无机场数据" : "没有找到相关机场")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                
+                                if !searchText.isEmpty {
+                                    Text("请尝试其他关键词")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                            .buttonStyle(.plain)
-                        } else {
-                            NavigationLink {
-                                AirportDetailView(airport: airport)
-                            } label: {
-                                AirportRowView(airport: airport)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 60)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(filteredAirports, id: \.icao) { airport in
+                            if let binding = selectedAirportBinding {
+                                Button {
+                                    binding.wrappedValue = airport
+                                } label: {
+                                    AirportRowView(airport: airport)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                NavigationLink {
+                                    AirportDetailView(airport: airport)
+                                } label: {
+                                    AirportRowView(airport: airport)
+                                }
                             }
                         }
                     }
-                    .searchable(text: $searchText, prompt: "搜索机场 ICAO 或名称")
                 }
+                .searchable(text: $searchText, prompt: "搜索机场 ICAO 或名称")
             }
             .navigationTitle("机场")
             .navigationBarTitleDisplayMode(.large)

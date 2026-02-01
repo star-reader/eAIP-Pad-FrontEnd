@@ -56,11 +56,11 @@ struct UnifiedSubscriptionView: View {
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
 
-                                        Text("然后 \(product.displayPrice)/月")
+                                        Text("然后 $18/月")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
                                     } else {
-                                        Text("\(product.displayPrice)/月")
+                                        Text("$18/月")
                                             .font(.title2)
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
@@ -129,17 +129,15 @@ struct UnifiedSubscriptionView: View {
                             }
                             .disabled(isLoading || subscriptionService.isLoading)
 
-                            if let product = subscriptionService.monthlyProduct {
-                                Text(
-                                    subscriptionService.hasUsedTrial
-                                        ? "订阅可随时取消，按 \(product.displayPrice)/月 自动续费"
-                                        : "订阅可随时取消，首月免费后按 \(product.displayPrice)/月 自动续费"
-                                )
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                            }
+                            Text(
+                                subscriptionService.hasUsedTrial
+                                    ? "订阅可随时取消，按 ¥18/月 自动续费"
+                                    : "订阅可随时取消，首月免费后按 ¥18/月 自动续费"
+                            )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                         }
                         .padding(.horizontal)
 

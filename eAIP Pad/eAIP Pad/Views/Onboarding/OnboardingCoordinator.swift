@@ -215,6 +215,10 @@ struct MainAppView: View {
             // 优先级 2: 启动时在首个订阅状态同步完成前，始终展示主应用，避免闪屏
             else if !subscriptionService.hasLoadedOnce {
                 contentView
+                    .task {
+                        // 仅在首次加载时同步订阅状态
+                        await subscriptionService.syncSubscriptionStatus()
+                    }
             }
             // 优先级 3: 检查订阅状态
             else if subscriptionService.hasValidSubscription {
@@ -224,10 +228,6 @@ struct MainAppView: View {
                 // 已登录但没有订阅：显示订阅页面
                 UnifiedSubscriptionView()
             }
-        }
-        .task {
-            // 进入主应用时同步订阅状态
-            await subscriptionService.syncSubscriptionStatus()
         }
     }
 
