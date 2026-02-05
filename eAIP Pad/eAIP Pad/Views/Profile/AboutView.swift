@@ -14,7 +14,7 @@ struct AboutView: View {
                             .font(.headline)
                             .foregroundColor(.secondary)
                         
-                        Text("版本 1.0.0 (Build 1)")
+                        Text(AppVersion.appVersion)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -79,11 +79,7 @@ struct AboutView: View {
                     }
                     
                     VStack(spacing: 8) {
-                        Text("© 2025 eAIP Pad")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("专为中国航空爱好者设计")
+                        Text("© 2025-\(Calendar.current.component(.year, from: Date())) eAIP Pad")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

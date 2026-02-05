@@ -56,7 +56,7 @@ struct UnifiedSubscriptionView: View {
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
 
-                                        Text("然后 $18/月")
+                                        Text("然后 ¥18/月")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
                                     } else {
