@@ -56,11 +56,11 @@ struct UnifiedSubscriptionView: View {
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
 
-                                        Text("然后 ¥18/月")
+                                        Text("然后 \(product.displayPrice)/月")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
                                     } else {
-                                        Text("$18/月")
+                                        Text("\(product.displayPrice)/月")
                                             .font(.title2)
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
@@ -82,8 +82,20 @@ struct UnifiedSubscriptionView: View {
                                 if subscriptionService.isLoading {
                                     ProgressView()
                                 } else {
-                                    Text("加载中...")
-                                        .foregroundColor(.secondary)
+                                    if let errorMessage = subscriptionService.errorMessage {
+                                        Text(errorMessage)
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.center)
+
+                                        Button("重新加载") {
+                                            Task {
+                                                await subscriptionService.loadProducts()
+                                            }
+                                        }
+                                    } else {
+                                        Text("加载中...")
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
                             .padding()
@@ -117,7 +129,11 @@ struct UnifiedSubscriptionView: View {
                                 .background(Color.primaryBlue)
                                 .cornerRadius(12)
                             }
-                            .disabled(isLoading || subscriptionService.isLoading)
+                            .disabled(
+                                isLoading
+                                    || subscriptionService.isLoading
+                                    || subscriptionService.monthlyProduct == nil
+                            )
 
                             Button {
                                 Task {
@@ -156,8 +172,10 @@ struct UnifiedSubscriptionView: View {
             Text(errorMessage)
         }
         .onAppear {
-            Task {
-                await subscriptionService.loadProducts()
+            if subscriptionService.monthlyProduct == nil && !subscriptionService.isLoading {
+                Task {
+                    await subscriptionService.loadProducts()
+                }
             }
         }
     }

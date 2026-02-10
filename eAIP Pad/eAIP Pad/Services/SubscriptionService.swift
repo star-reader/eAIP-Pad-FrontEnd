@@ -62,6 +62,10 @@ class SubscriptionService: ObservableObject {
 
     // MARK: - 购买订阅
     func purchaseMonthlySubscription() async -> Bool {
+        if monthlyProduct == nil {
+            await loadProducts()
+        }
+
         guard let product = monthlyProduct else {
             errorMessage = "产品未加载，请稍后再试"
             LoggerService.shared.warning(module: "SubscriptionService", message: "购买失败：产品未加载")

@@ -60,6 +60,55 @@ struct AboutView: View {
                     .padding()
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                     
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("数据来源")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .top, spacing: 12) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.title3)
+                                    .foregroundColor(.orange)
+                                    .frame(width: 24)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("官方数据源")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                    
+                                    Text("中国民用航空局 空中交通管理局 航行情报服务中心")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Button {
+                                if let url = URL(string: "https://www.eaipchina.cn/") {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "globe")
+                                        .font(.caption)
+                                    Text("访问官方 eAIP 网站")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption2)
+                                }
+                                .foregroundColor(.blue)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    
                     Button {
                         if let url = URL(string: "https://github.com/star-reader/eAIP-Pad-FrontEnd") {
                             UIApplication.shared.open(url)
@@ -79,7 +128,7 @@ struct AboutView: View {
                     }
                     
                     VStack(spacing: 8) {
-                        Text("© 2025-\(Calendar.current.component(.year, from: Date())) eAIP Pad")
+                        Text("© 2025-\(String(Calendar.current.component(.year, from: Date()))) eAIP Pad")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
