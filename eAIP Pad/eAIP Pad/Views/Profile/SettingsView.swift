@@ -4,6 +4,8 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var userSettings: [UserSettings]
+    @State private var showingDeleteAccountConfirmation = false
+    @State private var showingDeleteAccountDoneAlert = false
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -97,9 +99,42 @@ struct SettingsView: View {
                         Toggle("", isOn: .constant(true))
                     }
                 }
+
+                Section {
+                    Button(role: .destructive) {
+                        showingDeleteAccountConfirmation = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "person.crop.circle.badge.minus")
+                                .foregroundColor(.red)
+                                .frame(width: 24)
+
+                            Text("账号注销")
+                                .foregroundColor(.red)
+                        }
+                    }
+                } header: {
+                    Text("账户")
+                } footer: {
+                    Text("注销后将清除本机登录状态与账号凭据，后续可重新登录。")
+                }
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog("确认注销账号？", isPresented: $showingDeleteAccountConfirmation) {
+                Button("确认注销", role: .destructive) {
+                    AuthenticationService.shared.signOut()
+                    showingDeleteAccountDoneAlert = true
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("将清除本机登录信息并退出登录。此操作不会影响 Apple 账号本身。")
+            }
+            .alert("账号已注销", isPresented: $showingDeleteAccountDoneAlert) {
+                Button("确定", role: .cancel) {}
+            } message: {
+                Text("您已退出当前账号，可继续以游客模式使用基础功能。")
+            }
         }
     }
 }

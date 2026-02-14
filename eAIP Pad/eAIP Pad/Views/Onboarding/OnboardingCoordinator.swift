@@ -52,14 +52,10 @@ class OnboardingCoordinator: ObservableObject {
                     LoggerService.shared.info(
                         module: "OnboardingCoordinator", message: "正在认证中，保持登录界面")
                 case .notAuthenticated:
-                    // 仅当确无本地 token 时才进入登录
-                    let hasStoredAccessToken =
-                        UserDefaults.standard.string(forKey: "access_token") != nil
-                    if !hasStoredAccessToken && self.currentState != .needsLogin {
-                        LoggerService.shared.info(
-                            module: "OnboardingCoordinator", message: "Token 无效且无本地凭据，进入登录页面")
-                        self.currentState = .needsLogin
-                    }
+                    // 未登录时允许进入主应用（游客模式），不再强制跳转登录
+                    LoggerService.shared.info(
+                        module: "OnboardingCoordinator", message: "当前未登录，进入主应用游客模式")
+                    self.currentState = .completed
                 case .error:
                     // 出错也不要闪现登录，交由用户主动进入登录
                     LoggerService.shared.info(module: "OnboardingCoordinator", message: "认证出错")
@@ -99,10 +95,6 @@ class OnboardingCoordinator: ObservableObject {
         if authService.authenticationState == .authenticating || hasStoredAccessToken {
             currentState = .completed
             // 后台继续后续检查
-        } else if !authService.isAuthenticated {
-            // 无本地 token 且未认证，才进入登录
-            currentState = .needsLogin
-            return
         }
 
         // 同步订阅状态（后台执行，不阻塞）
@@ -207,10 +199,9 @@ struct MainAppView: View {
 
     var body: some View {
         Group {
-            // 优先级 1: 检查登录状态
-            if authService.authenticationState == .notAuthenticated {
-                // 未登录：显示登录页面
-                LoginView()
+            // 优先级 1: 未登录时允许游客访问基础功能
+            if authService.authenticationState != .authenticated {
+                contentView
             }
             // 优先级 2: 启动时在首个订阅状态同步完成前，始终展示主应用，避免闪屏
             else if !subscriptionService.hasLoadedOnce {

@@ -154,6 +154,23 @@ struct UnifiedSubscriptionView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
+
+                            HStack(spacing: 4) {
+                                Text("订阅即表示您同意")
+
+                                Button("服务条款") {
+                                    openURL("https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Terms-of-Service")
+                                }
+
+                                Text("和")
+
+                                Button("隐私政策") {
+                                    openURL("https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Privacy-Policy")
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                         }
                         .padding(.horizontal)
 
@@ -218,6 +235,11 @@ struct UnifiedSubscriptionView: View {
         }
 
         isLoading = false
+    }
+
+    private func openURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
     }
 }
 
