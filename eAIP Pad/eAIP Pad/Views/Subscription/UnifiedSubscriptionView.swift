@@ -3,6 +3,9 @@ import SwiftUI
 
 /// 统一订阅页面
 struct UnifiedSubscriptionView: View {
+    /// 用户点击「以后再说」时的回调；为 nil 时不显示取消按钮（如作为独立页面使用）
+    var onDismiss: (() -> Void)? = nil
+
     @StateObject private var subscriptionService = SubscriptionService.shared
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -56,11 +59,11 @@ struct UnifiedSubscriptionView: View {
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
 
-                                        Text("然后 $18/月")
+                                        Text("然后 \(product.displayPrice)/月")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
                                     } else {
-                                        Text("$18/月")
+                                        Text("\(product.displayPrice)/月")
                                             .font(.title2)
                                             .fontWeight(.bold)
                                             .foregroundColor(Color.primaryBlue)
@@ -82,8 +85,20 @@ struct UnifiedSubscriptionView: View {
                                 if subscriptionService.isLoading {
                                     ProgressView()
                                 } else {
-                                    Text("加载中...")
-                                        .foregroundColor(.secondary)
+                                    if let errorMessage = subscriptionService.errorMessage {
+                                        Text(errorMessage)
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.center)
+
+                                        Button("重新加载") {
+                                            Task {
+                                                await subscriptionService.loadProducts()
+                                            }
+                                        }
+                                    } else {
+                                        Text("加载中...")
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                             }
                             .padding()
@@ -117,7 +132,11 @@ struct UnifiedSubscriptionView: View {
                                 .background(Color.primaryBlue)
                                 .cornerRadius(12)
                             }
-                            .disabled(isLoading || subscriptionService.isLoading)
+                            .disabled(
+                                isLoading
+                                    || subscriptionService.isLoading
+                                    || subscriptionService.monthlyProduct == nil
+                            )
 
                             Button {
                                 Task {
@@ -138,6 +157,23 @@ struct UnifiedSubscriptionView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
+
+                            HStack(spacing: 4) {
+                                Text("订阅即表示您同意")
+
+                                Button("服务条款") {
+                                    openURL("https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Terms-of-Service")
+                                }
+
+                                Text("和")
+
+                                Button("隐私政策") {
+                                    openURL("https://github.com/star-reader/eAIP-Pad-FrontEnd/wiki/Privacy-Policy")
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                         }
                         .padding(.horizontal)
 
@@ -147,6 +183,16 @@ struct UnifiedSubscriptionView: View {
             }
             .navigationTitle("订阅")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let dismiss = onDismiss {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("以后再说") {
+                            dismiss()
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                }
+            }
         }
         .alert("订阅失败", isPresented: $showingError) {
             Button("确定", role: .cancel) {
@@ -156,8 +202,10 @@ struct UnifiedSubscriptionView: View {
             Text(errorMessage)
         }
         .onAppear {
-            Task {
-                await subscriptionService.loadProducts()
+            if subscriptionService.monthlyProduct == nil && !subscriptionService.isLoading {
+                Task {
+                    await subscriptionService.loadProducts()
+                }
             }
         }
     }
@@ -200,6 +248,11 @@ struct UnifiedSubscriptionView: View {
         }
 
         isLoading = false
+    }
+
+    private func openURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else { return }
+        UIApplication.shared.open(url)
     }
 }
 

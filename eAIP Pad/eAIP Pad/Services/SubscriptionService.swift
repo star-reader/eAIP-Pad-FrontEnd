@@ -26,8 +26,16 @@ class SubscriptionService: ObservableObject {
     private let authService = AuthenticationService.shared
     private let statusManager = SubscriptionStatusManager()
 
+    /// 指数退避重试参数
+    private static let verifyMaxRetries = 3
+    private static func verifyRetryDelay(attempt: Int) -> UInt64 {
+        // 1s, 2s, 4s
+        return UInt64(pow(2.0, Double(attempt))) * 1_000_000_000
+    }
+
     private init() {
         LoggerService.shared.info(module: "SubscriptionService", message: "订阅服务初始化")
+        // Transaction.updates 监听器必须尽早启动，以免 App 启动时到来的 Transaction 被丢失
         updateListenerTask = listenForTransactions()
     }
 
@@ -62,6 +70,10 @@ class SubscriptionService: ObservableObject {
 
     // MARK: - 购买订阅
     func purchaseMonthlySubscription() async -> Bool {
+        if monthlyProduct == nil {
+            await loadProducts()
+        }
+
         guard let product = monthlyProduct else {
             errorMessage = "产品未加载，请稍后再试"
             LoggerService.shared.warning(module: "SubscriptionService", message: "购买失败：产品未加载")
@@ -86,7 +98,10 @@ class SubscriptionService: ObservableObject {
                     LoggerService.shared.debug(
                         module: "SubscriptionService", message: "交易 JWS: \(transactionJWS)")
                     
-                    let success = await verifyTransactionWithServer(
+                    // 必须先成功向后端注册 Transaction，再 finish。
+                    // 若先 finish 后 verify 失败，Transaction.updates 将不再重放该交易，
+                    // 导致 original_transaction_id 永久无法写入后端（核心 Bug 根因）。
+                    let success = await verifyTransactionWithServerWithRetry(
                         transactionJWS: transactionJWS, transaction: transaction)
                     if success {
                         await transaction.finish()
@@ -96,9 +111,11 @@ class SubscriptionService: ObservableObject {
                         isLoading = false
                         return true
                     } else {
-                        await transaction.finish()
+                        // 不调用 transaction.finish()，保留在 StoreKit 队列中。
+                        // 下次 App 启动时 Transaction.updates 会重放，再次尝试 /verify。
                         LoggerService.shared.warning(
-                            module: "SubscriptionService", message: "服务器验证失败，购买未完成")
+                            module: "SubscriptionService",
+                            message: "后端 /verify 全部重试失败，Transaction 保留在队列，等待下次补发")
                         isLoading = false
                         return false
                     }
@@ -135,7 +152,33 @@ class SubscriptionService: ObservableObject {
         }
     }
 
-    // MARK: - 验证交易
+    // MARK: - 验证交易（带指数退避重试）
+    /// 对 /verify 接口进行最多 verifyMaxRetries 次重试，使用指数退避策略。
+    /// 任何环境（sandbox / production / Xcode）下都必须执行，不得有环境分支跳过此调用。
+    private func verifyTransactionWithServerWithRetry(
+        transactionJWS: String, transaction: StoreKit.Transaction
+    ) async -> Bool {
+        for attempt in 0..<SubscriptionService.verifyMaxRetries {
+            let success = await verifyTransactionWithServer(
+                transactionJWS: transactionJWS, transaction: transaction)
+            if success { return true }
+
+            let isLastAttempt = attempt == SubscriptionService.verifyMaxRetries - 1
+            if !isLastAttempt {
+                let delay = SubscriptionService.verifyRetryDelay(attempt: attempt)
+                LoggerService.shared.warning(
+                    module: "SubscriptionService",
+                    message: "/verify 失败，\(delay / 1_000_000_000)s 后重试 (\(attempt + 1)/\(SubscriptionService.verifyMaxRetries))")
+                try? await Task.sleep(nanoseconds: delay)
+            }
+        }
+        LoggerService.shared.error(
+            module: "SubscriptionService",
+            message: "/verify 接口已重试 \(SubscriptionService.verifyMaxRetries) 次仍失败，Transaction 暂不 finish")
+        return false
+    }
+
+    // MARK: - 验证交易（单次）
     private func verifyTransactionWithServer(
         transactionJWS: String, transaction: StoreKit.Transaction
     ) async -> Bool {
@@ -146,9 +189,10 @@ class SubscriptionService: ObservableObject {
         }
 
         LoggerService.shared.info(
-            module: "SubscriptionService", 
+            module: "SubscriptionService",
             message: "验证交易 - 用户: \(appleUserId.maskedAppleUserId), 产品: \(transaction.productID)")
 
+        // 从 JWS 提取环境，任何环境都透传，不做分支跳过
         let environment = JWSParser.extractEnvironment(from: transactionJWS)
         LoggerService.shared.info(
             module: "SubscriptionService", message: "交易环境: \(environment ?? "未知")")
@@ -171,14 +215,14 @@ class SubscriptionService: ObservableObject {
             } else {
                 errorMessage = response.message ?? "订阅验证失败"
                 LoggerService.shared.warning(
-                    module: "SubscriptionService", 
+                    module: "SubscriptionService",
                     message: "服务器验证失败: \(response.message ?? "未知错误"), 状态: \(response.status)")
                 return false
             }
         } catch {
             errorMessage = "服务器验证失败: \(error.localizedDescription)"
             LoggerService.shared.error(
-                module: "SubscriptionService", 
+                module: "SubscriptionService",
                 message: "服务器验证失败: \(error.localizedDescription), 错误类型: \(type(of: error))")
             return false
         }
@@ -342,7 +386,8 @@ class SubscriptionService: ObservableObject {
                     continue
                 }
 
-                let success = await self.verifyTransactionWithServer(
+                // 同样使用带重试的验证，成功后才 finish
+                let success = await self.verifyTransactionWithServerWithRetry(
                     transactionJWS: transactionJWS, transaction: transaction)
                 if success {
                     await transaction.finish()
@@ -352,9 +397,66 @@ class SubscriptionService: ObservableObject {
                         LoggerService.shared.info(
                             module: "SubscriptionService", message: "交易更新处理完成")
                     }
+                } else {
+                    await MainActor.run {
+                        LoggerService.shared.warning(
+                            module: "SubscriptionService",
+                            message: "Transaction.updates: /verify 重试全部失败，Transaction 保留队列")
+                    }
                 }
             }
         }
+    }
+
+    // MARK: - 遍历 currentEntitlements 补发 /verify
+    /// 每次 App 进入前台 / 用户登录后调用。
+    /// 遍历 StoreKit 2 的 Transaction.currentEntitlements，对每个有效权益调用 /verify，
+    /// 确保即使 Transaction.updates 未来得及触发，后端也能收到 original_transaction_id。
+    func verifyCurrentEntitlements() async {
+        guard authService.appleUserId != nil else {
+            LoggerService.shared.warning(
+                module: "SubscriptionService",
+                message: "verifyCurrentEntitlements: 用户未登录，跳过")
+            return
+        }
+
+        LoggerService.shared.info(
+            module: "SubscriptionService",
+            message: "开始遍历 currentEntitlements 补发 /verify")
+
+        var count = 0
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result else {
+                LoggerService.shared.warning(
+                    module: "SubscriptionService",
+                    message: "currentEntitlements: 交易未通过 StoreKit 验证，跳过")
+                continue
+            }
+            guard transaction.productType == .autoRenewable else { continue }
+
+            let jws = result.jwsRepresentation
+            count += 1
+            LoggerService.shared.info(
+                module: "SubscriptionService",
+                message: "currentEntitlements: 补发 /verify，产品: \(transaction.productID)")
+
+            let success = await verifyTransactionWithServerWithRetry(
+                transactionJWS: jws, transaction: transaction)
+            if success {
+                await transaction.finish()
+            } else {
+                LoggerService.shared.warning(
+                    module: "SubscriptionService",
+                    message: "currentEntitlements: /verify 失败，Transaction 保留队列")
+            }
+        }
+
+        LoggerService.shared.info(
+            module: "SubscriptionService",
+            message: "currentEntitlements 遍历完成，共处理 \(count) 个有效权益")
+
+        // 无论是否有权益，都刷新一次服务器侧状态
+        await querySubscriptionStatus()
     }
 
     // MARK: - 更新订阅状态
@@ -371,7 +473,9 @@ class SubscriptionService: ObservableObject {
         do {
             try await AppStore.sync()
             LoggerService.shared.info(module: "SubscriptionService", message: "AppStore 同步成功")
-            await syncSubscriptionStatus()
+            // AppStore.sync() 会触发 Transaction.updates 重放进行 /verify，
+            // 同时对 currentEntitlements 显式补发，覆盖重装/账号切换等边缘场景
+            await verifyCurrentEntitlements()
             LoggerService.shared.info(module: "SubscriptionService", message: "恢复购买成功")
         } catch {
             errorMessage = "恢复购买失败: \(error.localizedDescription)"

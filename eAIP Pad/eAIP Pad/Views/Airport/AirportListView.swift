@@ -101,11 +101,11 @@ struct AirportListView: View {
             }
         }
         .task {
-            if authService.authenticationState == .authenticated {
-                await loadAirports()
-            }
+            // 无需登录即可加载机场列表
+            await loadAirports()
         }
         .onChange(of: authService.authenticationState) { _, newValue in
+            // 登录成功后重新加载，以便后端返回个性化数据（如已订阅用户的额外信息）
             if newValue == .authenticated {
                 Task { await loadAirports() }
             }
@@ -113,7 +113,6 @@ struct AirportListView: View {
     }
 
     private func loadAirports() async {
-        guard authService.authenticationState == .authenticated else { return }
         isLoading = true
         errorMessage = nil
 

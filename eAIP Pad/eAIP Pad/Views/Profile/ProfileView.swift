@@ -10,6 +10,7 @@ struct ProfileView: View {
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var airacVersions: [AIRACVersion]
     @StateObject private var subscriptionService = SubscriptionService.shared
+    @StateObject private var authService = AuthenticationService.shared
     @State private var showingSettings = false
     @State private var showingAbout = false
     @State private var showingSubscription = false
@@ -22,6 +23,7 @@ struct ProfileView: View {
     @State private var errorMessage: String = ""
     @State private var mailData: MailData?
     @State private var showingSignOutConfirmation = false
+    @State private var showingLoginSheet = false
     
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -37,8 +39,13 @@ struct ProfileView: View {
             Section {
                 SubscriptionStatusCard(
                     subscriptionService: subscriptionService,
+                    isAuthenticated: authService.authenticationState == .authenticated,
                     onSubscribe: {
-                        showingSubscription = true
+                        if authService.authenticationState == .authenticated {
+                            showingSubscription = true
+                        } else {
+                            showingLoginSheet = true
+                        }
                     }
                 )
             }
@@ -159,17 +166,33 @@ struct ProfileView: View {
                 
                 // 账户管理
                 Section {
-                    Button {
-                        showingSignOutConfirmation = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundColor(.red)
-                                .frame(width: 24)
-                            
-                            Text("退出登录")
-                                .font(.subheadline)
-                                .foregroundColor(.red)
+                    if authService.authenticationState == .authenticated {
+                        Button {
+                            showingSignOutConfirmation = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .foregroundColor(.red)
+                                    .frame(width: 24)
+
+                                Text("退出登录")
+                                    .font(.subheadline)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    } else {
+                        Button {
+                            showingLoginSheet = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                                    .foregroundColor(.blue)
+                                    .frame(width: 24)
+
+                                Text("前往登录")
+                                    .font(.subheadline)
+                                    .foregroundColor(.blue)
+                            }
                         }
                     }
                 }
@@ -186,6 +209,18 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
+        }
+        .sheet(isPresented: $showingLoginSheet) {
+            NavigationStack {
+                LoginView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("关闭") {
+                                showingLoginSheet = false
+                            }
+                        }
+                    }
+            }
         }
         .alert("缓存已清理", isPresented: $showingCacheCleared) {
             Button("确定", role: .cancel) {}
@@ -219,7 +254,7 @@ struct ProfileView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("退出后需要重新登录才能使用应用")
+            Text("退出后将进入游客模式，仍可访问基础页面，登录后可继续使用完整功能")
         }
         .sheet(item: $mailData) { data in
             MailComposeView(
@@ -233,6 +268,11 @@ struct ProfileView: View {
         }
         .onAppear {
             Task { await updateCacheSize() }
+        }
+        .onChange(of: authService.authenticationState) { _, newState in
+            if newState == .authenticated {
+                showingLoginSheet = false
+            }
         }
     }
     

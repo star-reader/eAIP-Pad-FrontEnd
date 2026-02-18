@@ -197,6 +197,18 @@ extension AppError {
             return appError
         }
         
+        // NetworkError 映射
+        if let networkError = error as? NetworkError {
+            switch networkError {
+            case .unauthorized:
+                return .unauthorized
+            case .serverError(let code, _) where code == 403:
+                return .subscriptionNotFound
+            default:
+                break
+            }
+        }
+        
         if let appNetworkError = error as? AppNetworkError {
             return .network(appNetworkError)
         }

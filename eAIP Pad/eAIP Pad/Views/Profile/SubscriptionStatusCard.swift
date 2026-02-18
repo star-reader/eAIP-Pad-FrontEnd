@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SubscriptionStatusCard: View {
     @ObservedObject var subscriptionService: SubscriptionService
+    let isAuthenticated: Bool
     let onSubscribe: () -> Void
     @State private var isRefreshing = false
     
@@ -80,7 +81,7 @@ struct SubscriptionStatusCard: View {
             }
             
             if !subscriptionService.hasValidSubscription && subscriptionService.subscriptionStatus != .trial {
-                Button("立即订阅") {
+                Button(isAuthenticated ? "立即订阅" : "登录后订阅") {
                     onSubscribe()
                 }
                 .buttonStyle(.borderedProminent)

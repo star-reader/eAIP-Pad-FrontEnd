@@ -116,12 +116,11 @@ struct RegulationsView: View {
             }
         }
         .task {
-            // 仅在已认证后加载
-            if authService.authenticationState == .authenticated {
-                await loadAirports()
-            }
+            // 无需登录即可加载机场细则列表
+            await loadAirports()
         }
         .onChange(of: authService.authenticationState) { _, newValue in
+            // 登录成功后重新加载
             if newValue == .authenticated {
                 Task { await loadAirports() }
             }
@@ -130,8 +129,6 @@ struct RegulationsView: View {
 
     // MARK: - 加载机场数据
     private func loadAirports() async {
-        // 若未认证则等待，不启动加载流程
-        guard authService.authenticationState == .authenticated else { return }
         isLoading = true
         errorMessage = nil
 
