@@ -50,10 +50,7 @@ struct MainSidebarView: View {
             if let item = selectedSidebarItem {
                 ContentListView(
                     selectedItem: item,
-                    selectedAirport: $selectedAirport,
-                    onLoginRequired: {
-                        showingLoginSheet = true
-                    }
+                    selectedAirport: $selectedAirport
                 )
                 .environment(\.selectedChartBinding, $selectedChart)
                 .environment(\.selectedAirportBinding, $selectedAirport)
@@ -177,17 +174,10 @@ struct SidebarView: View {
 struct ContentListView: View {
     let selectedItem: SidebarItem
     @Binding var selectedAirport: AirportResponse?
-    let onLoginRequired: () -> Void
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
-    @StateObject private var authService = AuthenticationService.shared
 
     var body: some View {
         Group {
-            if selectedItem != .profile && authService.authenticationState != .authenticated {
-                SidebarLoginRequiredPlaceholderView(featureName: selectedItem.title) {
-                    onLoginRequired()
-                }
-            } else {
             switch selectedItem {
             case .airports:
                 // 机场页面需要处理机场选择
@@ -219,7 +209,6 @@ struct ContentListView: View {
             case .profile:
                 // 个人中心使用 sheet 显示设置，不需要 NavigationStack
                 ProfileView()
-            }
             }
         }
     }

@@ -29,6 +29,8 @@ struct PDFReaderView: View {
     @State private var showingThumbnails = false  // 显示缩略图目录
     @State private var showingShareSheet = false  // 显示分享菜单
     @State private var pdfFileToShare: URL?  // 要分享的 PDF 文件 URL
+    @State private var showingLoginSheet = false       // 未登录时弹出登录引导
+    @State private var showingSubscriptionSheet = false // 未订阅时弹出订阅页面
 
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -62,18 +64,20 @@ struct PDFReaderView: View {
                     ProgressView("加载PDF...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let errorMessage = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                        Button("重试") {
-                            Task {
-                                await loadPDF()
+                    VStack(spacing: 20) {
+                        if showingLoginSheet == false && showingSubscriptionSheet == false {
+                            // 用于非授权类错误的通用错误 UI
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.largeTitle)
+                                .foregroundColor(.orange)
+                            Text(errorMessage)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                            Button("重试") {
+                                Task { await loadPDF() }
                             }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let pdfDocument = pdfDocument {
@@ -242,6 +246,27 @@ struct PDFReaderView: View {
                     ShareSheet(items: [pdfFile])
                 }
             }
+            // 未登录：弹出登录页面
+            .sheet(isPresented: $showingLoginSheet) {
+                NavigationStack {
+                    LoginView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("关闭") {
+                                    showingLoginSheet = false
+                                    dismiss()
+                                }
+                            }
+                        }
+                }
+            }
+            // 未订阅：弹出订阅页面
+            .sheet(isPresented: $showingSubscriptionSheet) {
+                UnifiedSubscriptionView(onDismiss: {
+                    showingSubscriptionSheet = false
+                    dismiss()
+                })
+            }
         }
         .task(id: chartID) {
             LoggerService.shared.info(
@@ -336,7 +361,20 @@ struct PDFReaderView: View {
                 return
             }
 
-            // 2. 缓存未命中，从网络下载
+            // 2. 缓存未命中 — 先验证权限，再发网络请求
+            let authService = AuthenticationService.shared
+            let subscriptionService = SubscriptionService.shared
+
+            guard authService.authenticationState == .authenticated else {
+                // 未登录：直接抛出，不发无用请求
+                throw NetworkError.unauthorized
+            }
+
+            guard subscriptionService.hasValidSubscription else {
+                // 已登录但无订阅
+                throw AppError.subscriptionNotFound
+            }
+
             // 根据文档类型获取签名URL
             let signedURLResponse: SignedURLResponse
             switch documentType {
@@ -408,7 +446,20 @@ struct PDFReaderView: View {
             }
         } catch {
             await MainActor.run {
-                self.errorMessage = "加载PDF失败: \(error.localizedDescription)"
+                // 识别错误类型，弹出对应引导而不是显示错误文本
+                let appError = AppError.from(error)
+                switch appError {
+                case .unauthorized, .tokenExpired:
+                    // 未登录或 Token 过期
+                    self.showingLoginSheet = true
+                    self.errorMessage = nil
+                case .subscriptionNotFound, .subscriptionExpired:
+                    // 已登录但无有效订阅
+                    self.showingSubscriptionSheet = true
+                    self.errorMessage = nil
+                default:
+                    self.errorMessage = "加载PDF失败: \(error.localizedDescription)"
+                }
             }
         }
 

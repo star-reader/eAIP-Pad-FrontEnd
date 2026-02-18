@@ -271,30 +271,32 @@ class NetworkService: ObservableObject {
     }
 
     // MARK: - 机场相关
+    // 浏览型接口：requiresAuth = false，无 Token 可正常请求，有 Token 时后端自动做个性化处理
     func getAirports(search: String? = nil) async throws -> [AirportResponse] {
         let endpoint = APIEndpoint.airports
-        // 注意：这里简化处理，实际应该构造带参数的URL
-        let response: [AirportResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [AirportResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
     func getAirport(icao: String) async throws -> AirportResponse {
-        let response: AirportResponse = try await makeRequest(endpoint: .airport(icao: icao))
+        let response: AirportResponse = try await makeRequest(endpoint: .airport(icao: icao), requiresAuth: false)
         return response
     }
 
     func getAirportCharts(icao: String) async throws -> [ChartResponse] {
-        let response: [ChartResponse] = try await makeRequest(endpoint: .airportCharts(icao: icao))
+        let response: [ChartResponse] = try await makeRequest(endpoint: .airportCharts(icao: icao), requiresAuth: false)
         return response
     }
 
     // MARK: - 航图相关
     func getChart(id: Int) async throws -> ChartResponse {
-        let response: ChartResponse = try await makeRequest(endpoint: .chart(id: id))
+        // 基础信息无需 Token
+        let response: ChartResponse = try await makeRequest(endpoint: .chart(id: id), requiresAuth: false)
         return response
     }
 
     func getChartSignedURL(id: Int) async throws -> SignedURLResponse {
+        // 付费操作，必须携带 Token
         let response: SignedURLResponse = try await makeRequest(endpoint: .chartSignedURL(id: id))
         return response
     }
@@ -303,20 +305,20 @@ class NetworkService: ObservableObject {
     func getEnrouteCharts(type: String? = nil) async throws -> [ChartResponse] {
         let endpoint = APIEndpoint.enrouteCharts
         if let type = type, !type.isEmpty {
-            // 添加类型参数
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "type", value: type)]
         }
-        let response: [ChartResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [ChartResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
     func getEnrouteChart(id: Int) async throws -> ChartResponse {
-        let response: ChartResponse = try await makeRequest(endpoint: .enrouteChart(id: id))
+        let response: ChartResponse = try await makeRequest(endpoint: .enrouteChart(id: id), requiresAuth: false)
         return response
     }
 
     func getEnrouteSignedURL(id: Int) async throws -> SignedURLResponse {
+        // 付费操作，必须携带 Token
         let response: SignedURLResponse = try await makeRequest(endpoint: .enrouteSignedURL(id: id))
         return response
     }
@@ -328,13 +330,13 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "category", value: category)]
         }
-        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
     func getAIPDocumentsByICAO(icao: String) async throws -> [AIPDocumentResponse] {
         let endpoint = APIEndpoint.aipDocumentsByICAO(icao: icao)
-        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
@@ -344,7 +346,7 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "chapter_type", value: chapterType)]
         }
-        let response: [SUPDocumentResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [SUPDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
@@ -354,7 +356,7 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "chapter_type", value: chapterType)]
         }
-        let response: [AMDTDocumentResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [AMDTDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
@@ -364,17 +366,19 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "series", value: series)]
         }
-        let response: [NOTAMDocumentResponse] = try await makeRequest(endpoint: endpoint)
+        let response: [NOTAMDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
         return response
     }
 
     func getDocument(type: String, id: Int) async throws -> DocumentDetailResponse {
+        // 文档基础信息无需 Token
         let response: DocumentDetailResponse = try await makeRequest(
-            endpoint: .document(type: type, id: id))
+            endpoint: .document(type: type, id: id), requiresAuth: false)
         return response
     }
 
     func getDocumentSignedURL(type: String, id: Int) async throws -> SignedURLResponse {
+        // 付费操作，必须携带 Token
         let response: SignedURLResponse = try await makeRequest(
             endpoint: .documentSignedURL(type: type, id: id))
         return response
@@ -399,7 +403,7 @@ class NetworkService: ObservableObject {
             let fltCat: String?
         }
 
-        let apiModel: MetarAPIModel = try await makeRequest(endpoint: .weatherMETAR(icao: icao))
+        let apiModel: MetarAPIModel = try await makeRequest(endpoint: .weatherMETAR(icao: icao), requiresAuth: false)
 
         let station = apiModel.icaoId
         let observationTime =
@@ -494,7 +498,7 @@ class NetworkService: ObservableObject {
             }
         }
 
-        let apiModel: TAFAPIModel = try await makeRequest(endpoint: .weatherTAF(icao: icao))
+        let apiModel: TAFAPIModel = try await makeRequest(endpoint: .weatherTAF(icao: icao), requiresAuth: false)
 
         let periods: [TAFPeriod]? = apiModel.fcsts?.map { f in
             let wind = formatWind(dir: f.wdir, spd: f.wspd)
@@ -523,7 +527,8 @@ class NetworkService: ObservableObject {
 
     // MARK: - AIRAC相关
     func getCurrentAIRAC() async throws -> AIRACResponse {
-        let response: AIRACResponse = try await makeRequest(endpoint: .currentAIRAC)
+        // AIRAC 版本信息属于公开数据，无需 Token
+        let response: AIRACResponse = try await makeRequest(endpoint: .currentAIRAC, requiresAuth: false)
         return response
     }
 

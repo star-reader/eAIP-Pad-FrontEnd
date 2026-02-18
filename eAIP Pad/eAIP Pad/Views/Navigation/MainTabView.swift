@@ -149,13 +149,9 @@ struct MainTabView: View {
 
     @ViewBuilder
     private func tabContent<Content: View>(featureName: String, content: Content) -> some View {
-        if authService.authenticationState == .authenticated {
-            content
-        } else {
-            LoginRequiredPlaceholderView(featureName: featureName) {
-                showingLoginSheet = true
-            }
-        }
+        // 浏览型内容无需登录，直接展示。
+        // 需要登录才能操作的功能（如打开 PDF）由各页面内部处理 401 时弹出登录引导。
+        content
     }
 }
 

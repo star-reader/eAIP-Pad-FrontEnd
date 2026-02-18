@@ -186,6 +186,8 @@ struct MainAppView: View {
     @Query private var userSettings: [UserSettings]
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var authService = AuthenticationService.shared
+    /// 用户点击「以后再说」跳过订阅页面，本次启动期间不再弹出
+    @State private var hasSkippedSubscription = false
 
     private var currentSettings: UserSettings {
         if let settings = userSettings.first {
@@ -212,12 +214,14 @@ struct MainAppView: View {
                     }
             }
             // 优先级 3: 检查订阅状态
-            else if subscriptionService.hasValidSubscription {
-                // 有订阅：显示主应用内容
+            else if subscriptionService.hasValidSubscription || hasSkippedSubscription {
+                // 有订阅，或用户本次已跳过：显示主应用内容
                 contentView
             } else {
-                // 已登录但没有订阅：显示订阅页面
-                UnifiedSubscriptionView()
+                // 已登录但没有订阅：显示订阅页面（提供「以后再说」跳过按钮）
+                UnifiedSubscriptionView(onDismiss: {
+                    hasSkippedSubscription = true
+                })
             }
         }
     }

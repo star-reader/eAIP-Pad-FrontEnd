@@ -3,6 +3,9 @@ import SwiftUI
 
 /// 统一订阅页面
 struct UnifiedSubscriptionView: View {
+    /// 用户点击「以后再说」时的回调；为 nil 时不显示取消按钮（如作为独立页面使用）
+    var onDismiss: (() -> Void)? = nil
+
     @StateObject private var subscriptionService = SubscriptionService.shared
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -180,6 +183,16 @@ struct UnifiedSubscriptionView: View {
             }
             .navigationTitle("订阅")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if let dismiss = onDismiss {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("以后再说") {
+                            dismiss()
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                }
+            }
         }
         .alert("订阅失败", isPresented: $showingError) {
             Button("确定", role: .cancel) {
