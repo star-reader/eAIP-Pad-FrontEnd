@@ -10,9 +10,6 @@ import SwiftUI
 // MARK: - 网络服务
 class NetworkService: ObservableObject {
     static let shared = NetworkService()
-
-    private var accessToken: String?
-    private var refreshToken: String?
     
     // 请求任务管理（用于取消）
     private var activeTasks: [UUID: Task<Any, Error>] = [:]
@@ -24,34 +21,6 @@ class NetworkService: ObservableObject {
     
     deinit {
         cancelAllRequests()
-    }
-
-    // MARK: - 认证相关
-    func setTokens(accessToken: String, refreshToken: String) {
-        self.accessToken = accessToken
-        // 避免将空字符串当作有效 refresh token 存入
-        self.refreshToken = refreshToken.isEmpty ? nil : refreshToken
-        // 使用脱敏后的 token 记录日志
-        LoggerService.shared.info(
-            module: "NetworkService", message: "设置 Access Token: \(accessToken.maskedToken)")
-        if !refreshToken.isEmpty {
-            LoggerService.shared.info(
-                module: "NetworkService", message: "设置 Refresh Token: \(refreshToken.maskedToken)")
-        }
-    }
-
-    func clearTokens() {
-        LoggerService.shared.info(module: "NetworkService", message: "清除 Tokens")
-        self.accessToken = nil
-        self.refreshToken = nil
-    }
-
-    func getCurrentAccessToken() -> String? {
-        return accessToken
-    }
-
-    func getCurrentRefreshToken() -> String? {
-        return refreshToken
     }
     
     // MARK: - 请求取消管理
@@ -83,7 +52,6 @@ class NetworkService: ObservableObject {
         endpoint: APIEndpoint,
         method: HTTPMethod = .GET,
         body: Data? = nil,
-        requiresAuth: Bool = true,
         maxRetries: Int = 3
     ) async throws -> T {
         var lastError: Error?
@@ -93,8 +61,7 @@ class NetworkService: ObservableObject {
                 return try await makeRequest(
                     endpoint: endpoint,
                     method: method,
-                    body: body,
-                    requiresAuth: requiresAuth
+                    body: body
                 )
             } catch {
                 lastError = error
@@ -157,17 +124,11 @@ class NetworkService: ObservableObject {
     private func makeRequest<T: Codable>(
         endpoint: APIEndpoint,
         method: HTTPMethod = .GET,
-        body: Data? = nil,
-        requiresAuth: Bool = true
+        body: Data? = nil
     ) async throws -> T {
         var request = URLRequest(url: endpoint.url)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // 添加认证头
-        if requiresAuth, let token = accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
 
         // 添加请求体
         if let body = body {
@@ -182,31 +143,6 @@ class NetworkService: ObservableObject {
         guard let httpResponse = response as? HTTPURLResponse else {
             logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
             throw NetworkError.invalidResponse
-        }
-
-        // 处理401错误，尝试刷新token
-        if httpResponse.statusCode == 401 && requiresAuth {
-            logResponse(response: httpResponse, data: data, error: nil)
-
-            // 若无 refresh token，直接返回未授权，避免抛出“没有刷新令牌”误导性错误
-            guard let currentRefreshToken = self.refreshToken, !currentRefreshToken.isEmpty else {
-                throw NetworkError.unauthorized
-            }
-
-            try await refreshAccessToken()
-            // 重新设置认证头并重试
-            request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
-            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                retryHttpResponse.statusCode == 200
-            else {
-                logResponse(
-                    response: retryResponse as? HTTPURLResponse, data: retryData,
-                    error: NetworkError.unauthorized)
-                throw NetworkError.unauthorized
-            }
-            logResponse(response: retryHttpResponse, data: retryData, error: nil)
-            return try JSONDecoder().decode(APIResponse<T>.self, from: retryData).data!
         }
 
         guard httpResponse.statusCode == 200 else {
@@ -226,77 +162,31 @@ class NetworkService: ObservableObject {
         return responseData
     }
 
-    // MARK: - 认证方法
-    func appleLogin(idToken: String) async throws -> AuthResponse {
-        LoggerService.shared.info(module: "NetworkService", message: "开始 Apple 登录")
-        // 使用脱敏后的 idToken 记录日志
-        LoggerService.shared.info(module: "NetworkService", message: "ID Token: \(idToken.maskedToken)")
-
-        let body = ["id_token": idToken]
-        let bodyData = try JSONEncoder().encode(body)
-
-        let response: AuthResponse = try await makeRequestWithRetry(
-            endpoint: .appleLogin,
-            method: .POST,
-            body: bodyData,
-            requiresAuth: false
-        )
-        LoggerService.shared.info(module: "NetworkService", message: "Apple 登录成功")
-        return response
-    }
-
-    func refreshAccessToken() async throws {
-        LoggerService.shared.info(module: "NetworkService", message: "开始刷新 Access Token")
-        guard let refreshToken = refreshToken, !refreshToken.isEmpty else {
-            LoggerService.shared.error(module: "NetworkService", message: "刷新失败：缺少 Refresh Token")
-            throw NetworkError.noRefreshToken
-        }
-
-        // 加密记录 refreshToken
-        LoggerService.shared.info(
-            module: "NetworkService", message: "使用 Refresh Token: \(refreshToken)")
-
-        let body = ["refresh_token": refreshToken]
-        let bodyData = try JSONEncoder().encode(body)
-
-        let response: AuthResponse = try await makeRequest(
-            endpoint: .refreshToken,
-            method: .POST,
-            body: bodyData,
-            requiresAuth: false
-        )
-
-        setTokens(accessToken: response.accessToken, refreshToken: response.refreshToken)
-        LoggerService.shared.info(module: "NetworkService", message: "Access Token 刷新成功")
-    }
-
     // MARK: - 机场相关
     // 浏览型接口：requiresAuth = false，无 Token 可正常请求，有 Token 时后端自动做个性化处理
     func getAirports(search: String? = nil) async throws -> [AirportResponse] {
         let endpoint = APIEndpoint.airports
-        let response: [AirportResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [AirportResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
     func getAirport(icao: String) async throws -> AirportResponse {
-        let response: AirportResponse = try await makeRequest(endpoint: .airport(icao: icao), requiresAuth: false)
+        let response: AirportResponse = try await makeRequest(endpoint: .airport(icao: icao))
         return response
     }
 
     func getAirportCharts(icao: String) async throws -> [ChartResponse] {
-        let response: [ChartResponse] = try await makeRequest(endpoint: .airportCharts(icao: icao), requiresAuth: false)
+        let response: [ChartResponse] = try await makeRequest(endpoint: .airportCharts(icao: icao))
         return response
     }
 
     // MARK: - 航图相关
     func getChart(id: Int) async throws -> ChartResponse {
-        // 基础信息无需 Token
-        let response: ChartResponse = try await makeRequest(endpoint: .chart(id: id), requiresAuth: false)
+        let response: ChartResponse = try await makeRequest(endpoint: .chart(id: id))
         return response
     }
 
     func getChartSignedURL(id: Int) async throws -> SignedURLResponse {
-        // 付费操作，必须携带 Token
         let response: SignedURLResponse = try await makeRequest(endpoint: .chartSignedURL(id: id))
         return response
     }
@@ -308,17 +198,16 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "type", value: type)]
         }
-        let response: [ChartResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [ChartResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
     func getEnrouteChart(id: Int) async throws -> ChartResponse {
-        let response: ChartResponse = try await makeRequest(endpoint: .enrouteChart(id: id), requiresAuth: false)
+        let response: ChartResponse = try await makeRequest(endpoint: .enrouteChart(id: id))
         return response
     }
 
     func getEnrouteSignedURL(id: Int) async throws -> SignedURLResponse {
-        // 付费操作，必须携带 Token
         let response: SignedURLResponse = try await makeRequest(endpoint: .enrouteSignedURL(id: id))
         return response
     }
@@ -330,13 +219,13 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "category", value: category)]
         }
-        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
     func getAIPDocumentsByICAO(icao: String) async throws -> [AIPDocumentResponse] {
         let endpoint = APIEndpoint.aipDocumentsByICAO(icao: icao)
-        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [AIPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
@@ -346,7 +235,7 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "chapter_type", value: chapterType)]
         }
-        let response: [SUPDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [SUPDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
@@ -356,7 +245,7 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "chapter_type", value: chapterType)]
         }
-        let response: [AMDTDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [AMDTDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
@@ -366,19 +255,17 @@ class NetworkService: ObservableObject {
             var components = URLComponents(url: endpoint.url, resolvingAgainstBaseURL: false)!
             components.queryItems = [URLQueryItem(name: "series", value: series)]
         }
-        let response: [NOTAMDocumentResponse] = try await makeRequest(endpoint: endpoint, requiresAuth: false)
+        let response: [NOTAMDocumentResponse] = try await makeRequest(endpoint: endpoint)
         return response
     }
 
     func getDocument(type: String, id: Int) async throws -> DocumentDetailResponse {
-        // 文档基础信息无需 Token
         let response: DocumentDetailResponse = try await makeRequest(
-            endpoint: .document(type: type, id: id), requiresAuth: false)
+            endpoint: .document(type: type, id: id))
         return response
     }
 
     func getDocumentSignedURL(type: String, id: Int) async throws -> SignedURLResponse {
-        // 付费操作，必须携带 Token
         let response: SignedURLResponse = try await makeRequest(
             endpoint: .documentSignedURL(type: type, id: id))
         return response
@@ -403,7 +290,7 @@ class NetworkService: ObservableObject {
             let fltCat: String?
         }
 
-        let apiModel: MetarAPIModel = try await makeRequest(endpoint: .weatherMETAR(icao: icao), requiresAuth: false)
+        let apiModel: MetarAPIModel = try await makeRequest(endpoint: .weatherMETAR(icao: icao))
 
         let station = apiModel.icaoId
         let observationTime =
@@ -498,7 +385,7 @@ class NetworkService: ObservableObject {
             }
         }
 
-        let apiModel: TAFAPIModel = try await makeRequest(endpoint: .weatherTAF(icao: icao), requiresAuth: false)
+        let apiModel: TAFAPIModel = try await makeRequest(endpoint: .weatherTAF(icao: icao))
 
         let periods: [TAFPeriod]? = apiModel.fcsts?.map { f in
             let wind = formatWind(dir: f.wdir, spd: f.wspd)
@@ -527,256 +414,8 @@ class NetworkService: ObservableObject {
 
     // MARK: - AIRAC相关
     func getCurrentAIRAC() async throws -> AIRACResponse {
-        // AIRAC 版本信息属于公开数据，无需 Token
-        let response: AIRACResponse = try await makeRequest(endpoint: .currentAIRAC, requiresAuth: false)
+        let response: AIRACResponse = try await makeRequest(endpoint: .currentAIRAC)
         return response
-    }
-
-    // MARK: - IAP 相关方法
-    /// 验证 JWS 凭证
-    func verifyJWS(transactionJWS: String, appleUserId: String, environment: String? = nil)
-        async throws -> VerifyJWSResponse
-    {
-        LoggerService.shared.info(module: "NetworkService", message: "开始验证 JWS")
-        // 敏感信息只在 DEBUG 模式记录
-        LoggerService.shared.debug(
-            module: "NetworkService", message: "Transaction JWS: \(transactionJWS)")
-        LoggerService.shared.info(
-            module: "NetworkService", message: "Apple User ID: \(appleUserId.maskedAppleUserId)")
-        LoggerService.shared.info(
-            module: "NetworkService", message: "Environment: \(environment ?? "nil")")
-
-        let request = VerifyJWSRequest(
-            transactionJWS: transactionJWS,
-            appleUserId: appleUserId,
-            environment: environment
-        )
-        let bodyData = try JSONEncoder().encode(request)
-
-        // IAP API 可能返回直接响应或 APIResponse 包装
-        var urlRequest = URLRequest(url: APIEndpoint.iapVerify.url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = bodyData
-
-        if let token = accessToken {
-            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        logRequest(request: urlRequest, body: bodyData)
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
-            throw NetworkError.invalidResponse
-        }
-
-        // 处理401错误
-        if httpResponse.statusCode == 401 {
-            try await refreshAccessToken()
-            urlRequest.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await URLSession.shared.data(for: urlRequest)
-            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                retryHttpResponse.statusCode == 200
-            else {
-                throw NetworkError.unauthorized
-            }
-            logResponse(response: retryHttpResponse, data: retryData, error: nil)
-
-            // 尝试直接解析或 APIResponse 格式
-            do {
-                return try JSONDecoder().decode(VerifyJWSResponse.self, from: retryData)
-            } catch {
-                let apiResponse = try JSONDecoder().decode(
-                    APIResponse<VerifyJWSResponse>.self, from: retryData)
-                guard let responseData = apiResponse.data else {
-                    throw NetworkError.noData
-                }
-                return responseData
-            }
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let error = NetworkError.serverError(httpResponse.statusCode)
-            logResponse(response: httpResponse, data: data, error: error)
-            throw error
-        }
-
-        logResponse(response: httpResponse, data: data, error: nil)
-
-        do {
-            return try JSONDecoder().decode(VerifyJWSResponse.self, from: data)
-        } catch {
-            let apiResponse = try JSONDecoder().decode(
-                APIResponse<VerifyJWSResponse>.self, from: data)
-            guard let responseData = apiResponse.data else {
-                throw NetworkError.noData
-            }
-            return responseData
-        }
-    }
-
-    /// 批量同步订阅
-    func syncSubscriptions(
-        transactionJWSList: [String], appleUserId: String, environment: String? = nil
-    ) async throws -> SyncSubscriptionResponse {
-        LoggerService.shared.info(
-            module: "NetworkService", 
-            message: "开始批量同步订阅，共 \(transactionJWSList.count) 个交易")
-        // 敏感信息只在 DEBUG 模式记录
-        LoggerService.shared.debug(
-            module: "NetworkService",
-            message: "Transaction JWS List: \(transactionJWSList.joined(separator: ","))")
-        LoggerService.shared.info(
-            module: "NetworkService", message: "Apple User ID: \(appleUserId.maskedAppleUserId)")
-        LoggerService.shared.info(
-            module: "NetworkService", message: "Environment: \(environment ?? "nil")")
-
-        let request = SyncSubscriptionRequest(
-            transactionJWSList: transactionJWSList,
-            appleUserId: appleUserId,
-            environment: environment
-        )
-        let bodyData = try JSONEncoder().encode(request)
-
-        var urlRequest = URLRequest(url: APIEndpoint.iapSync.url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = bodyData
-
-        if let token = accessToken {
-            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        logRequest(request: urlRequest, body: bodyData)
-
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
-            throw NetworkError.invalidResponse
-        }
-
-        // 处理401错误
-        if httpResponse.statusCode == 401 {
-            try await refreshAccessToken()
-            urlRequest.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await URLSession.shared.data(for: urlRequest)
-            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                retryHttpResponse.statusCode == 200
-            else {
-                throw NetworkError.unauthorized
-            }
-            logResponse(response: retryHttpResponse, data: retryData, error: nil)
-
-            do {
-                return try JSONDecoder().decode(SyncSubscriptionResponse.self, from: retryData)
-            } catch {
-                let apiResponse = try JSONDecoder().decode(
-                    APIResponse<SyncSubscriptionResponse>.self, from: retryData)
-                guard let responseData = apiResponse.data else {
-                    throw NetworkError.noData
-                }
-                return responseData
-            }
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let error = NetworkError.serverError(httpResponse.statusCode)
-            logResponse(response: httpResponse, data: data, error: error)
-            throw error
-        }
-
-        logResponse(response: httpResponse, data: data, error: nil)
-
-        do {
-            return try JSONDecoder().decode(SyncSubscriptionResponse.self, from: data)
-        } catch {
-            let apiResponse = try JSONDecoder().decode(
-                APIResponse<SyncSubscriptionResponse>.self, from: data)
-            guard let responseData = apiResponse.data else {
-                throw NetworkError.noData
-            }
-            return responseData
-        }
-    }
-
-    /// 查询订阅状态
-    func getSubscriptionStatus(appleUserId: String) async throws -> SubscriptionStatusResponse {
-        LoggerService.shared.info(module: "NetworkService", message: "开始查询订阅状态")
-        // 敏感信息脱敏记录
-        LoggerService.shared.info(
-            module: "NetworkService", message: "Apple User ID: \(appleUserId.maskedAppleUserId)")
-
-        var components = URLComponents(
-            url: APIEndpoint.iapStatus.url, resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "apple_user_id", value: appleUserId)]
-
-        guard let finalURL = components.url else {
-            LoggerService.shared.error(module: "NetworkService", message: "查询订阅状态失败：无效的 URL")
-            throw NetworkError.invalidURL
-        }
-
-        var request = URLRequest(url: finalURL)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if let token = accessToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        logRequest(request: request, body: nil)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            logResponse(response: nil, data: data, error: NetworkError.invalidResponse)
-            throw NetworkError.invalidResponse
-        }
-
-        // 处理401错误
-        if httpResponse.statusCode == 401 {
-            try await refreshAccessToken()
-            request.setValue("Bearer \(accessToken!)", forHTTPHeaderField: "Authorization")
-            let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
-            guard let retryHttpResponse = retryResponse as? HTTPURLResponse,
-                retryHttpResponse.statusCode == 200
-            else {
-                throw NetworkError.unauthorized
-            }
-            logResponse(response: retryHttpResponse, data: retryData, error: nil)
-
-            do {
-                return try JSONDecoder().decode(SubscriptionStatusResponse.self, from: retryData)
-            } catch {
-                let apiResponse = try JSONDecoder().decode(
-                    APIResponse<SubscriptionStatusResponse>.self, from: retryData)
-                guard let responseData = apiResponse.data else {
-                    throw NetworkError.noData
-                }
-                return responseData
-            }
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            let error = NetworkError.serverError(httpResponse.statusCode)
-            logResponse(response: httpResponse, data: data, error: error)
-            throw error
-        }
-
-        logResponse(response: httpResponse, data: data, error: nil)
-
-        do {
-            return try JSONDecoder().decode(SubscriptionStatusResponse.self, from: data)
-        } catch {
-            let apiResponse = try JSONDecoder().decode(
-                APIResponse<SubscriptionStatusResponse>.self, from: data)
-            guard let responseData = apiResponse.data else {
-                throw NetworkError.noData
-            }
-            return responseData
-        }
     }
 
     // MARK: - 日志记录方法

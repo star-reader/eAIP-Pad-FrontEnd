@@ -12,7 +12,6 @@ struct RegulationNavigation: Identifiable, Hashable {
 struct RegulationsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @ObservedObject private var authService = AuthenticationService.shared
     @State private var searchText = ""
     @State private var isLoading = false
     @State private var airports: [AirportResponse] = []
@@ -116,14 +115,7 @@ struct RegulationsView: View {
             }
         }
         .task {
-            // 无需登录即可加载机场细则列表
             await loadAirports()
-        }
-        .onChange(of: authService.authenticationState) { _, newValue in
-            // 登录成功后重新加载
-            if newValue == .authenticated {
-                Task { await loadAirports() }
-            }
         }
     }
 

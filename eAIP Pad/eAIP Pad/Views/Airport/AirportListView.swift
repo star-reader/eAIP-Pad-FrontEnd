@@ -6,7 +6,6 @@ import SwiftUI
 struct AirportListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
-    @ObservedObject private var authService = AuthenticationService.shared
     @Query private var localAirports: [Airport]
     @State private var searchText = ""
     @State private var airports: [AirportResponse] = []
@@ -101,14 +100,7 @@ struct AirportListView: View {
             }
         }
         .task {
-            // 无需登录即可加载机场列表
             await loadAirports()
-        }
-        .onChange(of: authService.authenticationState) { _, newValue in
-            // 登录成功后重新加载，以便后端返回个性化数据（如已订阅用户的额外信息）
-            if newValue == .authenticated {
-                Task { await loadAirports() }
-            }
         }
     }
 

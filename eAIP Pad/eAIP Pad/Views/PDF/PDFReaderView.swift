@@ -13,7 +13,6 @@ struct PDFReaderView: View {
     let documentType: DocumentType
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.columnVisibilityBinding) private var columnVisibilityBinding
     @Query private var annotations: [ChartAnnotation]
     @Query private var pinnedCharts: [PinnedChart]
@@ -29,8 +28,6 @@ struct PDFReaderView: View {
     @State private var showingThumbnails = false  // 显示缩略图目录
     @State private var showingShareSheet = false  // 显示分享菜单
     @State private var pdfFileToShare: URL?  // 要分享的 PDF 文件 URL
-    @State private var showingLoginSheet = false       // 未登录时弹出登录引导
-    @State private var showingSubscriptionSheet = false // 未订阅时弹出订阅页面
 
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -65,19 +62,16 @@ struct PDFReaderView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let errorMessage = errorMessage {
                     VStack(spacing: 20) {
-                        if showingLoginSheet == false && showingSubscriptionSheet == false {
-                            // 用于非授权类错误的通用错误 UI
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.largeTitle)
-                                .foregroundColor(.orange)
-                            Text(errorMessage)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                            Button("重试") {
-                                Task { await loadPDF() }
-                            }
-                            .buttonStyle(.borderedProminent)
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                        Text(errorMessage)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Button("重试") {
+                            Task { await loadPDF() }
                         }
+                        .buttonStyle(.borderedProminent)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let pdfDocument = pdfDocument {
@@ -246,27 +240,6 @@ struct PDFReaderView: View {
                     ShareSheet(items: [pdfFile])
                 }
             }
-            // 未登录：弹出登录页面
-            .sheet(isPresented: $showingLoginSheet) {
-                NavigationStack {
-                    LoginView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button("关闭") {
-                                    showingLoginSheet = false
-                                    dismiss()
-                                }
-                            }
-                        }
-                }
-            }
-            // 未订阅：弹出订阅页面
-            .sheet(isPresented: $showingSubscriptionSheet) {
-                UnifiedSubscriptionView(onDismiss: {
-                    showingSubscriptionSheet = false
-                    dismiss()
-                })
-            }
         }
         .task(id: chartID) {
             LoggerService.shared.info(
@@ -361,21 +334,7 @@ struct PDFReaderView: View {
                 return
             }
 
-            // 2. 缓存未命中 — 先验证权限，再发网络请求
-            let authService = AuthenticationService.shared
-            let subscriptionService = SubscriptionService.shared
-
-            guard authService.authenticationState == .authenticated else {
-                // 未登录：直接抛出，不发无用请求
-                throw NetworkError.unauthorized
-            }
-
-            guard subscriptionService.hasValidSubscription else {
-                // 已登录但无订阅
-                throw AppError.subscriptionNotFound
-            }
-
-            // 根据文档类型获取签名URL
+            // 2. 缓存未命中，直接请求当前文档
             let signedURLResponse: SignedURLResponse
             switch documentType {
             case .chart:
@@ -416,13 +375,8 @@ struct PDFReaderView: View {
                 of: "/api/v1/", with: "/eaip/v1/")
             let fullURL = URL(string: NetworkConfig.baseURL + correctedPath)!
 
-            // 下载PDF - 需要带Authorization头
             var pdfRequest = URLRequest(url: fullURL)
-
-            // 从NetworkService获取当前的access token
-            if let accessToken = NetworkService.shared.getCurrentAccessToken() {
-                pdfRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            }
+            pdfRequest.setValue("application/pdf", forHTTPHeaderField: "Accept")
 
             let (data, _) = try await URLSession.shared.data(for: pdfRequest)
 
@@ -446,20 +400,7 @@ struct PDFReaderView: View {
             }
         } catch {
             await MainActor.run {
-                // 识别错误类型，弹出对应引导而不是显示错误文本
-                let appError = AppError.from(error)
-                switch appError {
-                case .unauthorized, .tokenExpired:
-                    // 未登录或 Token 过期
-                    self.showingLoginSheet = true
-                    self.errorMessage = nil
-                case .subscriptionNotFound, .subscriptionExpired:
-                    // 已登录但无有效订阅
-                    self.showingSubscriptionSheet = true
-                    self.errorMessage = nil
-                default:
-                    self.errorMessage = "加载PDF失败: \(error.localizedDescription)"
-                }
+                self.errorMessage = "加载PDF失败: \(error.localizedDescription)"
             }
         }
 

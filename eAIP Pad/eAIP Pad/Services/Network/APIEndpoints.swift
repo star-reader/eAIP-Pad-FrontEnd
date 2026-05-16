@@ -39,10 +39,6 @@ enum HTTPMethod: String {
 
 // MARK: - API 端点
 enum APIEndpoint {
-    // 认证
-    case appleLogin
-    case refreshToken
-    
     // 机场
     case airports
     case airport(icao: String)
@@ -84,21 +80,12 @@ enum APIEndpoint {
     // AIRAC
     case currentAIRAC
     
-    // IAP v2
-    case iapVerify
-    case iapSync
-    case iapStatus
-    
     // 天气
     case weatherMETAR(icao: String)
     case weatherTAF(icao: String)
 
     var path: String {
         switch self {
-        case .appleLogin:
-            return "/auth/apple"
-        case .refreshToken:
-            return "/auth/refresh"
         case .airports:
             return "/airports"
         case .airport(let icao):
@@ -145,12 +132,6 @@ enum APIEndpoint {
             return "/annotations/\(type)/\(id)/\(page)"
         case .currentAIRAC:
             return "/airac/current"
-        case .iapVerify:
-            return "/iap/v2/verify"
-        case .iapSync:
-            return "/iap/v2/sync"
-        case .iapStatus:
-            return "/iap/v2/status"
         case .weatherMETAR(let icao):
             return "/weather/metar/\(icao)"
         case .weatherTAF(let icao):

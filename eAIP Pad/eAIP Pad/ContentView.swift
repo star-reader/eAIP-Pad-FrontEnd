@@ -61,48 +61,13 @@ struct ContentView: View {
     
     private func checkAndUpdateAIRAC() async {
         LoggerService.shared.info(module: "ContentView", message: "准备检查 AIRAC 版本...")
-        guard !isCheckingAIRAC else { 
+        guard !isCheckingAIRAC else {
             LoggerService.shared.info(module: "ContentView", message: "AIRAC 检查已在进行中，跳过")
-            return 
+            return
         }
         isCheckingAIRAC = true
         defer { isCheckingAIRAC = false }
-        
-        // 等待认证完成（最多 30 秒）
-        LoggerService.shared.info(module: "ContentView", message: "等待用户认证完成...")
-        var waitCount = 0
-        while AuthenticationService.shared.authenticationState != .authenticated && waitCount < 300 {
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            waitCount += 1
-            
-            // 每 5 秒记录一次等待状态
-            if waitCount % 50 == 0 {
-                LoggerService.shared.info(module: "ContentView", message: "仍在等待认证... (\(waitCount / 10) 秒)")
-            }
-        }
-        
-        // 如果还未认证，则跳过 AIRAC 检查
-        guard AuthenticationService.shared.authenticationState == .authenticated else {
-            LoggerService.shared.warning(module: "ContentView", message: "等待超时或用户未认证，跳过 AIRAC 检查")
-            return
-        }
-        
-        LoggerService.shared.info(module: "ContentView", message: "✓ 用户已认证，等待 Access Token...")
-        
-        // 等待 token 设置（最多 3 秒）
-        var tokenWaitCount = 0
-        while NetworkService.shared.getCurrentAccessToken() == nil && tokenWaitCount < 30 {
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            tokenWaitCount += 1
-        }
-        
-        // 如果还是没有 token，跳过本次检查
-        guard NetworkService.shared.getCurrentAccessToken() != nil else {
-            LoggerService.shared.warning(module: "ContentView", message: "Access Token 未就绪，跳过 AIRAC 检查")
-            return
-        }
-        
-        LoggerService.shared.info(module: "ContentView", message: "✓ Access Token 已就绪，开始检查 AIRAC 版本")
+        LoggerService.shared.info(module: "ContentView", message: "开始检查 AIRAC 版本")
         
         var airacResponse: AIRACResponse?
         var lastError: Error?

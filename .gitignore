@@ -65,3 +65,4 @@ fastlane/test_output
 
 SharedKey.swift
 .DS_Store
+build

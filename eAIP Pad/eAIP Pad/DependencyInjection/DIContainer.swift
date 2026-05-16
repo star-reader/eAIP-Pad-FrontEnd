@@ -101,8 +101,6 @@ extension DIContainer {
     /// 在主线程注册 MainActor 隔离的服务
     @MainActor
     func registerMainActorServices() {
-        // 等待服务类实现协议后再启用这些注册
-        // register(AuthenticationServiceProtocol.self, instance: AuthenticationService.shared)
-        // register(SubscriptionServiceProtocol.self, instance: SubscriptionService.shared)
+        // 当前无需注册额外的 MainActor 服务
     }
 }

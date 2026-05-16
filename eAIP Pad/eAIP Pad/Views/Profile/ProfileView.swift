@@ -6,202 +6,137 @@ import Foundation
 // MARK: - 个人中心视图
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var userSettings: [UserSettings]
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var airacVersions: [AIRACVersion]
-    @StateObject private var subscriptionService = SubscriptionService.shared
-    @StateObject private var authService = AuthenticationService.shared
     @State private var showingSettings = false
     @State private var showingAbout = false
-    @State private var showingSubscription = false
     @State private var showingCacheCleared = false
     @State private var showingCacheError = false
     @State private var showingEmailAlert = false
-    @State private var showingMailComposer = false
     @State private var showingBugReportOptions = false
     @State private var cacheSizeText: String = ""
     @State private var errorMessage: String = ""
     @State private var mailData: MailData?
-    @State private var showingSignOutConfirmation = false
-    @State private var showingLoginSheet = false
-    
-    private var currentSettings: UserSettings {
-        userSettings.first ?? UserSettings()
-    }
-    
+
     private var currentAIRAC: AIRACVersion? {
         airacVersions.first { $0.isCurrent }
     }
     
     var body: some View {
         List {
-            // 订阅状态卡片
-            Section {
-                SubscriptionStatusCard(
-                    subscriptionService: subscriptionService,
-                    isAuthenticated: authService.authenticationState == .authenticated,
-                    onSubscribe: {
-                        if authService.authenticationState == .authenticated {
-                            showingSubscription = true
-                        } else {
-                            showingLoginSheet = true
-                        }
-                    }
-                )
-            }
-            
             // 统计信息
             Section("使用统计") {
+                StatisticRow(
+                    icon: "pin.fill",
+                    title: "收藏航图",
+                    value: "\(pinnedCharts.count) 个",
+                    color: .orange
+                )
+
+                if let currentAIRAC = currentAIRAC {
                     StatisticRow(
-                        icon: "pin.fill",
-                        title: "收藏航图",
-                        value: "\(pinnedCharts.count) 个",
-                        color: .orange
+                        icon: "arrow.clockwise",
+                        title: "当前AIRAC",
+                        value: currentAIRAC.version,
+                        color: .blue
                     )
-                    
-                    if let currentAIRAC = currentAIRAC {
-                        StatisticRow(
-                            icon: "arrow.clockwise",
-                            title: "当前AIRAC",
-                            value: currentAIRAC.version,
-                            color: .blue
-                        )
-                    }
                 }
-                
-                // 应用设置
-                Section("应用设置") {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        SettingRow(
-                            icon: "gearshape.fill",
-                            title: "偏好设置",
-                            color: .gray
-                        )
-                    }
-                    
-                    Button {
-                        Task {
-                            await clearCache()
-                            await MainActor.run {
-                                showingCacheCleared = true
-                            }
-                        }
-                    } label: {
-                        SettingRow(
-                            icon: "trash.fill",
-                            title: "清理缓存",
-                            color: .red,
-                            trailingText: cacheSizeText
-                        )
-                    }
-                }
-                
-                // 帮助与支持
-                Section("帮助与支持") {
-                    Button {
-                        showingAbout = true
-                    } label: {
-                        SettingRow(
-                            icon: "info.circle.fill",
-                            title: "关于应用",
-                            color: .blue
-                        )
-                    }
-                    
-                    Button {
-                        openGitHub()
-                    } label: {
-                        SettingRow(
-                            icon: "link.circle.fill",
-                            title: "GitHub 仓库",
-                            color: .green
-                        )
-                    }
-                    
-                    Button {
-                        sendNewIdeaEmail()
-                    } label: {
-                        SettingRow(
-                            icon: "lightbulb.fill",
-                            title: "我有新想法",
-                            color: .yellow
-                        )
-                    }
-                    
-                    Button {
-                        showingBugReportOptions = true
-                    } label: {
-                        SettingRow(
-                            icon: "ladybug.fill",
-                            title: "反馈bug",
-                            color: .red
-                        )
-                    }
-                }
-                
-                // 法律信息
-                Section("法律信息") {
-                    Button {
-                        openPrivacyPolicy()
-                    } label: {
-                        SettingRow(
-                            icon: "hand.raised.fill",
-                            title: "隐私政策",
-                            color: .purple
-                        )
-                    }
-                    
-                    Button {
-                        openTermsOfService()
-                    } label: {
-                        SettingRow(
-                            icon: "doc.text.fill",
-                            title: "服务条款",
-                            color: .indigo
-                        )
-                    }
-                }
-                
-                // 账户管理
-                Section {
-                    if authService.authenticationState == .authenticated {
-                        Button {
-                            showingSignOutConfirmation = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .foregroundColor(.red)
-                                    .frame(width: 24)
+            }
 
-                                Text("退出登录")
-                                    .font(.subheadline)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    } else {
-                        Button {
-                            showingLoginSheet = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.plus")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 24)
+            Section("应用设置") {
+                Button {
+                    showingSettings = true
+                } label: {
+                    SettingRow(
+                        icon: "gearshape.fill",
+                        title: "偏好设置",
+                        color: .gray
+                    )
+                }
 
-                                Text("前往登录")
-                                    .font(.subheadline)
-                                    .foregroundColor(.blue)
-                            }
+                Button {
+                    Task {
+                        await clearCache()
+                        await MainActor.run {
+                            showingCacheCleared = true
                         }
                     }
+                } label: {
+                    SettingRow(
+                        icon: "trash.fill",
+                        title: "清理缓存",
+                        color: .red,
+                        trailingText: cacheSizeText
+                    )
                 }
+            }
+
+            Section("帮助与支持") {
+                Button {
+                    showingAbout = true
+                } label: {
+                    SettingRow(
+                        icon: "info.circle.fill",
+                        title: "关于应用",
+                        color: .blue
+                    )
+                }
+
+                Button {
+                    openGitHub()
+                } label: {
+                    SettingRow(
+                        icon: "link.circle.fill",
+                        title: "GitHub 仓库",
+                        color: .green
+                    )
+                }
+
+                Button {
+                    sendNewIdeaEmail()
+                } label: {
+                    SettingRow(
+                        icon: "lightbulb.fill",
+                        title: "我有新想法",
+                        color: .yellow
+                    )
+                }
+
+                Button {
+                    showingBugReportOptions = true
+                } label: {
+                    SettingRow(
+                        icon: "ladybug.fill",
+                        title: "反馈bug",
+                        color: .red
+                    )
+                }
+            }
+
+            Section("法律信息") {
+                Button {
+                    openPrivacyPolicy()
+                } label: {
+                    SettingRow(
+                        icon: "hand.raised.fill",
+                        title: "隐私政策",
+                        color: .purple
+                    )
+                }
+
+                Button {
+                    openTermsOfService()
+                } label: {
+                    SettingRow(
+                        icon: "doc.text.fill",
+                        title: "服务条款",
+                        color: .indigo
+                    )
+                }
+            }
         }
         .navigationTitle("个人")
         .navigationBarTitleDisplayMode(.large)
-        .sheet(isPresented: $showingSubscription) {
-            UnifiedSubscriptionView()
-        }
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()
@@ -209,18 +144,6 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
-        }
-        .sheet(isPresented: $showingLoginSheet) {
-            NavigationStack {
-                LoginView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button("关闭") {
-                                showingLoginSheet = false
-                            }
-                        }
-                    }
-            }
         }
         .alert("缓存已清理", isPresented: $showingCacheCleared) {
             Button("确定", role: .cancel) {}
@@ -248,14 +171,6 @@ struct ProfileView: View {
         } message: {
             Text("附带日志文件可以帮助开发者更好地定位问题")
         }
-        .confirmationDialog("确定要退出登录吗？", isPresented: $showingSignOutConfirmation) {
-            Button("退出登录", role: .destructive) {
-                handleSignOut()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("退出后将进入游客模式，仍可访问基础页面，登录后可继续使用完整功能")
-        }
         .sheet(item: $mailData) { data in
             MailComposeView(
                 subject: data.subject,
@@ -268,11 +183,6 @@ struct ProfileView: View {
         }
         .onAppear {
             Task { await updateCacheSize() }
-        }
-        .onChange(of: authService.authenticationState) { _, newState in
-            if newState == .authenticated {
-                showingLoginSheet = false
-            }
         }
     }
     
@@ -319,14 +229,6 @@ struct ProfileView: View {
         await MainActor.run {
             cacheSizeText = formatted
         }
-    }
-    
-    // MARK: - 账户管理
-    
-    private func handleSignOut() {
-        LoggerService.shared.info(module: "ProfileView", message: "用户点击退出登录")
-        AuthenticationService.shared.signOut()
-        LoggerService.shared.info(module: "ProfileView", message: "用户已成功退出登录")
     }
     
     // MARK: - 外部链接
