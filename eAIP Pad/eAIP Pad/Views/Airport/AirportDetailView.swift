@@ -11,17 +11,30 @@ struct AirportDetailView: View {
     @State private var errorMessage: String?
     @State private var selectedChartType: ChartType = .all
     @State private var showWeatherSheet = false
+    @State private var searchText = ""
+    @State private var sortOption: AirportChartSortOption = .updatedFirst
 
     // 过滤后的航图列表
     private var filteredCharts: [ChartResponse] {
-        // 过滤掉 OTHERS 类型
         let nonOthersCharts = charts.filter { $0.chartType != "OTHERS" }
 
+        let typeFiltered: [ChartResponse]
         if selectedChartType == .all {
-            return nonOthersCharts
+            typeFiltered = nonOthersCharts
         } else {
-            return nonOthersCharts.filter { $0.chartType == selectedChartType.rawValue }
+            typeFiltered = nonOthersCharts.filter { $0.chartType == selectedChartType.rawValue }
         }
+
+        let searchFiltered = typeFiltered.filter { chart in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return chart.nameCn.localizedCaseInsensitiveContains(keyword)
+                || chart.nameEn.localizedCaseInsensitiveContains(keyword)
+                || chart.chartType.localizedCaseInsensitiveContains(keyword)
+        }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
     }
 
     // 按类型分组的航图
@@ -56,6 +69,15 @@ struct AirportDetailView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
                 .padding(.bottom, 8)
+
+                CompactSearchFilterBar(
+                    searchText: $searchText,
+                    selectedSort: $sortOption,
+                    searchPlaceholder: "搜索航图名称或类型",
+                    sortOptions: AirportChartSortOption.allCases,
+                    sortTitle: "排序",
+                    sortLabel: { $0.displayName }
+                )
 
                 // 航图列表
                 List {
@@ -168,6 +190,49 @@ struct AirportDetailView: View {
         }
 
         try? modelContext.save()
+    }
+}
+
+enum AirportChartSortOption: String, CaseIterable {
+    case updatedFirst
+    case nameAsc
+    case nameDesc
+    case typeAsc
+
+    var displayName: String {
+        switch self {
+        case .updatedFirst: return "更新优先"
+        case .nameAsc: return "名称 A-Z"
+        case .nameDesc: return "名称 Z-A"
+        case .typeAsc: return "类型"
+        }
+    }
+
+    var sorter: (ChartResponse, ChartResponse) -> Bool {
+        switch self {
+        case .updatedFirst:
+            return { lhs, rhs in
+                if lhs.isModified != rhs.isModified {
+                    return lhs.isModified && !rhs.isModified
+                }
+                return lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
+            }
+        case .nameAsc:
+            return { lhs, rhs in
+                lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
+            }
+        case .nameDesc:
+            return { lhs, rhs in
+                lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedDescending
+            }
+        case .typeAsc:
+            return { lhs, rhs in
+                if lhs.chartType != rhs.chartType {
+                    return lhs.chartType.localizedStandardCompare(rhs.chartType) == .orderedAscending
+                }
+                return lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
+            }
+        }
     }
 }
 

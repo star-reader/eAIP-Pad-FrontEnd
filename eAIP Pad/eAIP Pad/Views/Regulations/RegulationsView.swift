@@ -304,6 +304,21 @@ struct AirportRegulationsView: View {
     @State private var regulations: [AIPDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var searchText = ""
+    @State private var sortOption: RegulationSortOption = .updatedFirst
+
+    private var filteredRegulations: [AIPDocumentResponse] {
+        let searchFiltered = regulations.filter { regulation in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return regulation.nameCn.localizedCaseInsensitiveContains(keyword)
+                || regulation.name.localizedCaseInsensitiveContains(keyword)
+                || regulation.category.localizedCaseInsensitiveContains(keyword)
+        }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
+    }
 
     var body: some View {
         VStack {
@@ -333,7 +348,16 @@ struct AirportRegulationsView: View {
                 )
                 .foregroundColor(.primaryBlue)
             } else {
-                List(regulations, id: \.id) { regulation in
+                CompactSearchFilterBar(
+                    searchText: $searchText,
+                    selectedSort: $sortOption,
+                    searchPlaceholder: "搜索细则名称或分类",
+                    sortOptions: RegulationSortOption.allCases,
+                    sortTitle: "排序",
+                    sortLabel: { $0.displayName }
+                )
+
+                List(filteredRegulations, id: \.id) { regulation in
                     NavigationLink {
                         PDFReaderView(
                             chartID: "ad_\(regulation.id)",
@@ -435,6 +459,42 @@ struct AirportRegulationsView: View {
         }
 
         isLoading = false
+    }
+}
+
+enum RegulationSortOption: String, CaseIterable {
+    case updatedFirst
+    case nameAsc
+    case nameDesc
+
+    var displayName: String {
+        switch self {
+        case .updatedFirst: return "更新优先"
+        case .nameAsc: return "名称 A-Z"
+        case .nameDesc: return "名称 Z-A"
+        }
+    }
+
+    var sorter: (AIPDocumentResponse, AIPDocumentResponse) -> Bool {
+        switch self {
+        case .updatedFirst:
+            return { lhs, rhs in
+                let lhsUpdated = (lhs.isModified ?? false) || (lhs.hasUpdate ?? false)
+                let rhsUpdated = (rhs.isModified ?? false) || (rhs.hasUpdate ?? false)
+                if lhsUpdated != rhsUpdated {
+                    return lhsUpdated && !rhsUpdated
+                }
+                return lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
+            }
+        case .nameAsc:
+            return { lhs, rhs in
+                lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
+            }
+        case .nameDesc:
+            return { lhs, rhs in
+                lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedDescending
+            }
+        }
     }
 }
 

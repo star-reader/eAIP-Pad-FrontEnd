@@ -60,14 +60,26 @@ struct AIPDocumentsView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedCategory: AIPCategory = .all
+    @State private var searchText = ""
+    @State private var sortOption: AIPDocumentSortOption = .updatedFirst
 
     // 过滤后的文档列表
     private var filteredDocuments: [AIPDocumentResponse] {
-        if selectedCategory == .all {
-            return documents
-        } else {
-            return documents.filter { $0.category == selectedCategory.rawValue }
+        let categoryFiltered =
+            selectedCategory == .all
+            ? documents
+            : documents.filter { $0.category == selectedCategory.rawValue }
+
+        let searchFiltered = categoryFiltered.filter { document in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return document.nameCn.localizedCaseInsensitiveContains(keyword)
+                || document.name.localizedCaseInsensitiveContains(keyword)
+                || document.category.localizedCaseInsensitiveContains(keyword)
         }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
     }
 
     var body: some View {
@@ -95,6 +107,15 @@ struct AIPDocumentsView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
+
+            CompactSearchFilterBar(
+                searchText: $searchText,
+                selectedSort: $sortOption,
+                searchPlaceholder: "搜索 AIP 文档",
+                sortOptions: AIPDocumentSortOption.allCases,
+                sortTitle: "排序",
+                sortLabel: { $0.displayName }
+            )
 
             LoadingStateView(
                 isLoading: isLoading,
@@ -196,58 +217,80 @@ struct SUPDocumentsView: View {
     @State private var documents: [SUPDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var searchText = ""
+    @State private var sortOption: SUPDocumentSortOption = .updatedFirst
+
+    private var filteredDocuments: [SUPDocumentResponse] {
+        let searchFiltered = documents.filter { document in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return document.localSubject.localizedCaseInsensitiveContains(keyword)
+                || document.subject.localizedCaseInsensitiveContains(keyword)
+                || document.serial.localizedCaseInsensitiveContains(keyword)
+        }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
+    }
 
     var body: some View {
-        LoadingStateView(
-            isLoading: isLoading,
-            errorMessage: errorMessage,
-            loadingMessage: "加载SUP文档...",
-            retryAction: { await loadSUPDocuments() }
-        ) {
-            List(documents, id: \.id) { document in
-                if let binding = selectedChartBinding {
-                    // iPad 模式
-                    Button {
-                        LoggerService.shared.info(
-                            module: "SUPDocumentsView",
-                            message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
-                        )
-                        // 创建简化的 ChartResponse
-                        binding.wrappedValue = ChartResponse(
-                            id: document.id,
-                            documentId: document.documentId,
-                            parentId: nil,
-                            icao: nil,
-                            nameEn: document.subject,
-                            nameCn: document.localSubject,
-                            chartType: "SUP",
-                            pdfPath: document.pdfPath,
-                            htmlPath: nil,
-                            htmlEnPath: nil,
-                            airacVersion: document.airacVersion,
-                            isModified: document.isModified ?? false,
-                            isOpened: nil
-                        )
-                    } label: {
-                        SUPDocumentRowView(document: document)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    // iPhone 模式
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "sup_\(document.id)",
-                            displayName: document.localSubject,
-                            documentType: .sup
-                        )
-                    } label: {
-                        SUPDocumentRowView(document: document)
+        VStack(spacing: 0) {
+            CompactSearchFilterBar(
+                searchText: $searchText,
+                selectedSort: $sortOption,
+                searchPlaceholder: "搜索 SUP 文档",
+                sortOptions: SUPDocumentSortOption.allCases,
+                sortTitle: "排序",
+                sortLabel: { $0.displayName }
+            )
+
+            LoadingStateView(
+                isLoading: isLoading,
+                errorMessage: errorMessage,
+                loadingMessage: "加载SUP文档...",
+                retryAction: { await loadSUPDocuments() }
+            ) {
+                List(filteredDocuments, id: \.id) { document in
+                    if let binding = selectedChartBinding {
+                        Button {
+                            LoggerService.shared.info(
+                                module: "SUPDocumentsView",
+                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                            )
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: document.documentId,
+                                parentId: nil,
+                                icao: nil,
+                                nameEn: document.subject,
+                                nameCn: document.localSubject,
+                                chartType: "SUP",
+                                pdfPath: document.pdfPath,
+                                htmlPath: nil,
+                                htmlEnPath: nil,
+                                airacVersion: document.airacVersion,
+                                isModified: document.isModified ?? false,
+                                isOpened: nil
+                            )
+                        } label: {
+                            SUPDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "sup_\(document.id)",
+                                displayName: document.localSubject,
+                                documentType: .sup
+                            )
+                        } label: {
+                            SUPDocumentRowView(document: document)
+                        }
                     }
                 }
             }
-            .listStyle(.insetGrouped)
         }
         .task {
             await loadSUPDocuments()
@@ -297,55 +340,80 @@ struct AMDTDocumentsView: View {
     @State private var documents: [AMDTDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var searchText = ""
+    @State private var sortOption: AMDTDocumentSortOption = .updatedFirst
+
+    private var filteredDocuments: [AMDTDocumentResponse] {
+        let searchFiltered = documents.filter { document in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return document.localSubject.localizedCaseInsensitiveContains(keyword)
+                || document.subject.localizedCaseInsensitiveContains(keyword)
+                || document.serial.localizedCaseInsensitiveContains(keyword)
+        }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
+    }
 
     var body: some View {
-        LoadingStateView(
-            isLoading: isLoading,
-            errorMessage: errorMessage,
-            loadingMessage: "加载AMDT文档...",
-            retryAction: { await loadAMDTDocuments() }
-        ) {
-            List(documents, id: \.id) { document in
-                if let binding = selectedChartBinding {
-                    Button {
-                        LoggerService.shared.info(
-                            module: "AMDTDocumentsView",
-                            message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
-                        )
-                        binding.wrappedValue = ChartResponse(
-                            id: document.id,
-                            documentId: "\(document.id)",
-                            parentId: nil,
-                            icao: nil,
-                            nameEn: document.subject,
-                            nameCn: document.localSubject,
-                            chartType: "AMDT",
-                            pdfPath: document.pdfPath,
-                            htmlPath: nil,
-                            htmlEnPath: nil,
-                            airacVersion: document.airacVersion,
-                            isModified: document.isModified ?? false,
-                            isOpened: nil
-                        )
-                    } label: {
-                        AMDTDocumentRowView(document: document)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "amdt_\(document.id)",
-                            displayName: document.localSubject,
-                            documentType: .amdt
-                        )
-                    } label: {
-                        AMDTDocumentRowView(document: document)
+        VStack(spacing: 0) {
+            CompactSearchFilterBar(
+                searchText: $searchText,
+                selectedSort: $sortOption,
+                searchPlaceholder: "搜索 AMDT 文档",
+                sortOptions: AMDTDocumentSortOption.allCases,
+                sortTitle: "排序",
+                sortLabel: { $0.displayName }
+            )
+
+            LoadingStateView(
+                isLoading: isLoading,
+                errorMessage: errorMessage,
+                loadingMessage: "加载AMDT文档...",
+                retryAction: { await loadAMDTDocuments() }
+            ) {
+                List(filteredDocuments, id: \.id) { document in
+                    if let binding = selectedChartBinding {
+                        Button {
+                            LoggerService.shared.info(
+                                module: "AMDTDocumentsView",
+                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                            )
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: "\(document.id)",
+                                parentId: nil,
+                                icao: nil,
+                                nameEn: document.subject,
+                                nameCn: document.localSubject,
+                                chartType: "AMDT",
+                                pdfPath: document.pdfPath,
+                                htmlPath: nil,
+                                htmlEnPath: nil,
+                                airacVersion: document.airacVersion,
+                                isModified: document.isModified ?? false,
+                                isOpened: nil
+                            )
+                        } label: {
+                            AMDTDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "amdt_\(document.id)",
+                                displayName: document.localSubject,
+                                documentType: .amdt
+                            )
+                        } label: {
+                            AMDTDocumentRowView(document: document)
+                        }
                     }
                 }
             }
-            .listStyle(.insetGrouped)
         }
         .task {
             await loadAMDTDocuments()
@@ -395,54 +463,78 @@ struct NOTAMDocumentsView: View {
     @State private var documents: [NOTAMDocumentResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var searchText = ""
+    @State private var sortOption: NOTAMDocumentSortOption = .latestFirst
+
+    private var filteredDocuments: [NOTAMDocumentResponse] {
+        let searchFiltered = documents.filter { document in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return document.seriesName.localizedCaseInsensitiveContains(keyword)
+                || document.generateTime.localizedCaseInsensitiveContains(keyword)
+        }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
+    }
 
     var body: some View {
-        LoadingStateView(
-            isLoading: isLoading,
-            errorMessage: errorMessage,
-            loadingMessage: "加载NOTAM文档...",
-            retryAction: { await loadNOTAMDocuments() }
-        ) {
-            List(documents, id: \.id) { document in
-                if let binding = selectedChartBinding {
-                    Button {
-                        LoggerService.shared.info(
-                            module: "NOTAMDocumentsView",
-                            message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
-                        binding.wrappedValue = ChartResponse(
-                            id: document.id,
-                            documentId: "\(document.id)",
-                            parentId: nil,
-                            icao: nil,
-                            nameEn: "NOTAM \(document.seriesName)",
-                            nameCn: "NOTAM \(document.seriesName)",
-                            chartType: "NOTAM",
-                            pdfPath: nil,
-                            htmlPath: nil,
-                            htmlEnPath: nil,
-                            airacVersion: document.airacVersion,
-                            isModified: false,
-                            isOpened: nil
-                        )
-                    } label: {
-                        NOTAMDocumentRowView(document: document)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "notam_\(document.id)",
-                            displayName: "NOTAM \(document.seriesName)",
-                            documentType: .notam
-                        )
-                    } label: {
-                        NOTAMDocumentRowView(document: document)
+        VStack(spacing: 0) {
+            CompactSearchFilterBar(
+                searchText: $searchText,
+                selectedSort: $sortOption,
+                searchPlaceholder: "搜索 NOTAM 文档",
+                sortOptions: NOTAMDocumentSortOption.allCases,
+                sortTitle: "排序",
+                sortLabel: { $0.displayName }
+            )
+
+            LoadingStateView(
+                isLoading: isLoading,
+                errorMessage: errorMessage,
+                loadingMessage: "加载NOTAM文档...",
+                retryAction: { await loadNOTAMDocuments() }
+            ) {
+                List(filteredDocuments, id: \.id) { document in
+                    if let binding = selectedChartBinding {
+                        Button {
+                            LoggerService.shared.info(
+                                module: "NOTAMDocumentsView",
+                                message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
+                            binding.wrappedValue = ChartResponse(
+                                id: document.id,
+                                documentId: "\(document.id)",
+                                parentId: nil,
+                                icao: nil,
+                                nameEn: "NOTAM \(document.seriesName)",
+                                nameCn: "NOTAM \(document.seriesName)",
+                                chartType: "NOTAM",
+                                pdfPath: nil,
+                                htmlPath: nil,
+                                htmlEnPath: nil,
+                                airacVersion: document.airacVersion,
+                                isModified: false,
+                                isOpened: nil
+                            )
+                        } label: {
+                            NOTAMDocumentRowView(document: document)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "notam_\(document.id)",
+                                displayName: "NOTAM \(document.seriesName)",
+                                documentType: .notam
+                            )
+                        } label: {
+                            NOTAMDocumentRowView(document: document)
+                        }
                     }
                 }
             }
-            .listStyle(.insetGrouped)
         }
         .task {
             await loadNOTAMDocuments()
@@ -665,6 +757,135 @@ enum AIPCategory: String, CaseIterable {
         case .all: return "全部"
         case .gen: return "GEN"
         case .enr: return "ENR"
+        }
+    }
+}
+
+enum AIPDocumentSortOption: String, CaseIterable {
+    case updatedFirst
+    case nameAsc
+    case nameDesc
+
+    var displayName: String {
+        switch self {
+        case .updatedFirst: return "更新优先"
+        case .nameAsc: return "名称 A-Z"
+        case .nameDesc: return "名称 Z-A"
+        }
+    }
+
+    var sorter: (AIPDocumentResponse, AIPDocumentResponse) -> Bool {
+        switch self {
+        case .updatedFirst:
+            return { lhs, rhs in
+                if (lhs.isModified == true) != (rhs.isModified == true) {
+                    return lhs.isModified == true
+                }
+                return lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
+            }
+        case .nameAsc:
+            return { lhs, rhs in lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending }
+        case .nameDesc:
+            return { lhs, rhs in lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedDescending }
+        }
+    }
+}
+
+enum SUPDocumentSortOption: String, CaseIterable {
+    case updatedFirst
+    case serialDesc
+    case titleAsc
+
+    var displayName: String {
+        switch self {
+        case .updatedFirst: return "更新优先"
+        case .serialDesc: return "期号新到旧"
+        case .titleAsc: return "标题 A-Z"
+        }
+    }
+
+    var sorter: (SUPDocumentResponse, SUPDocumentResponse) -> Bool {
+        switch self {
+        case .updatedFirst:
+            return { lhs, rhs in
+                let lhsUpdated = (lhs.isModified ?? false) || (lhs.hasUpdate ?? false)
+                let rhsUpdated = (rhs.isModified ?? false) || (rhs.hasUpdate ?? false)
+                if lhsUpdated != rhsUpdated {
+                    return lhsUpdated && !rhsUpdated
+                }
+                return lhs.serial.localizedStandardCompare(rhs.serial) == .orderedDescending
+            }
+        case .serialDesc:
+            return { lhs, rhs in lhs.serial.localizedStandardCompare(rhs.serial) == .orderedDescending }
+        case .titleAsc:
+            return { lhs, rhs in
+                lhs.localSubject.localizedStandardCompare(rhs.localSubject) == .orderedAscending
+            }
+        }
+    }
+}
+
+enum AMDTDocumentSortOption: String, CaseIterable {
+    case updatedFirst
+    case serialDesc
+    case titleAsc
+
+    var displayName: String {
+        switch self {
+        case .updatedFirst: return "更新优先"
+        case .serialDesc: return "期号新到旧"
+        case .titleAsc: return "标题 A-Z"
+        }
+    }
+
+    var sorter: (AMDTDocumentResponse, AMDTDocumentResponse) -> Bool {
+        switch self {
+        case .updatedFirst:
+            return { lhs, rhs in
+                let lhsUpdated = (lhs.isModified ?? false) || (lhs.hasUpdate ?? false)
+                let rhsUpdated = (rhs.isModified ?? false) || (rhs.hasUpdate ?? false)
+                if lhsUpdated != rhsUpdated {
+                    return lhsUpdated && !rhsUpdated
+                }
+                return lhs.serial.localizedStandardCompare(rhs.serial) == .orderedDescending
+            }
+        case .serialDesc:
+            return { lhs, rhs in lhs.serial.localizedStandardCompare(rhs.serial) == .orderedDescending }
+        case .titleAsc:
+            return { lhs, rhs in
+                lhs.localSubject.localizedStandardCompare(rhs.localSubject) == .orderedAscending
+            }
+        }
+    }
+}
+
+enum NOTAMDocumentSortOption: String, CaseIterable {
+    case latestFirst
+    case seriesAsc
+    case seriesDesc
+
+    var displayName: String {
+        switch self {
+        case .latestFirst: return "时间新到旧"
+        case .seriesAsc: return "系列 A-Z"
+        case .seriesDesc: return "系列 Z-A"
+        }
+    }
+
+    var sorter: (NOTAMDocumentResponse, NOTAMDocumentResponse) -> Bool {
+        switch self {
+        case .latestFirst:
+            return { lhs, rhs in
+                lhs.generateTime.localizedStandardCompare(rhs.generateTime) == .orderedDescending
+            }
+        case .seriesAsc:
+            return { lhs, rhs in
+                lhs.seriesName.localizedStandardCompare(rhs.seriesName) == .orderedAscending
+            }
+        case .seriesDesc:
+            return { lhs, rhs in
+                lhs.seriesName.localizedStandardCompare(rhs.seriesName) == .orderedDescending
+            }
         }
     }
 }
