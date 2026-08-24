@@ -68,7 +68,7 @@ struct MainSidebarView: View {
                     LoggerService.shared.info(
                         module: "MainSidebarView",
                         message:
-                            "selectedChart 变化: ID从 \(oldValue?.id ?? -1) -> \(newValue?.id ?? -1), Type: \(newValue?.chartType ?? "nil")"
+                            "selectedChart 变化: ID从 \(oldValue?.id ?? "nil") -> \(newValue?.id ?? "nil"), Type: \(newValue?.chartType ?? "nil")"
                     )
                 }
             } else {
@@ -85,7 +85,7 @@ struct MainSidebarView: View {
                 selectedChart: selectedChart
             )
             .environment(\.columnVisibilityBinding, $columnVisibility)
-            .id(selectedChart?.id ?? -1)  // 强制根据 selectedChart 重新创建视图
+            .id(selectedChart?.id ?? "none")  // 强制根据 selectedChart 重新创建视图
         }
         .navigationSplitViewStyle(.balanced)
         .tint(.primaryBlue)

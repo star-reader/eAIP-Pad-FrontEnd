@@ -125,72 +125,18 @@ struct RegulationsView: View {
         errorMessage = nil
 
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "RegulationsView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Regulations", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
-            }
-
-            guard let currentAIRAC = currentAIRAC else {
+            guard PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
+            else {
                 throw NSError(
                     domain: "Regulations", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
 
-            // 1. 先尝试从缓存加载
-            if let cachedAirports = PDFCacheService.shared.loadCachedData(
-                [AirportResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.airports
-            ) {
-                await MainActor.run {
-                    self.airports = cachedAirports
-                }
-                isLoading = false
-                return
-            }
-
-            // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getAirports()
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.airports
-            )
+            let descriptor = FetchDescriptor<Airport>(sortBy: [SortDescriptor(\.icao)])
+            let localAirports = try modelContext.fetch(descriptor)
 
             await MainActor.run {
-                self.airports = response
+                self.airports = localAirports.map { $0.toResponse() }
             }
         } catch {
             await MainActor.run {
@@ -206,8 +152,11 @@ struct RegulationsView: View {
         isLoadingRegulation = true
 
         do {
-            let regulations = try await NetworkService.shared.getAIPDocumentsByICAO(
-                icao: airport.icao)
+            let icao = airport.icao
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { $0.icao == icao && $0.documentType == "ad" }
+            )
+            let regulations = try modelContext.fetch(descriptor).map { $0.toAIPDocumentResponse() }
 
             await MainActor.run {
                 if let firstRegulation = regulations.first {
@@ -383,74 +332,21 @@ struct AirportRegulationsView: View {
         errorMessage = nil
 
         do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "RegulationsView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Regulations", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
-            }
-
-            guard let currentAIRAC = currentAIRAC else {
+            guard PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
+            else {
                 throw NSError(
                     domain: "Regulations", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
 
-            // 使用机场 ICAO 作为缓存键
-            let cacheKey = "ad_\(airport.icao)"
-
-            // 1. 先尝试从缓存加载
-            if let cachedRegulations = PDFCacheService.shared.loadCachedData(
-                [AIPDocumentResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: cacheKey
-            ) {
-                await MainActor.run {
-                    self.regulations = cachedRegulations
-                }
-                isLoading = false
-                return
-            }
-            // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getAIPDocumentsByICAO(icao: airport.icao)
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: cacheKey
+            let icao = airport.icao
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { $0.icao == icao && $0.documentType == "ad" }
             )
+            let localRegulations = try modelContext.fetch(descriptor)
 
             await MainActor.run {
-                self.regulations = response
+                self.regulations = localRegulations.map { $0.toAIPDocumentResponse() }
             }
         } catch {
             await MainActor.run {

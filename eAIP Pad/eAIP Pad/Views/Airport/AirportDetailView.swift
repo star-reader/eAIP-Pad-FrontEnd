@@ -10,7 +10,6 @@ struct AirportDetailView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedChartType: ChartType = .all
-    @State private var showWeatherSheet = false
     @State private var searchText = ""
     @State private var sortOption: AirportChartSortOption = .updatedFirst
 
@@ -53,10 +52,8 @@ struct AirportDetailView: View {
         ) {
             VStack(spacing: 0) {
                 // 机场信息卡片
-                AirportInfoCard(airport: airport) {
-                    showWeatherSheet = true
-                }
-                .padding()
+                AirportInfoCard(airport: airport)
+                    .padding()
 
                 // 使用原生 Picker 作为分段控制器
                 Picker("航图类型", selection: $selectedChartType) {
@@ -104,10 +101,6 @@ struct AirportDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showWeatherSheet) {
-            WeatherSheetView(
-                icao: airport.icao, airportNameCn: airport.nameCn, airportNameEn: airport.nameEn)
-        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
@@ -134,62 +127,19 @@ struct AirportDetailView: View {
         errorMessage = nil
 
         do {
-            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
-                throw NSError(domain: "AirportDetailView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-
-            let cacheKey = "charts_\(airport.icao)"
-
-            if let cached = AIRACHelper.shared.loadCachedData([ChartResponse].self, airacVersion: airacVersion, dataType: cacheKey) {
-                charts = cached
-                syncChartsToLocal(cached)
-                isLoading = false
-                return
-            }
-
-            let response = try await NetworkService.shared.getAirportCharts(icao: airport.icao)
-            AIRACHelper.shared.cacheData(response, airacVersion: airacVersion, dataType: cacheKey)
-            charts = response
-            syncChartsToLocal(response)
+            let icao = airport.icao
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> {
+                    $0.icao == icao && $0.documentType == "chart"
+                }
+            )
+            let localCharts = try modelContext.fetch(descriptor)
+            charts = localCharts.map { $0.toChartResponse() }
         } catch {
             errorMessage = "加载航图数据失败: \(error.localizedDescription)"
         }
 
         isLoading = false
-    }
-
-    private func syncChartsToLocal(_ charts: [ChartResponse]) {
-        for chartResponse in charts {
-            // 检查是否已存在
-            let existingCharts = try? modelContext.fetch(
-                FetchDescriptor<LocalChart>(
-                    predicate: #Predicate { $0.documentID == chartResponse.documentId }
-                )
-            )
-
-            if existingCharts?.isEmpty ?? true {
-                let chart = LocalChart(
-                    chartID: "chart_\(chartResponse.id)",
-                    documentID: chartResponse.documentId,
-                    nameEn: chartResponse.nameEn,
-                    nameCn: chartResponse.nameCn,
-                    chartType: chartResponse.chartType,
-                    airacVersion: chartResponse.airacVersion,
-                    documentType: "chart"
-                )
-                chart.icao = chartResponse.icao
-                chart.parentID = chartResponse.parentId
-                chart.pdfPath = chartResponse.pdfPath
-                chart.htmlPath = chartResponse.htmlPath
-                chart.htmlEnPath = chartResponse.htmlEnPath
-                chart.isModified = chartResponse.isModified
-                chart.isOpened = chartResponse.isOpened ?? false
-
-                modelContext.insert(chart)
-            }
-        }
-
-        try? modelContext.save()
     }
 }
 
@@ -239,17 +189,12 @@ enum AirportChartSortOption: String, CaseIterable {
 // MARK: - 机场信息卡片
 struct AirportInfoCard: View {
     let airport: AirportResponse
-    let onWeatherTap: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        // Text(airport.icao)
-                        //     .font(.largeTitle)
-                        //     .fontWeight(.bold)
-
                         Text(airport.nameCn)
                             .font(.headline)
                             .foregroundColor(.primary)
@@ -268,12 +213,6 @@ struct AirportInfoCard: View {
                 }
 
                 Spacer()
-
-                VStack(spacing: 8) {
-                    Button("天气") { onWeatherTap() }
-                        .buttonStyle(.bordered)
-                        .font(.caption)
-                }
             }
         }
         .padding()

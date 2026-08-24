@@ -10,6 +10,7 @@ struct ProfileView: View {
     @Query private var airacVersions: [AIRACVersion]
     @State private var showingSettings = false
     @State private var showingAbout = false
+    @State private var showingAIRACImport = false
     @State private var showingCacheCleared = false
     @State private var showingCacheError = false
     @State private var showingEmailAlert = false
@@ -44,6 +45,16 @@ struct ProfileView: View {
             }
 
             Section("应用设置") {
+                Button {
+                    showingAIRACImport = true
+                } label: {
+                    SettingRow(
+                        icon: "tray.and.arrow.down.fill",
+                        title: "导入 AIRAC 数据包",
+                        color: .blue
+                    )
+                }
+
                 Button {
                     showingSettings = true
                 } label: {
@@ -144,6 +155,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showingAbout) {
             AboutView()
+        }
+        .sheet(isPresented: $showingAIRACImport) {
+            AIRACUpdateView()
         }
         .alert("缓存已清理", isPresented: $showingCacheCleared) {
             Button("确定", role: .cancel) {}

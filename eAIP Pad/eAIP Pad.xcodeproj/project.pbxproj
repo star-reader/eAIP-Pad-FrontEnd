@@ -263,7 +263,7 @@
 				CODE_SIGN_ENTITLEMENTS = "eAIP Pad/eAIP Pad.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 6;
-				DEVELOPMENT_TEAM = 2S577ZVVWZ;
+				DEVELOPMENT_TEAM = 8LPMZ2UQ54;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "eAIP-Pad-Info.plist";
@@ -280,7 +280,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.usagi-jin.eAIP-Pad";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.usagi-jin.eAIP-Pad.dev";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -304,7 +304,7 @@
 				CODE_SIGN_ENTITLEMENTS = "eAIP Pad/eAIP Pad.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 6;
-				DEVELOPMENT_TEAM = 2S577ZVVWZ;
+				DEVELOPMENT_TEAM = 8LPMZ2UQ54;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "eAIP-Pad-Info.plist";
@@ -321,7 +321,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.usagi-jin.eAIP-Pad";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.usagi-jin.eAIP-Pad.dev";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

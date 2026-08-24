@@ -110,64 +110,22 @@ struct AirportListView: View {
 
         do {
             guard
-                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
-                    modelContext: modelContext)
+                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
                 throw NSError(
                     domain: "AirportListView", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
 
-            if let cached = AIRACHelper.shared.loadCachedData(
-                [AirportResponse].self, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.airports)
-            {
-                airports = cached
-                syncAirportsToLocal(cached)
-                isLoading = false
-                return
-            }
-
-            let response = try await NetworkService.shared.getAirports(
-                search: searchText.isEmpty ? nil : searchText)
-
-            if searchText.isEmpty {
-                AIRACHelper.shared.cacheData(
-                    response, airacVersion: airacVersion,
-                    dataType: PDFCacheService.DataType.airports)
-            }
-
-            airports = response
-            syncAirportsToLocal(response)
+            let descriptor = FetchDescriptor<Airport>(
+                sortBy: [SortDescriptor(\.icao)])
+            let localAirports = try modelContext.fetch(descriptor)
+            airports = localAirports.map { $0.toResponse() }
         } catch {
             errorMessage = "加载机场数据失败: \(error.localizedDescription)"
         }
 
         isLoading = false
-    }
-
-    private func syncAirportsToLocal(_ airports: [AirportResponse]) {
-        for airportResponse in airports {
-            // 检查是否已存在
-            let existingAirports = try? modelContext.fetch(
-                FetchDescriptor<Airport>(
-                    predicate: #Predicate { $0.icao == airportResponse.icao }
-                )
-            )
-
-            if existingAirports?.isEmpty ?? true {
-                let airport = Airport(
-                    icao: airportResponse.icao,
-                    nameEn: airportResponse.nameEn,
-                    nameCn: airportResponse.nameCn,
-                    hasTerminalCharts: airportResponse.hasTerminalCharts,
-                    isModified: airportResponse.isModified ?? false
-                )
-                modelContext.insert(airport)
-            }
-        }
-
-        try? modelContext.save()
     }
 }
 
