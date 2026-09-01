@@ -44,15 +44,15 @@ struct AboutView: View {
                             )
 
                             FeatureItem(
-                                icon: "cloud.fill",
-                                title: "航图缓存",
-                                description: "航图加载后自动本地缓存，下次秒开"
+                                icon: "internaldrive.fill",
+                                title: "完全离线",
+                                description: "航图数据全部保存在本机，无需联网即可查阅"
                             )
-                            
+
                             FeatureItem(
-                                icon: "arrow.clockwise",
-                                title: "自动更新",
-                                description: "AIRAC版本自动同步，确保数据最新"
+                                icon: "tray.and.arrow.down.fill",
+                                title: "手动导入",
+                                description: "从 EAIP China 官网下载 Web 数据包后手动导入更新"
                             )
                         }
                     }

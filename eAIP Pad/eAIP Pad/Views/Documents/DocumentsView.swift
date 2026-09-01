@@ -179,29 +179,18 @@ struct AIPDocumentsView: View {
 
         do {
             guard
-                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
-                    modelContext: modelContext)
+                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
                 throw NSError(
                     domain: "DocumentsView", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
 
-            let category = selectedCategory == .all ? nil : selectedCategory.rawValue
-            let cacheKey =
-                category != nil ? "aip_\(category!)" : PDFCacheService.DataType.aipDocuments
-
-            if let cached = AIRACHelper.shared.loadCachedData(
-                [AIPDocumentResponse].self, airacVersion: airacVersion, dataType: cacheKey)
-            {
-                documents = cached
-                isLoading = false
-                return
-            }
-
-            let response = try await NetworkService.shared.getAIPDocuments(category: category)
-            AIRACHelper.shared.cacheData(response, airacVersion: airacVersion, dataType: cacheKey)
-            documents = response
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { $0.documentType == "aip" }
+            )
+            let localDocuments = try modelContext.fetch(descriptor)
+            documents = localDocuments.map { $0.toAIPDocumentResponse() }
         } catch {
             errorMessage = "加载AIP文档失败: \(error.localizedDescription)"
         }
@@ -303,28 +292,18 @@ struct SUPDocumentsView: View {
 
         do {
             guard
-                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
-                    modelContext: modelContext)
+                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
                 throw NSError(
                     domain: "DocumentsView", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
 
-            if let cached = AIRACHelper.shared.loadCachedData(
-                [SUPDocumentResponse].self, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.supDocuments)
-            {
-                documents = cached
-                isLoading = false
-                return
-            }
-
-            let response = try await NetworkService.shared.getSUPDocuments()
-            AIRACHelper.shared.cacheData(
-                response, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.supDocuments)
-            documents = response
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { $0.documentType == "sup" }
+            )
+            let localDocuments = try modelContext.fetch(descriptor)
+            documents = localDocuments.map { $0.toSUPDocumentResponse() }
         } catch {
             errorMessage = "加载SUP文档失败: \(error.localizedDescription)"
         }
@@ -421,37 +400,10 @@ struct AMDTDocumentsView: View {
     }
 
     private func loadAMDTDocuments() async {
+        // 注：官方 Web 包的 AMDT.JSON 目前未纳入本地导入解析范围，此列表暂时始终为空。
         isLoading = true
         errorMessage = nil
-
-        do {
-            guard
-                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
-                    modelContext: modelContext)
-            else {
-                throw NSError(
-                    domain: "DocumentsView", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-
-            if let cached = AIRACHelper.shared.loadCachedData(
-                [AMDTDocumentResponse].self, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.amdtDocuments)
-            {
-                documents = cached
-                isLoading = false
-                return
-            }
-
-            let response = try await NetworkService.shared.getAMDTDocuments()
-            AIRACHelper.shared.cacheData(
-                response, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.amdtDocuments)
-            documents = response
-        } catch {
-            errorMessage = "加载AMDT文档失败: \(error.localizedDescription)"
-        }
-
+        documents = []
         isLoading = false
     }
 }
@@ -547,28 +499,18 @@ struct NOTAMDocumentsView: View {
 
         do {
             guard
-                let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(
-                    modelContext: modelContext)
+                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
                 throw NSError(
                     domain: "DocumentsView", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
 
-            if let cached = AIRACHelper.shared.loadCachedData(
-                [NOTAMDocumentResponse].self, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.notamDocuments)
-            {
-                documents = cached
-                isLoading = false
-                return
-            }
-
-            let response = try await NetworkService.shared.getNOTAMDocuments()
-            AIRACHelper.shared.cacheData(
-                response, airacVersion: airacVersion,
-                dataType: PDFCacheService.DataType.notamDocuments)
-            documents = response
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { $0.documentType == "notam" }
+            )
+            let localDocuments = try modelContext.fetch(descriptor)
+            documents = localDocuments.map { $0.toNOTAMDocumentResponse() }
         } catch {
             errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
         }
@@ -577,7 +519,7 @@ struct NOTAMDocumentsView: View {
     }
 }
 
-// 注意：响应模型已在 NetworkService.swift 中定义，这里不需要重复定义
+// 注意：响应模型定义在 Models/Network/ 下，这里不需要重复定义
 
 // MARK: - 文档行视图
 struct AIPDocumentRowView: View {

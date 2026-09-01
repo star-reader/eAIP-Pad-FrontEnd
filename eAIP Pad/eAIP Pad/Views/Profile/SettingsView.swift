@@ -4,7 +4,8 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var userSettings: [UserSettings]
-    
+    @State private var showingAIRACImport = false
+
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
     }
@@ -80,27 +81,36 @@ struct SettingsView: View {
                 }
                 
                 Section("数据") {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(.blue)
-                            .frame(width: 24)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("自动同步")
-                            Text("启动时自动检查AIRAC更新")
+                    Button {
+                        showingAIRACImport = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "tray.and.arrow.down.fill")
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("导入 AIRAC 数据包")
+                                    .foregroundColor(.primary)
+                                Text("从 EAIP China 官网下载 Web 数据包后手动导入")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        
-                        Spacer()
-                        
-                        Toggle("", isOn: .constant(true))
-                            .disabled(true)
                     }
                 }
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $showingAIRACImport) {
+                AIRACUpdateView()
+            }
         }
     }
 }

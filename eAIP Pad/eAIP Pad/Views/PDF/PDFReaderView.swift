@@ -268,142 +268,43 @@ struct PDFReaderView: View {
         isLoading = true
         errorMessage = nil
 
-        do {
-            // 提取实际的 ID - 从 chartID 中提取最后一个下划线后的数字
-            let actualID: String
-            if let lastUnderscoreIndex = chartID.lastIndex(of: "_") {
-                actualID = String(chartID[chartID.index(after: lastUnderscoreIndex)...])
-            } else {
-                actualID = chartID
-            }
-
-            LoggerService.shared.info(
-                module: "PDFReaderView",
-                message:
-                    "chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)"
-            )
-
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "PDFReaderView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "PDFReaderView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    LoggerService.shared.warning(
-                        module: "PDFReaderView",
-                        message: "无法从 API 获取 AIRAC 版本，使用默认值: \(error.localizedDescription)")
-                    // 使用一个默认的 AIRAC 版本（用于降级处理）
-                    currentAIRAC = "unknown"
-                }
-            }
-
-            // 确保 airacVersion 不为 nil（如果 API 获取失败，已设置为 "unknown"）
-            let airacVersion = currentAIRAC ?? "unknown"
-
-            // 1. 先尝试从缓存加载
-            if let cachedDocument = PDFCacheService.shared.loadFromCache(
-                airacVersion: airacVersion,
-                documentType: documentType.rawValue,
-                id: actualID
-            ) {
-                await MainActor.run {
-                    self.pdfDocument = cachedDocument
-                    self.totalPages = cachedDocument.pageCount
-                }
-                isLoading = false
-                return
-            }
-
-            // 2. 缓存未命中，直接请求当前文档
-            let signedURLResponse: SignedURLResponse
-            switch documentType {
-            case .chart:
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: id)
-            case .enroute:
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: id)
-            case .ad:
-                // AD 细则使用 documents/ad API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "ad", id: id)
-            case .aip:
-                // AIP 使用 documents/aip API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "aip", id: id)
-            case .sup:
-                // SUP 使用 documents/sup API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "sup", id: id)
-            case .amdt:
-                // AMDT 使用 documents/amdt API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "amdt", id: id)
-            case .notam:
-                // NOTAM 使用 documents/notam API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "notam", id: id)
-            }
-
-            // 构建完整URL - 将 /api/v1/ 替换为 /eaip/v1/
-            let correctedPath = signedURLResponse.url.replacingOccurrences(
-                of: "/api/v1/", with: "/eaip/v1/")
-            let fullURL = URL(string: NetworkConfig.baseURL + correctedPath)!
-
-            var pdfRequest = URLRequest(url: fullURL)
-            pdfRequest.setValue("application/pdf", forHTTPHeaderField: "Accept")
-
-            let (data, _) = try await URLSession.shared.data(for: pdfRequest)
-
-            // 3. 保存到缓存（只在有有效 AIRAC 版本时才缓存）
-            if airacVersion != "unknown" {
-                try? PDFCacheService.shared.saveToCache(
-                    pdfData: data,
-                    airacVersion: airacVersion,
-                    documentType: documentType.rawValue,
-                    id: actualID
-                )
-            }
-
-            await MainActor.run {
-                if let document = PDFDocument(data: data) {
-                    self.pdfDocument = document
-                    self.totalPages = document.pageCount
-                } else {
-                    self.errorMessage = "无法解析PDF文档"
-                }
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "加载PDF失败: \(error.localizedDescription)"
-            }
+        // 提取实际的 ID - 从 chartID 中提取最后一个下划线后的数字
+        let actualID: String
+        if let lastUnderscoreIndex = chartID.lastIndex(of: "_") {
+            actualID = String(chartID[chartID.index(after: lastUnderscoreIndex)...])
+        } else {
+            actualID = chartID
         }
 
+        LoggerService.shared.info(
+            module: "PDFReaderView",
+            message:
+                "chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)"
+        )
+
+        // 获取当前 AIRAC 版本（数据完全来自本地导入，没有联网兜底）
+        guard
+            let airacVersion = PDFCacheService.shared.getCurrentAIRACVersion(
+                modelContext: modelContext)
+        else {
+            errorMessage = "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"
+            isLoading = false
+            return
+        }
+
+        // 从本地缓存加载（导入时已把 PDF 拷贝进此目录）
+        if let cachedDocument = PDFCacheService.shared.loadFromCache(
+            airacVersion: airacVersion,
+            documentType: documentType.rawValue,
+            id: actualID
+        ) {
+            self.pdfDocument = cachedDocument
+            self.totalPages = cachedDocument.pageCount
+            isLoading = false
+            return
+        }
+
+        errorMessage = "找不到该文档，可能缓存已被清理，请重新导入 AIRAC 数据包"
         isLoading = false
     }
 

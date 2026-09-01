@@ -86,25 +86,25 @@ struct EnrouteView: View {
     private func loadEnrouteCharts() async {
         isLoading = true
         errorMessage = nil
-        
+
         do {
-            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
-                throw NSError(domain: "EnrouteView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+            guard
+                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
+            else {
+                throw NSError(
+                    domain: "EnrouteView", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
             }
-            
-            if let cached = AIRACHelper.shared.loadCachedData([ChartResponse].self, airacVersion: airacVersion, dataType: PDFCacheService.DataType.enrouteCharts) {
-                enrouteCharts = cached
-                isLoading = false
-                return
-            }
-            
-            let charts = try await NetworkService.shared.getEnrouteCharts(type: nil)
-            AIRACHelper.shared.cacheData(charts, airacVersion: airacVersion, dataType: PDFCacheService.DataType.enrouteCharts)
-            enrouteCharts = charts
+
+            let descriptor = FetchDescriptor<LocalChart>(
+                predicate: #Predicate<LocalChart> { $0.documentType == "enroute" }
+            )
+            let localCharts = try modelContext.fetch(descriptor)
+            enrouteCharts = localCharts.map { $0.toChartResponse() }
         } catch {
             errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
         }
-        
+
         isLoading = false
     }
 }

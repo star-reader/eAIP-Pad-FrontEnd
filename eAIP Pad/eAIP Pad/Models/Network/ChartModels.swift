@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - 航图响应
 struct ChartResponse: Codable, Hashable, Identifiable {
-    let id: Int
+    let id: String
     let documentId: String
     let parentId: String?
     let icao: String?
@@ -38,18 +38,5 @@ struct ChartResponse: Codable, Hashable, Identifiable {
 
     static func == (lhs: ChartResponse, rhs: ChartResponse) -> Bool {
         return lhs.id == rhs.id
-    }
-}
-
-// MARK: - 签名 URL 响应
-struct SignedURLResponse: Codable {
-    let url: String
-    let expiresIn: Int
-    let expire: Int64
-
-    enum CodingKeys: String, CodingKey {
-        case url
-        case expiresIn = "expires_in"
-        case expire
     }
 }

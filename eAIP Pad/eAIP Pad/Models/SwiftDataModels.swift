@@ -55,11 +55,13 @@ final class AIRACVersion {
     var downloadedCharts: Int = 0
     var totalCharts: Int = 0
     var createdAt: Date = Date()
+    var source: String = "local"  // 数据来源：目前只有 "local"（手动导入的官方 Web 包）
 
-    init(version: String, effectiveDate: Date, isCurrent: Bool = false) {
+    init(version: String, effectiveDate: Date, isCurrent: Bool = false, source: String = "local") {
         self.version = version
         self.effectiveDate = effectiveDate
         self.isCurrent = isCurrent
+        self.source = source
     }
 }
 
