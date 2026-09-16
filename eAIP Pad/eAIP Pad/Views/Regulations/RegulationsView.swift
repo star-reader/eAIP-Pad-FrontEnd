@@ -43,21 +43,14 @@ struct RegulationsView: View {
                 if isLoading {
                     ProgressView("加载机场数据...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = errorMessage,
+                          AIRACHelper.isMissingDataError(errorMessage) {
+                    NoLocalDataStateView()
                 } else if let errorMessage = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                        Button("重试") {
-                            Task {
-                                await loadAirports()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ErrorStateView(
+                        message: errorMessage,
+                        retryAction: { await loadAirports() }
+                    )
                 } else if filteredAirports.isEmpty {
                     ContentUnavailableView(
                         "暂无机场数据",
@@ -127,9 +120,7 @@ struct RegulationsView: View {
         do {
             guard PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
-                throw NSError(
-                    domain: "Regulations", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
+                throw AIRACHelper.makeMissingDataError()
             }
 
             let descriptor = FetchDescriptor<Airport>(sortBy: [SortDescriptor(\.icao)])
@@ -274,21 +265,14 @@ struct AirportRegulationsView: View {
             if isLoading {
                 ProgressView("加载AD细则...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let errorMessage = errorMessage,
+                      AIRACHelper.isMissingDataError(errorMessage) {
+                NoLocalDataStateView()
             } else if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        Task {
-                            await loadRegulations()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ErrorStateView(
+                    message: errorMessage,
+                    retryAction: { await loadRegulations() }
+                )
             } else if regulations.isEmpty {
                 ContentUnavailableView(
                     "暂无AD细则",
@@ -334,9 +318,7 @@ struct AirportRegulationsView: View {
         do {
             guard PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
-                throw NSError(
-                    domain: "Regulations", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
+                throw AIRACHelper.makeMissingDataError()
             }
 
             let icao = airport.icao

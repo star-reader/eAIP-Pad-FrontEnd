@@ -60,20 +60,14 @@ struct PDFReaderView: View {
                 if isLoading {
                     ProgressView("加载PDF...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = errorMessage,
+                          AIRACHelper.isMissingDataError(errorMessage) {
+                    NoLocalDataStateView()
                 } else if let errorMessage = errorMessage {
-                    VStack(spacing: 20) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                        Button("重试") {
-                            Task { await loadPDF() }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ErrorStateView(
+                        message: errorMessage,
+                        retryAction: { await loadPDF() }
+                    )
                 } else if let pdfDocument = pdfDocument {
                     PDFViewRepresentable(
                         document: pdfDocument,
@@ -287,7 +281,7 @@ struct PDFReaderView: View {
             let airacVersion = PDFCacheService.shared.getCurrentAIRACVersion(
                 modelContext: modelContext)
         else {
-            errorMessage = "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"
+            errorMessage = AIRACHelper.missingDataMessage
             isLoading = false
             return
         }

@@ -22,11 +22,18 @@ struct LoadingStateView<Content: View>: View {
         self.content = content
     }
     
+    private var isMissingLocalData: Bool {
+        guard let errorMessage else { return false }
+        return AIRACHelper.isMissingDataError(errorMessage)
+    }
+
     var body: some View {
         Group {
             if isLoading {
                 ProgressView(loadingMessage)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if isMissingLocalData {
+                NoLocalDataStateView()
             } else if let errorMessage = errorMessage {
                 ErrorStateView(
                     message: errorMessage,
@@ -76,6 +83,18 @@ struct ErrorStateView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+}
+
+// MARK: - 无本地数据状态视图
+struct NoLocalDataStateView: View {
+    var body: some View {
+        ContentUnavailableView {
+            Label("暂无本地数据", systemImage: "tray.and.arrow.down")
+        } description: {
+            Text("请前往「个人」页面导入本地资源包")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -134,6 +153,10 @@ struct EmptyStateView: View {
     ) {
         Text("Content")
     }
+}
+
+#Preview("No Local Data State") {
+    NoLocalDataStateView()
 }
 
 #Preview("Empty State") {

@@ -112,9 +112,7 @@ struct AirportListView: View {
             guard
                 await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
             else {
-                throw NSError(
-                    domain: "AirportListView", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"])
+                throw AIRACHelper.makeMissingDataError()
             }
 
             let descriptor = FetchDescriptor<Airport>(

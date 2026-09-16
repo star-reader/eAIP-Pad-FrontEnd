@@ -13,6 +13,7 @@ struct MainAppView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.modelContext) private var modelContext
     @Query private var userSettings: [UserSettings]
+    @State private var showFeatureIntro = false
 
     private var currentSettings: UserSettings {
         if let settings = userSettings.first {
@@ -26,6 +27,12 @@ struct MainAppView: View {
 
     var body: some View {
         contentView
+            .onAppear {
+                showFeatureIntro = VersionIntroManager.shouldShowIntro()
+            }
+            .sheet(isPresented: $showFeatureIntro) {
+                FeatureIntroSheet()
+            }
     }
 
     private var contentView: some View {

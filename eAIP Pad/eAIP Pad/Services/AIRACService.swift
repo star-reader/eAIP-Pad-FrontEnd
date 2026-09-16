@@ -556,33 +556,33 @@ struct AIRACUpdateView: View {
                 }
 
                 Spacer()
-
-                if !airacService.isUpdating {
-                    VStack(spacing: 12) {
-                        Button {
-                            showingFolderPicker = true
-                        } label: {
-                            Label("选择文件夹", systemImage: "folder.badge.plus")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button("完成") {
-                            dismiss()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .padding(.horizontal)
-                }
             }
             .padding()
             .navigationTitle("AIRAC 数据")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !airacService.isUpdating {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("关闭") {
-                            dismiss()
+                    if #available(iOS 26.0, *) {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(role: .close) {
+                                dismiss()
+                            }
+                        }
+                    } else {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("关闭") {
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !airacService.isUpdating {
+                    SheetWideBottomInset(height: 112) {
+                        VStack(spacing: 12) {
+                            selectFolderButton
+                            doneButton
                         }
                     }
                 }
@@ -600,6 +600,48 @@ struct AIRACUpdateView: View {
             case .failure(let error):
                 airacService.errorMessage = "选择文件夹失败: \(error.localizedDescription)"
             }
+        }
+    }
+
+    @ViewBuilder
+    private var selectFolderButton: some View {
+        if #available(iOS 26.0, *) {
+            Button {
+                showingFolderPicker = true
+            } label: {
+                Label("选择文件夹", systemImage: "folder.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glassProminent)
+        } else {
+            Button {
+                showingFolderPicker = true
+            } label: {
+                Label("选择文件夹", systemImage: "folder.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+
+    @ViewBuilder
+    private var doneButton: some View {
+        if #available(iOS 26.0, *) {
+            Button {
+                dismiss()
+            } label: {
+                Text("完成")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.glass)
+        } else {
+            Button {
+                dismiss()
+            } label: {
+                Text("完成")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
         }
     }
 }
