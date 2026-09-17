@@ -253,55 +253,7 @@ class PDFCacheService {
         return statistics
     }
 
-    // MARK: - 数据缓存（机场列表、航路图列表等）
-
-    /// 生成数据缓存文件路径
-    private func dataCacheFilePath(airacVersion: String, dataType: String) -> URL {
-        let versionDirectory = dataCacheDirectory.appendingPathComponent(airacVersion)
-
-        // 确保 AIRAC 版本目录存在
-        if !fileManager.fileExists(atPath: versionDirectory.path) {
-            try? fileManager.createDirectory(
-                at: versionDirectory, withIntermediateDirectories: true)
-        }
-
-        let fileName = "\(dataType).json"
-        return versionDirectory.appendingPathComponent(fileName)
-    }
-
-    /// 缓存 Codable 数据（如机场列表、航路图列表）
-    func cacheData<T: Codable>(_ data: T, airacVersion: String, dataType: String) throws {
-        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        let jsonData = try encoder.encode(data)
-        try jsonData.write(to: filePath)
-    }
-
-    /// 从缓存加载 Codable 数据
-    func loadCachedData<T: Codable>(_ type: T.Type, airacVersion: String, dataType: String) -> T? {
-        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
-
-        guard fileManager.fileExists(atPath: filePath.path) else {
-            return nil
-        }
-
-        do {
-            let jsonData = try Data(contentsOf: filePath)
-            let decoder = JSONDecoder()
-            return try decoder.decode(type, from: jsonData)
-        } catch {
-            LoggerService.shared.error(
-                module: "PDFCacheService", message: "加载缓存数据失败: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    /// 检查数据缓存是否存在
-    func isDataCached(airacVersion: String, dataType: String) -> Bool {
-        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
-        return fileManager.fileExists(atPath: filePath.path)
-    }
+    // MARK: - 数据缓存清理
 
     /// 清理数据缓存
     func clearDataCache() {

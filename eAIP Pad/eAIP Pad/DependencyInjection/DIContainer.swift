@@ -83,24 +83,10 @@ extension EnvironmentValues {
     }
 }
 
-// 注意：服务协议定义在 ServiceProtocols.swift 中
-// 这样可以避免循环依赖问题
-
 // MARK: - 服务注册扩展
 extension DIContainer {
-    /// 注册所有核心服务
-    /// 注意：当前服务类还未实现协议，这些注册代码暂时注释掉
-    /// 未来可以让服务类实现对应的协议后启用
-    func registerServices() {
-        // 等待服务类实现协议后再启用这些注册
-        // register(NetworkServiceProtocol.self, instance: NetworkService.shared)
-        // register(KeychainServiceProtocol.self, instance: KeychainService.shared)
-        // register(LoggerServiceProtocol.self, instance: LoggerService.shared)
-    }
-    
-    /// 在主线程注册 MainActor 隔离的服务
+    func registerServices() {}
+
     @MainActor
-    func registerMainActorServices() {
-        // 当前无需注册额外的 MainActor 服务
-    }
+    func registerMainActorServices() {}
 }

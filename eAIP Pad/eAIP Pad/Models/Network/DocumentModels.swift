@@ -122,23 +122,3 @@ struct NOTAMDocumentResponse: Codable, Identifiable {
     }
 }
 
-// MARK: - 通用文档详情响应
-struct DocumentDetailResponse: Codable, Identifiable {
-    let id: String
-    let documentId: String
-    let name: String
-    let nameCn: String
-    let type: String
-    let airacVersion: String
-    let isModified: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case name
-        case nameCn = "name_cn"
-        case type
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-    }
-}
