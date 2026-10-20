@@ -45,26 +45,29 @@ struct EnrouteView: View {
                         )
                     } else {
                         List(filteredCharts, id: \.id) { chart in
-                            if let binding = selectedChartBinding {
-                                Button {
-                                    binding.wrappedValue = chart
-                                } label: {
-                                    EnrouteChartRowView(chart: chart)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                NavigationLink {
-                                    PDFReaderView(
-                                        chartID: "enroute_\(chart.id)",
-                                        displayName: chart.nameCn,
-                                        documentType: .enroute
-                                    )
-                                } label: {
-                                    EnrouteChartRowView(chart: chart)
+                            Group {
+                                if let binding = selectedChartBinding {
+                                    Button {
+                                        binding.wrappedValue = chart
+                                    } label: {
+                                        EnrouteChartRowView(chart: chart)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink {
+                                        PDFReaderView(
+                                            chartID: "enroute_\(chart.id)",
+                                            displayName: chart.nameCn,
+                                            documentType: .enroute
+                                        )
+                                    } label: {
+                                        EnrouteChartRowView(chart: chart)
+                                    }
                                 }
                             }
+                            .compactListRow()
                         }
                         .listStyle(.insetGrouped)
                     }
@@ -122,8 +125,10 @@ struct EnrouteChartRowView: View {
     }
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: AppSymbols.enroute)
+
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(chart.nameCn)
                         .font(.subheadline)
@@ -164,10 +169,10 @@ struct EnrouteChartRowView: View {
             Button {
                 togglePin()
             } label: {
-                Image(systemName: isPinned ? "pin.fill" : "pin")
-                    .foregroundColor(isPinned ? .orange : .secondary)
+                PinSymbolView(isPinned: isPinned)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isPinned ? "取消收藏" : "收藏航图")
         }
     }
 

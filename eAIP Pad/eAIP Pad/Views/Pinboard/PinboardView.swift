@@ -91,9 +91,9 @@ struct PinboardPreviewGridView: View {
                                 .fill(Color.primaryBlue.opacity(0.1))
                                 .frame(height: 200)
                                 .overlay(
-                                    Image(systemName: "doc.text.fill")
-                                        .font(.system(size: 48))
-                                        .foregroundColor(Color.primaryBlue.opacity(0.3))
+                                    StateSymbolView(
+                                        systemImage: chart.documentSymbol, tint: chart.documentSymbolTint
+                                    )
                                 )
                                 .cornerRadius(8)
 

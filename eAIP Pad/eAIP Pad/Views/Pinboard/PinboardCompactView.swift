@@ -18,7 +18,8 @@ struct PinboardToolbarButton: View {
             } label: {
                 // 使用 overlay 而不是 ZStack，确保角标不被裁剪
                 Image(systemName: "pin.fill")
-                    .foregroundColor(.orange)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.orange.gradient)
                     .imageScale(.medium)
                     .overlay(alignment: .topTrailing) {
                         if pinnedCharts.count > 0 {
@@ -32,6 +33,7 @@ struct PinboardToolbarButton: View {
                     }
                     .padding(8)  // 增加内边距，给角标留出空间
             }
+            .accessibilityLabel("快速访问，\(pinnedCharts.count) 个收藏")
             .sheet(isPresented: $showingPinboard) {
                 PinboardCompactView()
             }
@@ -45,6 +47,7 @@ struct PinboardCompactView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
     @AppStorage("pinboardStyle") private var selectedStyle: PinboardStyle = .compact
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -107,6 +110,7 @@ struct PinboardCompactView: View {
                 } label: {
                     PinCompactListRow(pin: pin)
                 }
+                .compactListRow()
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button("删除", systemImage: "trash") {
                         modelContext.delete(pin)
@@ -123,10 +127,7 @@ struct PinboardCompactView: View {
     private var previewGridView: some View {
         ScrollView {
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 16),
-                    GridItem(.flexible(), spacing: 16),
-                ], spacing: 16
+                columns: [GridItem(.adaptive(minimum: 260), spacing: 16)], spacing: 16
             ) {
                 ForEach(pinnedCharts) { pin in
                     NavigationLink {
@@ -154,11 +155,10 @@ struct PinboardCompactView: View {
     private var taskGridView: some View {
         ScrollView {
             LazyVGrid(
-                columns: [
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                    GridItem(.flexible(), spacing: 12),
-                ], spacing: 12
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: 12, alignment: .top),
+                    count: dynamicTypeSize.isAccessibilitySize ? 2 : 3
+                ), spacing: 12
             ) {
                 ForEach(pinnedCharts) { pin in
                     NavigationLink {
@@ -199,6 +199,10 @@ struct PinCompactListRow: View {
                 .frame(width: 4)
 
             HStack(spacing: 12) {
+                AppSymbolView(
+                    systemImage: pin.documentSymbol, tint: pin.documentSymbolTint, size: .compact
+                )
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pin.displayName)
                         .font(.subheadline)
@@ -220,10 +224,9 @@ struct PinCompactListRow: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.leading, 12)
-
                 Spacer()
             }
+            .padding(.leading, 12)
         }
     }
 }
@@ -314,6 +317,7 @@ struct PinboardListView: View {
                 } label: {
                     PinListRow(pin: pin)
                 }
+                .compactListRow()
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button("删除", systemImage: "trash") {
                         modelContext.delete(pin)
@@ -364,7 +368,7 @@ struct PinboardGridView: View {
     @Environment(\.modelContext) private var modelContext
 
     private let columns = [
-        GridItem(.adaptive(minimum: 150), spacing: 16)
+        GridItem(.adaptive(minimum: 150), spacing: 16, alignment: .top)
     ]
 
     var body: some View {
@@ -408,17 +412,8 @@ struct PinListRow: View {
                 .fill(chartTypeColor)
                 .frame(width: 4)
 
-            HStack {
-                // 文档类型图标
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(chartTypeColor.opacity(0.1))
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: iconForDocumentType(pin.documentType))
-                        .foregroundColor(chartTypeColor)
-                        .font(.title3)
-                }
+            HStack(spacing: 12) {
+                AppSymbolView(systemImage: pin.documentSymbol, tint: pin.documentSymbolTint)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pin.displayName)
@@ -452,19 +447,6 @@ struct PinListRow: View {
             }
             .padding(.leading, 12)
         }
-        .padding(.vertical, 4)
-    }
-
-    private func iconForDocumentType(_ type: String) -> String {
-        switch type {
-        case "chart": return "airplane"
-        case "enroute": return "map"
-        case "aip": return "doc.text"
-        case "sup": return "exclamationmark.triangle"
-        case "amdt": return "pencil.and.outline"
-        case "notam": return "bell"
-        default: return "doc"
-        }
     }
 }
 
@@ -485,31 +467,25 @@ struct PinPreviewCard: View {
 
             HStack(spacing: 12) {
                 // 小图标
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(chartTypeColor.opacity(0.1))
-                        .frame(width: 44, height: 44)
-
+                Group {
                     if let thumbnailData = pin.thumbnailData,
                         let uiImage = UIImage(data: thumbnailData)
                     {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 44, height: 44)
-                            .clipped()
-                            .cornerRadius(8)
+                            .frame(width: 30, height: 30)
+                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                     } else {
-                        Image(systemName: iconForDocumentType(pin.documentType))
-                            .foregroundColor(chartTypeColor)
-                            .font(.title3)
+                        AppSymbolView(systemImage: pin.documentSymbol, tint: pin.documentSymbolTint)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(pin.displayName)
                         .font(.subheadline)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.primary)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -517,6 +493,7 @@ struct PinPreviewCard: View {
                         if !pin.icao.isEmpty {
                             Text(pin.icao)
                                 .font(.caption)
+                                .fixedSize(horizontal: true, vertical: false)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(chartTypeColor.opacity(0.15), in: Capsule())
@@ -535,22 +512,11 @@ struct PinPreviewCard: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .frame(height: 90)
+        .frame(minHeight: 76)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func iconForDocumentType(_ type: String) -> String {
-        switch type {
-        case "chart": return "airplane"
-        case "enroute": return "map"
-        case "aip": return "doc.text"
-        case "sup": return "exclamationmark.triangle"
-        case "amdt": return "pencil.and.outline"
-        case "notam": return "bell"
-        default: return "doc"
-        }
     }
 }
 
@@ -569,33 +535,29 @@ struct PinGridCard: View {
                 .fill(chartTypeColor)
                 .frame(height: 4)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 // 小图标区域
-                ZStack {
-                    Circle()
-                        .fill(chartTypeColor.opacity(0.1))
-                        .frame(width: 50, height: 50)
-
+                Group {
                     if let thumbnailData = pin.thumbnailData,
                         let uiImage = UIImage(data: thumbnailData)
                     {
                         Image(uiImage: uiImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 50, height: 50)
-                            .clipShape(Circle())
+                            .frame(width: 40, height: 40)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     } else {
-                        Image(systemName: iconForDocumentType(pin.documentType))
-                            .foregroundColor(chartTypeColor)
-                            .font(.title2)
+                        AppSymbolView(
+                            systemImage: pin.documentSymbol, tint: pin.documentSymbolTint, size: .large
+                        )
                     }
                 }
-                .padding(.top, 8)
 
                 VStack(alignment: .center, spacing: 6) {
                     Text(pin.displayName)
                         .font(.caption)
                         .fontWeight(.semibold)
+                        .foregroundStyle(Color.primary)
                         .lineLimit(3)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
@@ -603,6 +565,7 @@ struct PinGridCard: View {
                     if !pin.icao.isEmpty {
                         Text(pin.icao)
                             .font(.caption2)
+                            .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(chartTypeColor.opacity(0.15), in: Capsule())
@@ -611,22 +574,11 @@ struct PinGridCard: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .padding(12)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .frame(height: 140)
+        .frame(minHeight: 120, alignment: .top)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private func iconForDocumentType(_ type: String) -> String {
-        switch type {
-        case "chart": return "airplane"
-        case "enroute": return "map"
-        case "aip": return "doc.text"
-        case "sup": return "exclamationmark.triangle"
-        case "amdt": return "pencil.and.outline"
-        case "notam": return "bell"
-        default: return "doc"
-        }
     }
 }
 

@@ -114,11 +114,11 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .airports: return "airplane.circle.fill"
-        case .enroute: return "map.fill"
-        case .regulations: return "doc.text.fill"
-        case .documents: return "folder.fill"
-        case .profile: return "person.fill"
+        case .airports: return AppSymbols.airport
+        case .enroute: return AppSymbols.enroute
+        case .regulations: return AppSymbols.regulations
+        case .documents: return AppSymbols.documents
+        case .profile: return AppSymbols.profile
         }
     }
 }
@@ -130,20 +130,16 @@ struct SidebarView: View {
     var body: some View {
         List(selection: $selectedItem) {
             Section("") {
-                Label("机场", systemImage: "airplane.circle.fill")
-                    .tag(SidebarItem.airports)
-
-                Label("航路", systemImage: "map.fill")
-                    .tag(SidebarItem.enroute)
-
-                Label("细则", systemImage: "doc.text.fill")
-                    .tag(SidebarItem.regulations)
-
-                Label("文档", systemImage: "folder.fill")
-                    .tag(SidebarItem.documents)
-
-                Label("个人", systemImage: "person.fill")
-                    .tag(SidebarItem.profile)
+                ForEach(SidebarItem.allCases) { item in
+                    Label {
+                        Text(item.title)
+                    } icon: {
+                        NavigationSymbolView(
+                            systemImage: item.icon, isSelected: selectedItem == item
+                        )
+                    }
+                    .tag(item)
+                }
             }
         }
         .navigationTitle("eAIP Pad")

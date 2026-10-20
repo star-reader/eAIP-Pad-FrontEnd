@@ -136,9 +136,9 @@ struct PDFReaderView: View {
                     Button {
                         togglePin()
                     } label: {
-                        Image(systemName: isPinned ? "pin.fill" : "pin")
-                            .foregroundColor(isPinned ? .orange : .primary)
+                        PinSymbolView(isPinned: isPinned)
                     }
+                    .accessibilityLabel(isPinned ? "取消收藏" : "收藏文档")
 
                     // 更多操作菜单
                     Menu {

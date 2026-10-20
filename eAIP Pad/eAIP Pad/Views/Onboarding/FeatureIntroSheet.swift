@@ -95,11 +95,7 @@ struct FeatureIntroSheet: View {
                     .foregroundStyle(.secondary)
             }
         } icon: {
-            Image(systemName: icon)
-                .font(.title3)
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.blue)
-                .accessibilityHidden(true)
+            AppSymbolView(systemImage: icon, size: .compact)
         }
     }
 

@@ -7,10 +7,8 @@ struct StatisticRow: View {
     let color: Color
     
     var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundColor(color)
-                .frame(width: 24)
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: icon, tint: color, size: .compact)
             
             Text(title)
                 .font(.subheadline)
@@ -32,10 +30,8 @@ struct SettingRow: View {
     var trailingText: String? = nil
     
     var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundColor(color)
-                .frame(width: 24)
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: icon, tint: color, size: .compact)
             
             Text(title)
                 .font(.subheadline)

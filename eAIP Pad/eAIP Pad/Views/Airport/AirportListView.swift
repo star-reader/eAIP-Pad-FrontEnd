@@ -52,6 +52,7 @@ struct AirportListView: View {
                             }
                         }
                     }
+                    .compactListRow()
                 }
                 .scrollContentBackground(filteredAirports.isEmpty ? .hidden : .automatic)
                 .overlay {
@@ -118,19 +119,10 @@ struct AirportRowView: View {
     let airport: AirportResponse
 
     var body: some View {
-        HStack {
-            // 机场图标
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.orange.opacity(0.1))
-                    .frame(width: 40, height: 40)
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: AppSymbols.airport)
 
-                Image(systemName: "airplane")
-                    .foregroundColor(.orange)
-                    .font(.title3)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(airport.icao)
                         .font(.headline)
@@ -156,7 +148,6 @@ struct AirportRowView: View {
 
             Spacer()
         }
-        .padding(.vertical, 4)
     }
 }
 

@@ -15,9 +15,7 @@ struct SettingsView: View {
             List {
                 Section("外观") {
                     HStack {
-                        Image(systemName: "gear")
-                            .foregroundColor(.blue)
-                            .frame(width: 24)
+                        AppSymbolView(systemImage: "gearshape.fill", size: .compact)
                         
                         Text("跟随系统外观")
                         
@@ -36,9 +34,7 @@ struct SettingsView: View {
                     
                     if !currentSettings.followSystemAppearance {
                         HStack {
-                            Image(systemName: "moon.fill")
-                                .foregroundColor(.indigo)
-                                .frame(width: 24)
+                            AppSymbolView(systemImage: "moon.fill", tint: .indigo, size: .compact)
                             
                             Text("深色模式")
                             
@@ -57,9 +53,7 @@ struct SettingsView: View {
                     }
                     
                     HStack {
-                        Image(systemName: "pin.fill")
-                            .foregroundColor(.orange)
-                            .frame(width: 24)
+                        AppSymbolView(systemImage: "pin.fill", tint: .orange, size: .compact)
                         
                         Text("Pinboard 样式")
                         
@@ -79,15 +73,14 @@ struct SettingsView: View {
                         .pickerStyle(.menu)
                     }
                 }
+                .compactListRow()
                 
                 Section("数据") {
                     Button {
                         showingAIRACImport = true
                     } label: {
                         HStack {
-                            Image(systemName: "tray.and.arrow.down.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 24)
+                            AppSymbolView(systemImage: "tray.and.arrow.down.fill", size: .compact)
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("导入 AIRAC 数据包")
@@ -105,6 +98,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .compactListRow()
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)

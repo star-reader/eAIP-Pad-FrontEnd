@@ -9,10 +9,11 @@ struct StateSymbolView: View {
     @State private var appeared = false
 
     var body: some View {
-        Image(systemName: systemImage)
+        Image(systemName: AppSymbols.stateSymbol(systemImage))
             .font(.system(size: min(symbolSize, 72), weight: .regular))
             .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(tint)
+            .foregroundStyle(tint.gradient)
+            .frame(width: min(symbolSize, 72) * 1.3, height: min(symbolSize, 72) * 1.15)
             .symbolEffect(.bounce, options: .nonRepeating, value: appeared)
             .symbolEffectsRemoved(reduceMotion)
             .accessibilityHidden(true)

@@ -67,10 +67,7 @@ struct AboutView: View {
                         
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: "info.circle.fill")
-                                    .font(.title3)
-                                    .foregroundColor(.orange)
-                                    .frame(width: 24)
+                                AppSymbolView(systemImage: "info.circle.fill", size: .compact)
                                 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("官方数据源")
@@ -115,13 +112,12 @@ struct AboutView: View {
                         }
                     } label: {
                         HStack {
-                            Image(systemName: "link.circle.fill")
-                                .font(.title3)
+                            AppSymbolView(systemImage: "link", size: .compact)
                             Text("在 GitHub 上查看源码")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                         }
-                        .foregroundColor(.orange)
+                        .foregroundStyle(.blue)
                         .padding()
                         .frame(maxWidth: .infinity)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -148,10 +144,7 @@ struct FeatureItem: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(.orange)
-                .frame(width: 24)
+            AppSymbolView(systemImage: icon, size: .compact)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)

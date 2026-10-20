@@ -275,6 +275,7 @@ struct ChartRowView: View {
                 }
             }
         }
+        .compactListRow()
     }
 
     @ViewBuilder
@@ -286,7 +287,7 @@ struct ChartRowView: View {
                 .frame(width: 4)
 
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(chart.nameCn)
                             .font(.subheadline)
@@ -328,10 +329,10 @@ struct ChartRowView: View {
                 Button {
                     togglePin()
                 } label: {
-                    Image(systemName: isPinned ? "pin.fill" : "pin")
-                        .foregroundColor(isPinned ? .orange : .secondary)
+                    PinSymbolView(isPinned: isPinned)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(isPinned ? "取消收藏" : "收藏航图")
             }
         }
     }

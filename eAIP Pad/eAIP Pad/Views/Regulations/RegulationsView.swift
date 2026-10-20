@@ -69,6 +69,7 @@ struct RegulationsView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .compactListRow()
                     }
                     .listStyle(.insetGrouped)
                 }
@@ -195,19 +196,10 @@ struct AirportRegulationRowView: View {
     let airport: AirportResponse
 
     var body: some View {
-        HStack {
-            // 机场图标
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.blue.opacity(0.1))
-                    .frame(width: 40, height: 40)
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: AppSymbols.regulations)
 
-                Image(systemName: "doc.text")
-                    .foregroundColor(.blue)
-                    .font(.title3)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(airport.icao)
                         .font(.headline)
@@ -233,7 +225,6 @@ struct AirportRegulationRowView: View {
 
             Spacer()
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -298,6 +289,7 @@ struct AirportRegulationsView: View {
                     } label: {
                         RegulationDocumentRowView(regulation: regulation)
                     }
+                    .compactListRow()
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(filteredRegulations.isEmpty ? .hidden : .automatic)
@@ -390,7 +382,7 @@ struct RegulationDocumentRowView: View {
     let regulation: AIPDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(regulation.nameCn)
                 .font(.subheadline)
                 .fontWeight(.medium)
@@ -422,7 +414,6 @@ struct RegulationDocumentRowView: View {
                 Spacer()
             }
         }
-        .padding(.vertical, 4)
     }
 }
 

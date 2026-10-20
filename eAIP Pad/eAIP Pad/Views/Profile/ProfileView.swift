@@ -43,6 +43,7 @@ struct ProfileView: View {
                     )
                 }
             }
+            .compactListRow()
 
             Section("应用设置") {
                 Button {
@@ -81,6 +82,7 @@ struct ProfileView: View {
                     )
                 }
             }
+            .compactListRow()
 
             Section("帮助与支持") {
                 Button {
@@ -109,7 +111,7 @@ struct ProfileView: View {
                     SettingRow(
                         icon: "lightbulb.fill",
                         title: "我有新想法",
-                        color: .yellow
+                        color: .orange
                     )
                 }
 
@@ -123,6 +125,7 @@ struct ProfileView: View {
                     )
                 }
             }
+            .compactListRow()
 
             Section("法律信息") {
                 Button {
@@ -145,6 +148,7 @@ struct ProfileView: View {
                     )
                 }
             }
+            .compactListRow()
         }
         .navigationTitle("个人")
         .navigationBarTitleDisplayMode(.large)

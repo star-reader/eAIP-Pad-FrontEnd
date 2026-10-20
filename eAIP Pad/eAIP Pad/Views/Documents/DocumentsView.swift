@@ -127,47 +127,50 @@ struct AIPDocumentsView: View {
                 retryAction: { await loadAIPDocuments() }
             ) {
                 List(filteredDocuments, id: \.id) { document in
-                    if let binding = selectedChartBinding {
-                        // iPad 模式
-                        Button {
-                            LoggerService.shared.info(
-                                module: "AIPDocumentsView",
-                                message: "点击文档: ID=\(document.id), Name=\(document.nameCn)")
-                            // 转换为 ChartResponse，使用 "AIP" 作为 chartType
-                            binding.wrappedValue = ChartResponse(
-                                id: document.id,
-                                documentId: document.documentId,
-                                parentId: document.parentId,
-                                icao: document.airportIcao,
-                                nameEn: document.name,
-                                nameCn: document.nameCn,
-                                chartType: "AIP",  // 统一使用 "AIP" 而不是 category
-                                pdfPath: document.pdfPath,
-                                htmlPath: document.htmlPath,
-                                htmlEnPath: document.htmlEnPath,
-                                airacVersion: document.airacVersion,
-                                isModified: document.isModified ?? false,
-                                isOpened: document.isOpened,
-                                documentType: .aip
-                            )
-                        } label: {
-                            AIPDocumentRowView(document: document)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        // iPhone 模式
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: "aip_\(document.id)",
-                                displayName: document.nameCn,
-                                documentType: .aip
-                            )
-                        } label: {
-                            AIPDocumentRowView(document: document)
+                    Group {
+                        if let binding = selectedChartBinding {
+                            // iPad 模式
+                            Button {
+                                LoggerService.shared.info(
+                                    module: "AIPDocumentsView",
+                                    message: "点击文档: ID=\(document.id), Name=\(document.nameCn)")
+                                // 转换为 ChartResponse，使用 "AIP" 作为 chartType
+                                binding.wrappedValue = ChartResponse(
+                                    id: document.id,
+                                    documentId: document.documentId,
+                                    parentId: document.parentId,
+                                    icao: document.airportIcao,
+                                    nameEn: document.name,
+                                    nameCn: document.nameCn,
+                                    chartType: "AIP",  // 统一使用 "AIP" 而不是 category
+                                    pdfPath: document.pdfPath,
+                                    htmlPath: document.htmlPath,
+                                    htmlEnPath: document.htmlEnPath,
+                                    airacVersion: document.airacVersion,
+                                    isModified: document.isModified ?? false,
+                                    isOpened: document.isOpened,
+                                    documentType: .aip
+                                )
+                            } label: {
+                                AIPDocumentRowView(document: document)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            // iPhone 模式
+                            NavigationLink {
+                                PDFReaderView(
+                                    chartID: "aip_\(document.id)",
+                                    displayName: document.nameCn,
+                                    documentType: .aip
+                                )
+                            } label: {
+                                AIPDocumentRowView(document: document)
+                            }
                         }
                     }
+                    .compactListRow()
                 }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
@@ -253,45 +256,48 @@ struct SUPDocumentsView: View {
                 retryAction: { await loadSUPDocuments() }
             ) {
                 List(filteredDocuments, id: \.id) { document in
-                    if let binding = selectedChartBinding {
-                        Button {
-                            LoggerService.shared.info(
-                                module: "SUPDocumentsView",
-                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
-                            )
-                            binding.wrappedValue = ChartResponse(
-                                id: document.id,
-                                documentId: document.documentId,
-                                parentId: nil,
-                                icao: nil,
-                                nameEn: document.subject,
-                                nameCn: document.localSubject,
-                                chartType: "SUP",
-                                pdfPath: document.pdfPath,
-                                htmlPath: nil,
-                                htmlEnPath: nil,
-                                airacVersion: document.airacVersion,
-                                isModified: document.isModified ?? false,
-                                isOpened: nil,
-                                documentType: .sup
-                            )
-                        } label: {
-                            SUPDocumentRowView(document: document)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: "sup_\(document.id)",
-                                displayName: document.localSubject,
-                                documentType: .sup
-                            )
-                        } label: {
-                            SUPDocumentRowView(document: document)
+                    Group {
+                        if let binding = selectedChartBinding {
+                            Button {
+                                LoggerService.shared.info(
+                                    module: "SUPDocumentsView",
+                                    message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                                )
+                                binding.wrappedValue = ChartResponse(
+                                    id: document.id,
+                                    documentId: document.documentId,
+                                    parentId: nil,
+                                    icao: nil,
+                                    nameEn: document.subject,
+                                    nameCn: document.localSubject,
+                                    chartType: "SUP",
+                                    pdfPath: document.pdfPath,
+                                    htmlPath: nil,
+                                    htmlEnPath: nil,
+                                    airacVersion: document.airacVersion,
+                                    isModified: document.isModified ?? false,
+                                    isOpened: nil,
+                                    documentType: .sup
+                                )
+                            } label: {
+                                SUPDocumentRowView(document: document)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            NavigationLink {
+                                PDFReaderView(
+                                    chartID: "sup_\(document.id)",
+                                    displayName: document.localSubject,
+                                    documentType: .sup
+                                )
+                            } label: {
+                                SUPDocumentRowView(document: document)
+                            }
                         }
                     }
+                    .compactListRow()
                 }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
@@ -376,45 +382,48 @@ struct AMDTDocumentsView: View {
                 retryAction: { await loadAMDTDocuments() }
             ) {
                 List(filteredDocuments, id: \.id) { document in
-                    if let binding = selectedChartBinding {
-                        Button {
-                            LoggerService.shared.info(
-                                module: "AMDTDocumentsView",
-                                message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
-                            )
-                            binding.wrappedValue = ChartResponse(
-                                id: document.id,
-                                documentId: "\(document.id)",
-                                parentId: nil,
-                                icao: nil,
-                                nameEn: document.subject,
-                                nameCn: document.localSubject,
-                                chartType: "AMDT",
-                                pdfPath: document.pdfPath,
-                                htmlPath: nil,
-                                htmlEnPath: nil,
-                                airacVersion: document.airacVersion,
-                                isModified: document.isModified ?? false,
-                                isOpened: nil,
-                                documentType: .amdt
-                            )
-                        } label: {
-                            AMDTDocumentRowView(document: document)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: "amdt_\(document.id)",
-                                displayName: document.localSubject,
-                                documentType: .amdt
-                            )
-                        } label: {
-                            AMDTDocumentRowView(document: document)
+                    Group {
+                        if let binding = selectedChartBinding {
+                            Button {
+                                LoggerService.shared.info(
+                                    module: "AMDTDocumentsView",
+                                    message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
+                                )
+                                binding.wrappedValue = ChartResponse(
+                                    id: document.id,
+                                    documentId: "\(document.id)",
+                                    parentId: nil,
+                                    icao: nil,
+                                    nameEn: document.subject,
+                                    nameCn: document.localSubject,
+                                    chartType: "AMDT",
+                                    pdfPath: document.pdfPath,
+                                    htmlPath: nil,
+                                    htmlEnPath: nil,
+                                    airacVersion: document.airacVersion,
+                                    isModified: document.isModified ?? false,
+                                    isOpened: nil,
+                                    documentType: .amdt
+                                )
+                            } label: {
+                                AMDTDocumentRowView(document: document)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            NavigationLink {
+                                PDFReaderView(
+                                    chartID: "amdt_\(document.id)",
+                                    displayName: document.localSubject,
+                                    documentType: .amdt
+                                )
+                            } label: {
+                                AMDTDocumentRowView(document: document)
+                            }
                         }
                     }
+                    .compactListRow()
                 }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
@@ -483,44 +492,47 @@ struct NOTAMDocumentsView: View {
                 retryAction: { await loadNOTAMDocuments() }
             ) {
                 List(filteredDocuments, id: \.id) { document in
-                    if let binding = selectedChartBinding {
-                        Button {
-                            LoggerService.shared.info(
-                                module: "NOTAMDocumentsView",
-                                message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
-                            binding.wrappedValue = ChartResponse(
-                                id: document.id,
-                                documentId: "\(document.id)",
-                                parentId: nil,
-                                icao: nil,
-                                nameEn: "NOTAM \(document.seriesName)",
-                                nameCn: "NOTAM \(document.seriesName)",
-                                chartType: "NOTAM",
-                                pdfPath: nil,
-                                htmlPath: nil,
-                                htmlEnPath: nil,
-                                airacVersion: document.airacVersion,
-                                isModified: false,
-                                isOpened: nil,
-                                documentType: .notam
-                            )
-                        } label: {
-                            NOTAMDocumentRowView(document: document)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        NavigationLink {
-                            PDFReaderView(
-                                chartID: "notam_\(document.id)",
-                                displayName: "NOTAM \(document.seriesName)",
-                                documentType: .notam
-                            )
-                        } label: {
-                            NOTAMDocumentRowView(document: document)
+                    Group {
+                        if let binding = selectedChartBinding {
+                            Button {
+                                LoggerService.shared.info(
+                                    module: "NOTAMDocumentsView",
+                                    message: "点击文档: ID=\(document.id), Series=\(document.seriesName)")
+                                binding.wrappedValue = ChartResponse(
+                                    id: document.id,
+                                    documentId: "\(document.id)",
+                                    parentId: nil,
+                                    icao: nil,
+                                    nameEn: "NOTAM \(document.seriesName)",
+                                    nameCn: "NOTAM \(document.seriesName)",
+                                    chartType: "NOTAM",
+                                    pdfPath: nil,
+                                    htmlPath: nil,
+                                    htmlEnPath: nil,
+                                    airacVersion: document.airacVersion,
+                                    isModified: false,
+                                    isOpened: nil,
+                                    documentType: .notam
+                                )
+                            } label: {
+                                NOTAMDocumentRowView(document: document)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            NavigationLink {
+                                PDFReaderView(
+                                    chartID: "notam_\(document.id)",
+                                    displayName: "NOTAM \(document.seriesName)",
+                                    documentType: .notam
+                                )
+                            } label: {
+                                NOTAMDocumentRowView(document: document)
+                            }
                         }
                     }
+                    .compactListRow()
                 }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
@@ -571,7 +583,7 @@ struct AIPDocumentRowView: View {
     let document: AIPDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(document.nameCn)
                 .font(.subheadline)
                 .fontWeight(.medium)
@@ -603,7 +615,6 @@ struct AIPDocumentRowView: View {
                 Spacer()
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -611,7 +622,7 @@ struct SUPDocumentRowView: View {
     let document: SUPDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("SUP \(document.serial)")
                     .font(.caption)
@@ -645,7 +656,6 @@ struct SUPDocumentRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -653,7 +663,7 @@ struct AMDTDocumentRowView: View {
     let document: AMDTDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("AMDT \(document.serial)")
                     .font(.caption)
@@ -687,7 +697,6 @@ struct AMDTDocumentRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -695,7 +704,7 @@ struct NOTAMDocumentRowView: View {
     let document: NOTAMDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("NOTAM \(document.seriesName)")
                     .font(.caption)
@@ -715,7 +724,6 @@ struct NOTAMDocumentRowView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
-        .padding(.vertical, 4)
     }
 }
 
