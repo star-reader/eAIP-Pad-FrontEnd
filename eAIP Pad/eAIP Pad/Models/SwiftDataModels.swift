@@ -171,7 +171,7 @@ enum PinboardStyle: String, CaseIterable {
 }
 
 // MARK: - 文档类型枚举
-enum DocumentType: String, CaseIterable {
+enum DocumentType: String, Codable, CaseIterable {
     case chart = "chart"
     case enroute = "enroute"
     case aip = "aip"

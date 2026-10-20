@@ -206,32 +206,13 @@ struct DetailView: View {
         if selectedItem == .profile {
             placeholderView
         } else if let chart = selectedChart {
-            // 显示选中的 PDF
-            let documentType: DocumentType = {
-                switch chart.chartType {
-                case "AD":
-                    return .ad  // AD 细则（来自 RegulationsView）
-                case "AIP":
-                    return .aip  // AIP 文档
-                case "ENROUTE", "AREA":
-                    return .enroute  // 航路图
-                case "SUP":
-                    return .sup
-                case "AMDT":
-                    return .amdt
-                case "NOTAM":
-                    return .notam
-                default:
-                    return .chart  // 机场航图（SID、STAR、APP 等）
-                }
-            }()
-
+            // 与 iPhone 使用相同的文档来源和标识，读取正确缓存并共享收藏、标注。
             PDFReaderView(
-                chartID: "\(chart.chartType.lowercased())_\(chart.id)",
+                chartID: chart.readerChartID,
                 displayName: chart.nameCn,
-                documentType: documentType
+                documentType: chart.readerDocumentType
             )
-            .id("\(documentType.rawValue)_\(chart.chartType)_\(chart.id)")  // 包含 documentType 确保唯一
+            .id(chart.readerChartID)
         } else {
             // 占位符
             placeholderView

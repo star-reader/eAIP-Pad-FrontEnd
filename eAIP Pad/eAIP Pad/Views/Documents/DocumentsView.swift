@@ -147,7 +147,8 @@ struct AIPDocumentsView: View {
                                 htmlEnPath: document.htmlEnPath,
                                 airacVersion: document.airacVersion,
                                 isModified: document.isModified ?? false,
-                                isOpened: document.isOpened
+                                isOpened: document.isOpened,
+                                documentType: .aip
                             )
                         } label: {
                             AIPDocumentRowView(document: document)
@@ -271,7 +272,8 @@ struct SUPDocumentsView: View {
                                 htmlEnPath: nil,
                                 airacVersion: document.airacVersion,
                                 isModified: document.isModified ?? false,
-                                isOpened: nil
+                                isOpened: nil,
+                                documentType: .sup
                             )
                         } label: {
                             SUPDocumentRowView(document: document)
@@ -393,7 +395,8 @@ struct AMDTDocumentsView: View {
                                 htmlEnPath: nil,
                                 airacVersion: document.airacVersion,
                                 isModified: document.isModified ?? false,
-                                isOpened: nil
+                                isOpened: nil,
+                                documentType: .amdt
                             )
                         } label: {
                             AMDTDocumentRowView(document: document)
@@ -498,7 +501,8 @@ struct NOTAMDocumentsView: View {
                                 htmlEnPath: nil,
                                 airacVersion: document.airacVersion,
                                 isModified: false,
-                                isOpened: nil
+                                isOpened: nil,
+                                documentType: .notam
                             )
                         } label: {
                             NOTAMDocumentRowView(document: document)

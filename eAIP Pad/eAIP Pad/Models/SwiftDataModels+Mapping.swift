@@ -31,7 +31,8 @@ extension LocalChart {
             htmlEnPath: htmlEnPath,
             airacVersion: airacVersion,
             isModified: isModified,
-            isOpened: isOpened
+            isOpened: isOpened,
+            documentType: DocumentType(rawValue: documentType)
         )
     }
 

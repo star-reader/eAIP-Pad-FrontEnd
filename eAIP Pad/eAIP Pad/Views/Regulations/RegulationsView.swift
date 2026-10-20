@@ -165,7 +165,8 @@ struct RegulationsView: View {
                             htmlEnPath: firstRegulation.htmlEnPath,
                             airacVersion: firstRegulation.airacVersion,
                             isModified: firstRegulation.isModified ?? false,
-                            isOpened: firstRegulation.isOpened
+                            isOpened: firstRegulation.isOpened,
+                            documentType: .ad
                         )
                     } else {
                         // iPhone 模式：使用 navigationDestination
