@@ -316,12 +316,18 @@ struct AIRACUpdateView: View {
                         }
                     }
                 } else {
-                    SheetWideBottomInset(height: 112) {
-                        VStack(spacing: 12) {
-                            selectFolderButton
-                            doneButton
-                        }
+                    VStack(spacing: 12) {
+                        selectFolderButton
+                        doneButton
                     }
+                    .font(.headline)
+                    .controlSize(.large)
+                    .buttonBorderShape(.capsule)
+                    .containerRelativeFrame(.horizontal) { width, _ in
+                        width * 0.8
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 8)
                 }
             }
         }
