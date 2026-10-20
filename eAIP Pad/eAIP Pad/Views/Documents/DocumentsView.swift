@@ -4,25 +4,32 @@ import SwiftUI
 // MARK: - 文档视图
 struct DocumentsView: View {
     @State private var selectedDocumentType: DocumentCategory = .aip
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // 文档类型选择器
                 DocumentTypeSelector(selectedType: $selectedDocumentType)
-                    .padding(.horizontal)
 
                 // 文档内容
                 Group {
                     switch selectedDocumentType {
                     case .aip:
                         AIPDocumentsView()
+                            .transition(.opacity)
                     case .sup:
                         SUPDocumentsView()
+                            .transition(.opacity)
                     case .notam:
                         NOTAMDocumentsView()
+                            .transition(.opacity)
                     }
                 }
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 0.2),
+                    value: selectedDocumentType
+                )
             }
             .navigationTitle("文档")
             .navigationBarTitleDisplayMode(.large)
@@ -60,6 +67,7 @@ struct AIPDocumentsView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedCategory: AIPCategory = .all
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
     @State private var sortOption: AIPDocumentSortOption = .updatedFirst
 
@@ -84,29 +92,24 @@ struct AIPDocumentsView: View {
 
     var body: some View {
         VStack {
-            // AIP 分类选择器 - HStack 按钮样式
-            HStack(spacing: 12) {
-                ForEach(AIPCategory.allCases, id: \.self) { category in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedCategory = category
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) {
+                    ForEach(AIPCategory.allCases, id: \.self) { category in
+                        Button {
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                                selectedCategory = category
+                            }
+                        } label: {
+                            Text(category.displayName)
                         }
-                    } label: {
-                        Text(category.displayName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(selectedCategory == category ? .white : .blue)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                selectedCategory == category ? Color.blue : Color.blue.opacity(0.1),
-                                in: Capsule()
-                            )
+                        .buttonStyle(CompactCapsuleButtonStyle(isSelected: selectedCategory == category))
+                        .accessibilityAddTraits(selectedCategory == category ? .isSelected : [])
                     }
                 }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .scrollIndicators(.hidden)
+            .padding(.vertical, 4)
 
             CompactSearchFilterBar(
                 searchText: $searchText,
@@ -163,6 +166,17 @@ struct AIPDocumentsView: View {
                         } label: {
                             AIPDocumentRowView(document: document)
                         }
+                    }
+                }
+                .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredDocuments.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无 AIP 文档",
+                            systemImage: "doc.text",
+                            description: "当前分类中没有文档，可尝试切换分类或导入其他数据包。"
+                        )
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -277,6 +291,17 @@ struct SUPDocumentsView: View {
                         }
                     }
                 }
+                .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredDocuments.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无 SUP 文档",
+                            systemImage: "doc.text",
+                            description: "当前分类中没有文档，可尝试切换分类或导入其他数据包。"
+                        )
+                    }
+                }
             }
         }
         .task {
@@ -388,6 +413,17 @@ struct AMDTDocumentsView: View {
                         }
                     }
                 }
+                .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredDocuments.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无 AMDT 文档",
+                            systemImage: "doc.text",
+                            description: "当前分类中没有文档，可尝试切换分类或导入其他数据包。"
+                        )
+                    }
+                }
             }
         }
         .task {
@@ -480,6 +516,17 @@ struct NOTAMDocumentsView: View {
                         } label: {
                             NOTAMDocumentRowView(document: document)
                         }
+                    }
+                }
+                .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredDocuments.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无 NOTAM 文档",
+                            systemImage: "doc.text",
+                            description: "当前分类中没有文档，可尝试切换分类或导入其他数据包。"
+                        )
                     }
                 }
             }

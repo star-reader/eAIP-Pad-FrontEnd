@@ -50,10 +50,10 @@ struct PinboardCompactView: View {
         NavigationStack {
             Group {
                 if pinnedCharts.isEmpty {
-                    ContentUnavailableView(
-                        "暂无收藏",
+                    EmptyStateView(
+                        title: "暂无收藏",
                         systemImage: "pin.slash",
-                        description: Text("收藏的航图会显示在这里")
+                        description: "收藏的航图会显示在这里"
                     )
                 } else {
                     // 根据选择的样式显示不同内容
@@ -247,22 +247,11 @@ struct PinboardFullView: View {
         NavigationStack {
             VStack {
                 if pinnedCharts.isEmpty {
-                    // 空状态
-                    VStack(spacing: 16) {
-                        Image(systemName: "pin")
-                            .font(.system(size: 60))
-                            .foregroundColor(.secondary)
-
-                        Text("暂无收藏")
-                            .font(.title2)
-                            .fontWeight(.medium)
-
-                        Text("在航图页面点击收藏按钮来添加快速访问")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    EmptyStateView(
+                        title: "暂无收藏",
+                        systemImage: "pin.slash",
+                        description: "在航图页面轻点图钉，\n即可将常用航图添加到快速访问。"
+                    )
                 } else {
                     // 根据样式显示内容
                     switch pinboardStyle {

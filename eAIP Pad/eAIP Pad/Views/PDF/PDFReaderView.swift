@@ -58,8 +58,7 @@ struct PDFReaderView: View {
         NavigationStack {
             ZStack {
                 if isLoading {
-                    ProgressView("加载PDF...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingIndicatorView(message: "加载 PDF…")
                 } else if let errorMessage = errorMessage,
                           AIRACHelper.isMissingDataError(errorMessage) {
                     NoLocalDataStateView()
@@ -83,8 +82,7 @@ struct PDFReaderView: View {
                     )
                     .ignoresSafeArea(.all, edges: .bottom)
                 } else {
-                    Text("无法加载PDF")
-                        .foregroundColor(.secondary)
+                    ErrorStateView(message: "无法读取此 PDF，请尝试重新打开或导入数据包。")
                 }
 
                 // 标注工具栏

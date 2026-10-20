@@ -246,43 +246,18 @@ struct AIRACUpdateView: View {
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.modelContext) private var modelContext
     @State private var showingFolderPicker = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                if !airacService.isUpdating {
-                    Image(systemName: "tray.and.arrow.down.fill")
-                        .font(.system(size: 60))
-                        .foregroundStyle(.blue)
-                        .symbolRenderingMode(.hierarchical)
-
-                    VStack(spacing: 8) {
-                        Text("导入 AIRAC 数据包")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-
-                        Text("请选择从 EAIP China 官网下载并解压后的 Web 数据包文件夹")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-
-                    if let errorMessage = airacService.errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                            .padding()
-                            .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                            .padding(.horizontal)
-                    }
+            GeometryReader { geometry in
+                ScrollView {
+                    importContent
+                        .frame(minHeight: geometry.size.height)
                 }
-
-                Spacer()
+                .scrollBounceBehavior(.basedOnSize)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding()
             .navigationTitle("AIRAC 数据")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -303,33 +278,19 @@ struct AIRACUpdateView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if airacService.isUpdating {
-                    SheetWideBottomInset(height: 72) {
-                        VStack(spacing: 10) {
-                            Text(airacService.updateMessage)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-
-                            ProgressView(value: airacService.updateProgress)
-                                .progressViewStyle(.linear)
+                if !airacService.isUpdating {
+                    SheetWideBottomInset {
+                        VStack(spacing: 12) {
+                            selectFolderButton
+                            doneButton
                         }
                     }
-                } else {
-                    VStack(spacing: 12) {
-                        selectFolderButton
-                        doneButton
-                    }
-                    .font(.headline)
-                    .controlSize(.large)
-                    .buttonBorderShape(.capsule)
-                    .containerRelativeFrame(.horizontal) { width, _ in
-                        width * 0.8
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, 8)
                 }
             }
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.25),
+                value: airacService.isUpdating
+            )
         }
         .interactiveDismissDisabled(airacService.isUpdating)
         .fileImporter(
@@ -348,6 +309,59 @@ struct AIRACUpdateView: View {
                 airacService.errorMessage = "选择文件夹失败: \(error.localizedDescription)"
             }
         }
+    }
+
+    private var importContent: some View {
+        VStack(spacing: 24) {
+            StateMessageContent(
+                title: airacService.isUpdating ? "正在导入 AIRAC 数据" : "导入 AIRAC 数据包",
+                systemImage: airacService.isUpdating ? "arrow.down.doc.fill" : "tray.and.arrow.down.fill",
+                description: airacService.isUpdating
+                    ? "请保持应用开启，完成后即可离线浏览。"
+                    : "选择从 EAIP China 官网下载\n并解压后的 Web 数据包文件夹。"
+            )
+            .id(airacService.isUpdating)
+            .transition(.opacity)
+
+            if airacService.isUpdating {
+                VStack(spacing: 12) {
+                    ProgressView(value: airacService.updateProgress)
+                        .tint(.blue)
+                        .accessibilityLabel("导入进度")
+
+                    Text(airacService.updateProgress, format: .percent.precision(.fractionLength(0)))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+
+                    Text(airacService.updateMessage)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: 340)
+                .transition(.opacity)
+            } else if let errorMessage = airacService.errorMessage {
+                Label {
+                    Text(errorMessage)
+                        .foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                }
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(16)
+                .frame(maxWidth: 340, alignment: .leading)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+                .modifier(StateEntranceModifier())
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 32)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

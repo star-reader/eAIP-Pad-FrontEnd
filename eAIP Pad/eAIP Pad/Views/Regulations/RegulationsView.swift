@@ -41,8 +41,7 @@ struct RegulationsView: View {
 
                 // 机场列表
                 if isLoading {
-                    ProgressView("加载机场数据...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingIndicatorView(message: "加载机场数据…")
                 } else if let errorMessage = errorMessage,
                           AIRACHelper.isMissingDataError(errorMessage) {
                     NoLocalDataStateView()
@@ -52,12 +51,12 @@ struct RegulationsView: View {
                         retryAction: { await loadAirports() }
                     )
                 } else if filteredAirports.isEmpty {
-                    ContentUnavailableView(
-                        "暂无机场数据",
-                        systemImage: "airplane.circle",
-                        description: Text("没有找到相关机场")
+                    SearchEmptyStateView(
+                        searchText: $searchText,
+                        title: "暂无机场数据",
+                        systemImage: "airplane",
+                        description: "当前数据包中没有机场信息。"
                     )
-                    .foregroundColor(.primaryBlue)
                 } else {
                     List(filteredAirports, id: \.icao) { airport in
                         Button {
@@ -263,8 +262,7 @@ struct AirportRegulationsView: View {
     var body: some View {
         VStack {
             if isLoading {
-                ProgressView("加载AD细则...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                LoadingIndicatorView(message: "加载 AD 细则…")
             } else if let errorMessage = errorMessage,
                       AIRACHelper.isMissingDataError(errorMessage) {
                 NoLocalDataStateView()
@@ -274,12 +272,11 @@ struct AirportRegulationsView: View {
                     retryAction: { await loadRegulations() }
                 )
             } else if regulations.isEmpty {
-                ContentUnavailableView(
-                    "暂无AD细则",
+                EmptyStateView(
+                    title: "暂无 AD 细则",
                     systemImage: "doc.text.magnifyingglass",
-                    description: Text("该机场暂无AD细则文档")
+                    description: "当前数据包中没有该机场的 AD 细则。"
                 )
-                .foregroundColor(.primaryBlue)
             } else {
                 CompactSearchFilterBar(
                     searchText: $searchText,
@@ -302,6 +299,17 @@ struct AirportRegulationsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(filteredRegulations.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredRegulations.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无 AD 细则",
+                            systemImage: "doc.text.magnifyingglass",
+                            description: "当前数据包中没有该机场的 AD 细则。"
+                        )
+                    }
+                }
             }
         }
         .navigationTitle("\(airport.icao) AD细则")
@@ -423,25 +431,7 @@ struct SearchBar: View {
     let placeholder: String
 
     var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-
-            TextField(placeholder, text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        CompactSearchField(text: $text, placeholder: placeholder)
     }
 }
 

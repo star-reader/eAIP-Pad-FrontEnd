@@ -97,6 +97,17 @@ struct AirportDetailView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(filteredCharts.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredCharts.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无此类航图",
+                            systemImage: "doc.richtext",
+                            description: "该机场在当前分类中没有航图，可尝试切换航图类型。"
+                        )
+                    }
+                }
             }
         }
         .navigationTitle("")

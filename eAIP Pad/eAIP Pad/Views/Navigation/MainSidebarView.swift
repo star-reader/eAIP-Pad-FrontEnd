@@ -72,10 +72,10 @@ struct MainSidebarView: View {
                     )
                 }
             } else {
-                ContentUnavailableView(
-                    "选择一个项目",
+                EmptyStateView(
+                    title: "选择一个项目",
                     systemImage: "sidebar.left",
-                    description: Text("从侧边栏选择一个项目开始")
+                    description: "从侧边栏选择一个项目开始"
                 )
             }
         } detail: {
@@ -243,37 +243,37 @@ struct DetailView: View {
         if let item = selectedItem {
             switch item {
             case .airports:
-                ContentUnavailableView(
-                    "选择机场或航图",
+                EmptyStateView(
+                    title: "选择机场或航图",
                     systemImage: "airplane.circle",
-                    description: Text("从左侧列表选择一个机场和航图查看")
+                    description: "从左侧列表选择一个机场和航图查看"
                 )
             case .enroute:
-                ContentUnavailableView(
-                    "选择航路图",
+                EmptyStateView(
+                    title: "选择航路图",
                     systemImage: "map",
-                    description: Text("从左侧列表选择一个航路图查看")
+                    description: "从左侧列表选择一个航路图查看"
                 )
             case .regulations:
-                ContentUnavailableView(
-                    "选择机场细则",
+                EmptyStateView(
+                    title: "选择机场细则",
                     systemImage: "doc.text.magnifyingglass",
-                    description: Text("从左侧列表选择一个机场查看细则")
+                    description: "从左侧列表选择一个机场查看细则"
                 )
             case .documents:
-                ContentUnavailableView(
-                    "选择文档",
+                EmptyStateView(
+                    title: "选择文档",
                     systemImage: "folder",
-                    description: Text("从左侧列表选择一个文档查看")
+                    description: "从左侧列表选择一个文档查看"
                 )
             case .profile:
                 EmptyView()
             }
         } else {
-            ContentUnavailableView(
-                "选择内容",
+            EmptyStateView(
+                title: "选择内容",
                 systemImage: "doc.text",
-                description: Text("从左侧选择项目以查看详情")
+                description: "从左侧选择项目以查看详情"
             )
         }
     }

@@ -7,24 +7,13 @@ struct FeatureIntroSheet: View {
         NavigationStack {
             List {
                 Section {
-                    VStack(spacing: 16) {
-                        Image(systemName: "tray.and.arrow.down.fill")
-                            .font(.system(size: 56))
-                            .foregroundStyle(.tint)
-                            .symbolRenderingMode(.hierarchical)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-
-                        Text("本地数据导入")
-                            .font(.title.bold())
-                            .multilineTextAlignment(.center)
-
-                        Text("APP 数据现已可以从本地导入。按照以下步骤完成数据包导入，即可开始使用。")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
+                    StateMessageContent(
+                        title: "本地数据导入",
+                        systemImage: "tray.and.arrow.down.fill",
+                        description: "导入官方 EAIP Web 数据包，\n即可在本机离线浏览航图与文档。"
+                    )
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
                     .listRowBackground(Color.clear)
                 }
 
@@ -32,7 +21,7 @@ struct FeatureIntroSheet: View {
                     featureRow(
                         icon: "person.crop.circle.fill",
                         title: "前往「个人」页面",
-                        description: "在底部导航栏选择「个人」，进入应用设置。"
+                        description: "在导航栏中选择「个人」，进入应用设置。"
                     )
 
                     featureRow(
@@ -107,6 +96,10 @@ struct FeatureIntroSheet: View {
             }
         } icon: {
             Image(systemName: icon)
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.blue)
+                .accessibilityHidden(true)
         }
     }
 
