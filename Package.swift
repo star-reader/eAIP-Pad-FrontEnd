@@ -25,7 +25,8 @@ let package = Package(
                 "Models/Network/DocumentModels.swift", "Models/SwiftDataModels.swift",
                 "Models/SwiftDataModels+Mapping.swift", "Services/LocalAIRACPackageParser.swift",
                 "Services/AIRACFileStore.swift", "Services/AIRACPackageStore.swift",
-                "Services/AIRACArchiveExtractor.swift"
+                "Services/AIRACArchiveExtractor.swift", "Services/AIRACServerClient.swift",
+                "Services/AIRACOnlineData.swift"
             ],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),

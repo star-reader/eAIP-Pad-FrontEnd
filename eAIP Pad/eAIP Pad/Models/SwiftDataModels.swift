@@ -55,7 +55,8 @@ final class AIRACVersion {
     var downloadedCharts: Int = 0
     var totalCharts: Int = 0
     var createdAt: Date = Date()
-    var source: String = "local"  // 数据来源：目前只有 "local"（手动导入的官方 Web 包）
+    var source: String = "local"  // local / serverCopy / serverRequest
+    var serverURL: String?
     // nil 表示旧版缓存布局；新导入先写入独立目录，再提交此指针。
     var cacheRevision: String?
     var airportICAOs: [String]?

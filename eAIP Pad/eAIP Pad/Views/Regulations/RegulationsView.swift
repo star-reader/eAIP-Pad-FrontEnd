@@ -121,12 +121,14 @@ struct RegulationsView: View {
         errorMessage = nil
 
         do {
-            let localAirports = try AIRACPackageStore.currentAirports(modelContext: modelContext)
+            let localAirports = try await AIRACPackageStore.loadAirports(modelContext: modelContext)
+            try Task.checkCancellation()
 
             await MainActor.run {
                 self.airports = localAirports.map { $0.toResponse() }
             }
         } catch {
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
             }
@@ -140,8 +142,9 @@ struct RegulationsView: View {
         isLoadingRegulation = true
 
         do {
-            let localCharts = try AIRACPackageStore.currentCharts(
+            let localCharts = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "ad", icao: airport.icao)
+            try Task.checkCancellation()
             let regulations = localCharts.map { $0.toAIPDocumentResponse() }
 
             await MainActor.run {
@@ -179,6 +182,7 @@ struct RegulationsView: View {
                 isLoadingRegulation = false
             }
         } catch {
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 errorMessage = "加载AD细则失败: \(error.localizedDescription)"
                 isLoadingRegulation = false
@@ -315,14 +319,16 @@ struct AirportRegulationsView: View {
         errorMessage = nil
 
         do {
-            let localCharts = try AIRACPackageStore.currentCharts(
+            let localCharts = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "ad", icao: airport.icao)
+            try Task.checkCancellation()
             let localRegulations = localCharts
 
             await MainActor.run {
                 self.regulations = localRegulations.map { $0.toAIPDocumentResponse() }
             }
         } catch {
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.errorMessage = "加载AD细则失败: \(error.localizedDescription)"
             }

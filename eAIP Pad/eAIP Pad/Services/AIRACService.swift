@@ -59,6 +59,33 @@ final class AIRACService: ObservableObject {
         PDFCacheService.shared.getFormattedTotalCacheSize()
     }
 
+    func configureServer(
+        _ configuration: AIRACServerConfiguration, expectedVersion: String, expectedDate: Date,
+        modelContext: ModelContext
+    ) async -> Bool {
+        guard !isUpdating else { return false }
+        isUpdating = true
+        errorMessage = nil
+        updateProgress = 0
+        updateMessage = "连接在线服务器..."
+        defer { isUpdating = false }
+        do {
+            try await packageStore.configureServer(
+                configuration, modelContext: modelContext,
+                expectedVersion: expectedVersion, expectedDate: expectedDate
+            ) { [weak self] progress, message in
+                self?.updateProgress = progress
+                self?.updateMessage = message
+                await Task.yield()
+            }
+            dataRevision &+= 1
+            return true
+        } catch {
+            errorMessage = "配置失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
     /// 删除导入内容和所有周期标记，保留用户收藏和标注。
     func clearAllCache(modelContext: ModelContext) async -> Bool {
         guard !isUpdating else { return false }
@@ -90,6 +117,7 @@ struct AIRACUpdateView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var showingPackagePicker = false
     @State private var selectingZIP = false
+    @State private var showingServerWizard = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -100,6 +128,8 @@ struct AIRACUpdateView: View {
 
                     if !airacService.isUpdating {
                         localImportSection
+                            .transition(.opacity)
+                        networkImportSection
                             .transition(.opacity)
                     }
                 }
@@ -136,6 +166,12 @@ struct AIRACUpdateView: View {
             )
         }
         .interactiveDismissDisabled(airacService.isUpdating)
+        .sheet(isPresented: $showingServerWizard) {
+            AIRACServerSetupView {
+                showingServerWizard = false
+                dismiss()
+            }
+        }
         .fileImporter(
             isPresented: $showingPackagePicker, allowedContentTypes: selectingZIP ? [.zip] : [.folder]
         ) { result in
@@ -162,7 +198,7 @@ struct AIRACUpdateView: View {
                 systemImage: airacService.isUpdating ? "arrow.down.doc.fill" : "tray.and.arrow.down.fill",
                 description: airacService.isUpdating
                     ? "请保持应用开启，完成后即可离线浏览。"
-                    : "选择从 EAIP China 官网下载的 Web 数据包，支持 ZIP 文件或已解压的文件夹。"
+                    : nil
             )
             .id(airacService.isUpdating)
             .transition(.opacity)
@@ -211,7 +247,7 @@ struct AIRACUpdateView: View {
         AIRACDataActionSection(title: "本地导入") {
             AIRACDataActionRow(
                 title: "选择 ZIP 文件",
-                subtitle: "自动解压并导入数据包",
+                subtitle: "自动解压并导入",
                 systemImage: "doc.zipper"
             ) {
                 selectingZIP = true
@@ -223,11 +259,24 @@ struct AIRACUpdateView: View {
 
             AIRACDataActionRow(
                 title: "选择已解压文件夹",
-                subtitle: "从解压后的 Web 数据包导入",
+                subtitle: "导入已解压的数据包",
                 systemImage: "folder"
             ) {
                 selectingZIP = false
                 showingPackagePicker = true
+            }
+        }
+    }
+
+    private var networkImportSection: some View {
+        AIRACDataActionSection(title: "网络导入") {
+            AIRACDataActionRow(
+                title: "配置自定义在线服务器",
+                subtitle: "复制到本地或按需请求",
+                systemImage: "network"
+            ) {
+                airacService.errorMessage = nil
+                showingServerWizard = true
             }
         }
     }

@@ -139,10 +139,13 @@ struct AirportDetailView: View {
         errorMessage = nil
 
         do {
-            charts = try AIRACPackageStore.currentCharts(
+            let loaded = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "chart", icao: airport.icao
-            ).map { $0.toChartResponse() }
+            )
+            try Task.checkCancellation()
+            charts = loaded.map { $0.toChartResponse() }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "加载航图数据失败: \(error.localizedDescription)"
         }
 

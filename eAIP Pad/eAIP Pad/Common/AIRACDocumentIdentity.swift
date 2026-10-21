@@ -34,7 +34,7 @@ nonisolated enum AIRACPackageError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingLocalData: return "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"
+        case .missingLocalData: return "暂无 AIRAC 数据，请先在「个人」中导入数据包或配置在线服务器"
         case .invalidPackage(let message): return message
         case .missingPDF(let path): return "数据包缺少 PDF：\(path)"
         case .invalidPDF(let path): return "PDF 无法读取或没有页面：\(path)"

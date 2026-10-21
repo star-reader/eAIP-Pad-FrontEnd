@@ -93,10 +93,13 @@ struct EnrouteView: View {
         errorMessage = nil
 
         do {
-            enrouteCharts = try AIRACPackageStore.currentCharts(
+            let loaded = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "enroute"
-            ).map { $0.toChartResponse() }
+            )
+            try Task.checkCancellation()
+            enrouteCharts = loaded.map { $0.toChartResponse() }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
         }
 

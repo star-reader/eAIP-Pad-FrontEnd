@@ -59,7 +59,7 @@ struct ContentView: View {
         await checkAndUpdateAIRAC()
     }
     
-    /// 数据完全来自用户手动导入的官方 EAIP Web 包，启动时只做本地状态检查，不再联网。
+    /// 启动时读取已启用的数据源周期；在线请求由各列表和阅读器按需发起。
     private func checkAndUpdateAIRAC() async {
         guard !isCheckingAIRAC else { return }
         isCheckingAIRAC = true
@@ -68,10 +68,10 @@ struct ContentView: View {
         let currentLocalVersion = airacVersions.first(where: { $0.isCurrent })
         if let localVersion = currentLocalVersion {
             LoggerService.shared.info(
-                module: "ContentView", message: "本地当前 AIRAC 版本: \(localVersion.version)")
+                module: "ContentView", message: "当前 AIRAC 版本: \(localVersion.version)")
         } else {
             LoggerService.shared.info(
-                module: "ContentView", message: "本地暂无 AIRAC 数据，等待用户导入")
+                module: "ContentView", message: "暂无 AIRAC 数据，等待用户导入或配置服务器")
         }
     }
 }

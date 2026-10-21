@@ -7,11 +7,11 @@ class AIRACHelper {
 
     static let missingDataErrorDomain = "AIRACHelper"
     static let missingDataErrorCode = -1001
-    static let missingDataMessage = "暂无本地 AIRAC 数据，请先在「个人」中导入数据包"
+    static let missingDataMessage = "暂无 AIRAC 数据，请先在「个人」中导入数据包或配置在线服务器"
 
     private init() {}
 
-    /// 返回本地已导入的当前 AIRAC 版本；没有导入过数据时返回 nil（不再联网获取）
+    /// 返回已启用的数据源周期；尚未导入或配置时返回 nil
     func getCurrentAIRACVersion(modelContext: ModelContext) async -> String? {
         return PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
     }

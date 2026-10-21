@@ -14,6 +14,5 @@ struct SheetWideBottomInset<Content: View>: View {
             .buttonBorderShape(.capsule)
             .padding(.top, 12)
             .padding(.bottom, 8)
-            .background(.background)
     }
 }

@@ -49,28 +49,39 @@ nonisolated enum LocalAIRACPackageParser {
         let dataURL = folderURL.appendingPathComponent("Data")
         let jsonPathURL = dataURL.appendingPathComponent("JsonPath")
 
-        let customersURL = dataURL.appendingPathComponent("Customers.js")
-        let customersRaw = try String(contentsOf: customersURL, encoding: .utf8)
-        let customer = try parseCustomer(customersRaw)
-        let version = customer.dataVersion
-        guard let effectiveDate = parseEAIPDate(customer.effectiveDate) else {
+        let customers = try Data(contentsOf: dataURL.appendingPathComponent("Customers.js"))
+        var indexes: [String: Data] = [:]
+        for name in ["AD", "GEN", "ENR", "SUP", "NOTAM"] {
+            let url = jsonPathURL.appendingPathComponent("\(name).JSON")
+            if ["SUP", "NOTAM"].contains(name), !FileManager.default.fileExists(atPath: url.path) { continue }
+            indexes[name] = try Data(contentsOf: url)
+        }
+        return try parse(customers: customers, indexes: indexes)
+    }
+
+    static func metadata(_ data: Data) throws -> (version: String, effectiveDate: Date) {
+        guard let raw = String(data: data, encoding: .utf8) else {
+            throw AIRACPackageError.invalidPackage("Customers.js 不是有效的 UTF-8 文本")
+        }
+        let customer = try parseCustomer(raw)
+        guard let date = parseEAIPDate(customer.effectiveDate) else {
             throw AIRACPackageError.invalidPackage("Customers.js 的生效时间无效，应为 yyMMddHHmm 格式（UTC）")
         }
+        return (customer.dataVersion, date)
+    }
 
+    /// 本地包和在线目录使用同一套解析与校验，按需请求允许只传入本页所需的索引。
+    static func parse(customers: Data, indexes: [String: Data], requireDocuments: Bool = true) throws -> ParsedAIRACPackage {
+        let (version, effectiveDate) = try metadata(customers)
         var pendingCharts: [ParsedAIRACPackage.Chart] = []
         var pendingAirports: [String: (nameEn: String, nameCn: String, isModified: Bool)] = [:]
+        if let data = indexes["AD"] { try parseAD(data, charts: &pendingCharts, airports: &pendingAirports) }
+        if let data = indexes["GEN"] { try parseGEN(data, charts: &pendingCharts) }
+        if let data = indexes["ENR"] { try parseENR(data, charts: &pendingCharts) }
+        if let data = indexes["SUP"] { try parseSUP(data, charts: &pendingCharts) }
+        if let data = indexes["NOTAM"] { try parseNOTAM(data, charts: &pendingCharts) }
 
-        try parseAD(
-            jsonPathURL.appendingPathComponent("AD.JSON"),
-            charts: &pendingCharts,
-            airports: &pendingAirports
-        )
-        try parseGEN(jsonPathURL.appendingPathComponent("GEN.JSON"), charts: &pendingCharts)
-        try parseENR(jsonPathURL.appendingPathComponent("ENR.JSON"), charts: &pendingCharts)
-        try parseSUP(jsonPathURL.appendingPathComponent("SUP.JSON"), charts: &pendingCharts)
-        try parseNOTAM(jsonPathURL.appendingPathComponent("NOTAM.JSON"), charts: &pendingCharts)
-
-        guard !pendingCharts.isEmpty else {
+        guard !requireDocuments || !pendingCharts.isEmpty else {
             throw AIRACPackageError.invalidPackage("数据包没有可导入的 PDF 文档")
         }
         var documentIDs = Set<String>()
@@ -147,13 +158,13 @@ nonisolated enum LocalAIRACPackageParser {
         return data
     }
 
-    private static func loadNodes(_ url: URL) throws -> [EAIPTreeNode] {
-        let data = stripBOM(try Data(contentsOf: url))
+    private static func loadNodes(_ raw: Data, name: String) throws -> [EAIPTreeNode] {
+        let data = stripBOM(raw)
         let nodes = try JSONDecoder().decode([EAIPTreeNode].self, from: data)
         var byID: [String: EAIPTreeNode] = [:]
         for node in nodes {
             guard !node.id.isEmpty, byID.updateValue(node, forKey: node.id) == nil else {
-                throw AIRACPackageError.invalidPackage("\(url.lastPathComponent) 存在空节点 ID 或重复 ID：\(node.id)")
+                throw AIRACPackageError.invalidPackage("\(name) 存在空节点 ID 或重复 ID：\(node.id)")
             }
         }
         // 迭代检查父链，避免循环关系导致无限遍历，深层目录也不会耗尽调用栈。
@@ -163,7 +174,7 @@ nonisolated enum LocalAIRACPackageParser {
             var current = node.id
             while let ancestor = byID[current], !validated.contains(current) {
                 guard path.insert(current).inserted else {
-                    throw AIRACPackageError.invalidPackage("\(url.lastPathComponent) 存在循环父子关系：\(current)")
+                    throw AIRACPackageError.invalidPackage("\(name) 存在循环父子关系：\(current)")
                 }
                 current = ancestor.pId
             }
@@ -173,11 +184,11 @@ nonisolated enum LocalAIRACPackageParser {
     }
 
     private static func parseAD(
-        _ url: URL,
+        _ raw: Data,
         charts: inout [ParsedAIRACPackage.Chart],
         airports: inout [String: (nameEn: String, nameCn: String, isModified: Bool)]
     ) throws {
-        let nodes = try loadNodes(url)
+        let nodes = try loadNodes(raw, name: "AD.JSON")
         let byParent = Dictionary(grouping: nodes, by: { $0.pId })
 
         let airportRoots = nodes.filter { ($0.airporticao?.isEmpty == false) }
@@ -230,8 +241,8 @@ nonisolated enum LocalAIRACPackageParser {
         return name
     }
 
-    private static func parseGEN(_ url: URL, charts: inout [ParsedAIRACPackage.Chart]) throws {
-        let nodes = try loadNodes(url)
+    private static func parseGEN(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
+        let nodes = try loadNodes(raw, name: "GEN.JSON")
         for node in nodes where !node.pdfPath.isEmpty {
             charts.append(
                 ParsedAIRACPackage.Chart(
@@ -245,8 +256,8 @@ nonisolated enum LocalAIRACPackageParser {
         }
     }
 
-    private static func parseENR(_ url: URL, charts: inout [ParsedAIRACPackage.Chart]) throws {
-        let nodes = try loadNodes(url)
+    private static func parseENR(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
+        let nodes = try loadNodes(raw, name: "ENR.JSON")
         let byParent = Dictionary(grouping: nodes, by: { $0.pId })
 
         guard
@@ -303,9 +314,8 @@ nonisolated enum LocalAIRACPackageParser {
         }
     }
 
-    private static func parseSUP(_ url: URL, charts: inout [ParsedAIRACPackage.Chart]) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        let data = stripBOM(try Data(contentsOf: url))
+    private static func parseSUP(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
+        let data = stripBOM(raw)
         let docs = try JSONDecoder().decode([EAIPFlatDocument].self, from: data)
         for doc in docs {
             charts.append(
@@ -321,9 +331,8 @@ nonisolated enum LocalAIRACPackageParser {
         }
     }
 
-    private static func parseNOTAM(_ url: URL, charts: inout [ParsedAIRACPackage.Chart]) throws {
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        let data = stripBOM(try Data(contentsOf: url))
+    private static func parseNOTAM(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
+        let data = stripBOM(raw)
         let docs = try JSONDecoder().decode([EAIPNotamDocument].self, from: data)
         for doc in docs {
             let stableID = "\(doc.seriesName)_\(doc.generateTime)"

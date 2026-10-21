@@ -21,6 +21,8 @@ struct PDFReaderView: View {
     @ObservedObject private var airacService = AIRACService.shared
 
     @State private var pdfDocument: PDFDocument?
+    @State private var loadedChart: LocalChart?
+    @State private var loadedVersion: String?
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingAnnotationTools = false
@@ -255,27 +257,22 @@ struct PDFReaderView: View {
         isLoading = true
         errorMessage = nil
         pdfDocument = nil
+        loadedChart = nil
+        loadedVersion = nil
         totalPages = 0
         currentPage = 0
-        defer { isLoading = false }
+        defer { if !Task.isCancelled { isLoading = false } }
         do {
-            let resolved = try AIRACPackageStore.resolveDocument(
+            let resolved = try await AIRACPackageStore.loadDocument(
                 chartID: chartID, documentType: documentType.rawValue,
                 version: airacVersion, modelContext: modelContext)
-            var document = PDFCacheService.shared.loadFromCache(
-                airacVersion: resolved.version.version, documentType: documentType.rawValue,
-                id: resolved.chart.cacheDocumentID, revision: resolved.version.cacheRevision)
-            if document == nil, resolved.version.cacheRevision == nil {
-                document = PDFCacheService.shared.loadFromCache(
-                    airacVersion: resolved.version.version, documentType: documentType.rawValue,
-                    id: resolved.chart.documentID)
-            }
-            guard let document else {
-                throw AIRACPackageError.missingPDF(resolved.chart.nameCn)
-            }
-            pdfDocument = document
-            totalPages = document.pageCount
+            try Task.checkCancellation()
+            loadedChart = resolved.chart
+            loadedVersion = resolved.version.version
+            pdfDocument = resolved.document
+            totalPages = resolved.document.pageCount
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -287,17 +284,14 @@ struct PDFReaderView: View {
                 modelContext.delete(pinToRemove)
             }
         } else {
-            guard let resolved = try? AIRACPackageStore.resolveDocument(
-                chartID: chartID, documentType: documentType.rawValue,
-                version: airacVersion, modelContext: modelContext)
-            else { return }
+            guard let loadedChart, let loadedVersion else { return }
             let newPin = PinnedChart(
-                chartID: resolved.chart.readerChartID,
-                displayName: resolved.chart.nameCn,
-                icao: resolved.chart.icao ?? "",
-                type: resolved.chart.chartType,
+                chartID: loadedChart.readerChartID,
+                displayName: loadedChart.nameCn,
+                icao: loadedChart.icao ?? "",
+                type: loadedChart.chartType,
                 documentType: documentType.rawValue,
-                airacVersion: resolved.version.version
+                airacVersion: loadedVersion
             )
             modelContext.insert(newPin)
         }

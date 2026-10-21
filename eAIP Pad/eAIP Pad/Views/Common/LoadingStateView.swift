@@ -211,9 +211,9 @@ struct EmptyStateView: View {
 struct NoLocalDataStateView: View {
     var body: some View {
         EmptyStateView(
-            title: "暂无本地数据",
+            title: "暂无 AIRAC 数据",
             systemImage: "tray.and.arrow.down.fill",
-            description: "前往「个人」导入 AIRAC 数据包，\n即可离线浏览航图与文档。"
+            description: "前往「个人」导入 AIRAC 数据包，\n或配置自定义在线服务器。"
         )
     }
 }

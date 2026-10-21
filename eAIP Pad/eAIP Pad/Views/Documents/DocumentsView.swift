@@ -198,10 +198,13 @@ struct AIPDocumentsView: View {
         errorMessage = nil
 
         do {
-            documents = try AIRACPackageStore.currentCharts(
+            let loaded = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "aip"
-            ).map { $0.toAIPDocumentResponse() }
+            )
+            try Task.checkCancellation()
+            documents = loaded.map { $0.toAIPDocumentResponse() }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "加载AIP文档失败: \(error.localizedDescription)"
         }
 
@@ -318,10 +321,13 @@ struct SUPDocumentsView: View {
         errorMessage = nil
 
         do {
-            documents = try AIRACPackageStore.currentCharts(
+            let loaded = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "sup"
-            ).map { $0.toSUPDocumentResponse() }
+            )
+            try Task.checkCancellation()
+            documents = loaded.map { $0.toSUPDocumentResponse() }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "加载SUP文档失败: \(error.localizedDescription)"
         }
 
@@ -549,10 +555,13 @@ struct NOTAMDocumentsView: View {
         errorMessage = nil
 
         do {
-            documents = try AIRACPackageStore.currentCharts(
+            let loaded = try await AIRACPackageStore.loadCharts(
                 modelContext: modelContext, documentType: "notam"
-            ).map { $0.toNOTAMDocumentResponse() }
+            )
+            try Task.checkCancellation()
+            documents = loaded.map { $0.toNOTAMDocumentResponse() }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
         }
 

@@ -96,8 +96,11 @@ struct AirportListView: View {
         errorMessage = nil
 
         do {
-            airports = try AIRACPackageStore.currentAirports(modelContext: modelContext).map { $0.toResponse() }
+            let loaded = try await AIRACPackageStore.loadAirports(modelContext: modelContext)
+            try Task.checkCancellation()
+            airports = loaded.map { $0.toResponse() }
         } catch {
+            guard !Task.isCancelled else { return }
             errorMessage = "加载机场数据失败: \(error.localizedDescription)"
         }
 

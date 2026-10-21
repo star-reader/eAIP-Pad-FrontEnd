@@ -271,6 +271,7 @@ struct AIRACDataCoreTests {
         #expect(version.version == "2601")
         #expect(version.isCurrent)
         #expect(version.cacheRevision == nil)
+        #expect(version.serverURL == nil)
         #expect(version.airportICAOs == nil)
     }
 

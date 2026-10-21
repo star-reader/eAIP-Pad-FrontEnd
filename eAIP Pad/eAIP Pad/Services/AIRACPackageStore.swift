@@ -96,8 +96,53 @@ final class AIRACPackageStore {
         await reportProgress(1, "导入完成")
     }
 
+    func configureServer(
+        _ configuration: AIRACServerConfiguration, modelContext: ModelContext,
+        client: AIRACServerClient = .shared, expectedVersion: String? = nil, expectedDate: Date? = nil,
+        progress: (@MainActor (Double, String) async -> Void)? = nil
+    ) async throws {
+        guard !isImporting else { throw AIRACPackageError.invalidPackage("已有 AIRAC 操作正在进行") }
+        isImporting = true
+        defer { isImporting = false }
+        await progress?(0.02, "读取服务器目录...")
+        let parsed = try await client.catalog(
+            from: configuration, expectedVersion: expectedVersion, expectedDate: expectedDate)
+        let prepared = PreparedAIRACCache(
+            version: parsed.version, revision: UUID().uuidString,
+            documentCount: configuration.mode == .copy ? parsed.charts.count : 0)
+        do {
+            if configuration.mode == .copy {
+                for (index, chart) in parsed.charts.enumerated() {
+                    try Task.checkCancellation()
+                    await progress?(0.1 + 0.8 * Double(index) / Double(parsed.charts.count),
+                        "复制 PDF \(index + 1) / \(parsed.charts.count)...")
+                    let data = try await client.fetch(chart.pdfPath!, from: configuration)!
+                    let files = self.files
+                    // PDF 校验与磁盘写入不阻塞主线程。
+                    try await Task.detached(priority: .utility) {
+                        try files.savePDF(data, version: parsed.version, revision: prepared.revision,
+                            documentType: chart.documentType, id: chart.cacheDocumentID)
+                    }.value
+                }
+                let latest = try await client.metadata(from: configuration)
+                guard latest.version == parsed.version, latest.effectiveDate == parsed.effectiveDate else {
+                    throw AIRACPackageError.invalidPackage("复制期间服务器周期已变更，请重新配置")
+                }
+            }
+            try Task.checkCancellation()
+            await progress?(0.95, "保存服务器配置...")
+            try Task.checkCancellation()
+            try commit(parsed, prepared: prepared, modelContext: modelContext, configuration: configuration)
+        } catch {
+            try? files.discard(prepared)
+            throw error
+        }
+        await progress?(1, "配置完成")
+    }
+
     private func commit(
-        _ parsed: ParsedAIRACPackage, prepared: PreparedAIRACCache, modelContext: ModelContext
+        _ parsed: ParsedAIRACPackage, prepared: PreparedAIRACCache, modelContext: ModelContext,
+        configuration: AIRACServerConfiguration? = nil
     ) throws {
         // 先保存调用方已有的用户设置/收藏，失败回滚只涉及本次导入。
         if modelContext.hasChanges { try modelContext.save() }
@@ -106,6 +151,10 @@ final class AIRACPackageStore {
         defer { modelContext.autosaveEnabled = autosave }
 
         let version = parsed.version
+        let isRequest = configuration?.mode == .request
+        // 请求模式只保存连接配置，目录和 PDF 在使用时获取。
+        let storedAirports = isRequest ? [] : parsed.airports
+        let storedCharts = isRequest ? [] : parsed.charts
         var evictedVersions: [String] = []
         var previousRevision: String?
         do {
@@ -127,7 +176,7 @@ final class AIRACPackageStore {
             let airports = try modelContext.fetch(FetchDescriptor<Airport>())
             var airportsByICAO = Dictionary(uniqueKeysWithValues: airports.map { ($0.icao, $0) })
             let terminalICAOs = Set(parsed.charts.filter { $0.documentType == "chart" }.compactMap(\.icao))
-            for pending in parsed.airports {
+            for pending in storedAirports {
                 let airport = airportsByICAO[pending.icao]
                     ?? Airport(icao: pending.icao, nameEn: pending.nameEn, nameCn: pending.nameCn)
                 if airportsByICAO[pending.icao] == nil {
@@ -141,7 +190,7 @@ final class AIRACPackageStore {
             }
 
             var incomingKeys = Set<String>()
-            for pending in parsed.charts {
+            for pending in storedCharts {
                 let key = AIRACDocumentIdentity.storageID(version: version, readerID: pending.readerID)
                 incomingKeys.insert(key)
                 let chart = byReaderID[pending.readerID] ?? LocalChart(
@@ -149,28 +198,7 @@ final class AIRACPackageStore {
                     nameCn: pending.nameCn, chartType: pending.chartType,
                     airacVersion: version, documentType: pending.documentType)
                 if byReaderID[pending.readerID] == nil { modelContext.insert(chart) }
-                chart.chartID = key
-                chart.documentID = pending.documentID
-                chart.airacVersion = version
-                chart.documentType = pending.documentType
-                chart.nameEn = pending.nameEn
-                chart.nameCn = pending.nameCn
-                chart.chartType = pending.chartType
-                chart.pdfPath = pending.pdfPath
-                chart.parentID = pending.parentID
-                chart.icao = pending.icao
-                chart.isModified = pending.isModified
-                chart.category = pending.category
-                chart.serialNumber = pending.serialNumber
-                chart.subject = pending.subject
-                chart.localSubject = pending.localSubject
-                chart.chapterType = pending.chapterType
-                chart.effectiveTime = pending.effectiveTime
-                chart.outDate = pending.outDate
-                chart.pubDate = pending.pubDate
-                chart.seriesName = pending.seriesName
-                chart.generateTime = pending.generateTime
-                chart.generateTimeEn = pending.generateTimeEn
+                chart.apply(pending, version: version)
             }
             for chart in existingCharts where !incomingKeys.contains(chart.chartID) {
                 modelContext.delete(chart)
@@ -178,10 +206,11 @@ final class AIRACPackageStore {
 
             try updatePins(parsed, previousCharts: allCharts, modelContext: modelContext)
             target.effectiveDate = parsed.effectiveDate
-            target.source = "local"
-            target.cacheRevision = prepared.revision
-            target.airportICAOs = parsed.airports.map(\.icao)
-            target.totalCharts = prepared.documentCount
+            target.source = configuration?.mode.source ?? "local"
+            target.serverURL = configuration?.rootURL.absoluteString
+            target.cacheRevision = isRequest ? nil : prepared.revision
+            target.airportICAOs = isRequest ? nil : parsed.airports.map(\.icao)
+            target.totalCharts = parsed.charts.count
             target.downloadedCharts = prepared.documentCount
             for item in versions { item.isCurrent = item.version == version }
 

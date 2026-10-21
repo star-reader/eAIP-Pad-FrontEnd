@@ -117,6 +117,34 @@ open "eAIP Pad/eAIP Pad.xcodeproj"
 - Subscribe to enable access to all premium features
 - Allow necessary permissions for location and notifications
 
+## AIRAC Data Sources
+
+In **个人 → 导入 AIRAC 数据包**, import a ZIP or extracted folder, or open
+**网络导入 → 配置自定义在线服务器**. The server must expose an extracted official
+Web package over HTTPS. Configure the package root containing both `index.html`
+and `Data`, with no authentication or additional API required:
+
+```text
+<configured-root>/
+  index.html
+  Data/Customers.js
+  Data/JsonPath/AD.JSON
+  Data/JsonPath/GEN.JSON
+  Data/JsonPath/ENR.JSON
+  Data/JsonPath/SUP.JSON       (optional)
+  Data/JsonPath/NOTAM.JSON     (optional)
+  ...PDF files referenced by the indexes
+```
+
+- **复制** downloads and validates every referenced PDF before activating the
+  source. Catalog metadata and PDFs remain available offline.
+- **请求** saves the server and cycle configuration. Lists and PDFs are fetched
+  when opened, without persistent content caching; browsing requires a connection.
+- A missing optional index may return HTTP 404. Other HTTP errors and malformed
+  indexes fail validation. Failed initialization preserves the previous source.
+- If the server's AIRAC cycle changes, configure it again before browsing that
+  cycle. Paths beginning with `/Data/` resolve under the configured package root.
+
 ## Development
 
 ### Project Configuration
