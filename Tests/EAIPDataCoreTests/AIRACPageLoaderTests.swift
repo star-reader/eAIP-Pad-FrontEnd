@@ -5,6 +5,7 @@ import Testing
 @Suite("AIRAC page keep alive", .serialized)
 @MainActor
 struct AIRACPageLoaderTests {
+    @MainActor
     final class Gate {
         private var continuation: CheckedContinuation<Int, Never>?
         private var observer: CheckedContinuation<Void, Never>?

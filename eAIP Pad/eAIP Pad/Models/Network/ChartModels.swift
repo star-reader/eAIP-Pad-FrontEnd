@@ -27,6 +27,7 @@ struct ChartResponse: Codable, Hashable, Identifiable {
         case "AIP": return .aip
         case "ENROUTE", "AREA": return .enroute
         case "SUP": return .sup
+        case "AIC": return .aic
         case "AMDT": return .amdt
         case "NOTAM": return .notam
         default: return .chart

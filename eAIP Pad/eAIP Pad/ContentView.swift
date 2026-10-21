@@ -50,9 +50,14 @@ struct ContentView: View {
     
     private func initializeApp() async {
         // 确保用户设置存在
-        if userSettings.isEmpty {
-            let settings = UserSettings()
-            modelContext.insert(settings)
+        do {
+            if try modelContext.fetch(FetchDescriptor<UserSettings>()).isEmpty {
+                modelContext.insert(UserSettings())
+            }
+            try UserSettings.migratePinboardStyle(in: modelContext)
+            try modelContext.save()
+        } catch {
+            LoggerService.shared.warning(module: "ContentView", message: "保存用户偏好失败：\(error.localizedDescription)")
         }
         
         // 启动时检查 AIRAC 版本更新

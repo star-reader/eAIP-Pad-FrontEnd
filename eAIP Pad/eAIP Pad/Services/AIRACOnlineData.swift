@@ -95,21 +95,18 @@ extension AIRACPackageStore {
                 throw AIRACPackageError.invalidPackage("服务器周期已变更，请重新配置在线服务器")
             }
             try selection.validate(modelContext: modelContext)
-            guard let document = PDFDocument(data: data), document.pageCount > 0 else {
-                throw AIRACPackageError.invalidPDF(pending.readerID)
-            }
-            return (LocalChart(pending: pending, version: parsed.version), selected, document)
+            let loaded = try await AIRACPDFLoader.decode(data, id: pending.readerID)
+            try selection.validate(modelContext: modelContext)
+            return (LocalChart(pending: pending, version: parsed.version), selected, loaded.document)
         }
         let resolved = try resolveDocument(chartID: chartID, documentType: documentType,
             version: requestedVersion, modelContext: modelContext)
-        var document = files.loadPDF(version: resolved.version.version, revision: resolved.version.cacheRevision,
-            documentType: documentType, id: resolved.chart.cacheDocumentID)
-        if document == nil, resolved.version.cacheRevision == nil {
-            document = files.loadPDF(version: resolved.version.version, revision: nil,
-                documentType: documentType, id: resolved.chart.documentID)
-        }
-        guard let document else { throw AIRACPackageError.missingPDF(resolved.chart.nameCn) }
-        return (resolved.chart, resolved.version, document)
+        let selection = RemoteSelection(resolved.version)
+        let loaded = try await AIRACPDFLoader.load(version: resolved.version.version,
+            revision: resolved.version.cacheRevision, documentType: documentType,
+            id: resolved.chart.cacheDocumentID, legacyID: resolved.chart.documentID, files: files)
+        try selection.validate(modelContext: modelContext)
+        return (resolved.chart, resolved.version, loaded.document)
     }
 
     private static func serverConfiguration(_ version: AIRACVersion) throws -> AIRACServerConfiguration {

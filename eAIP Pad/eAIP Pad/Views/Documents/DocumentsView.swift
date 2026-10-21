@@ -17,7 +17,9 @@ struct DocumentsView: View {
                 KeepAlivePages(selection: selectedDocumentType, pages: DocumentCategory.allCases) { category in
                     switch category {
                     case .aip: AIPDocumentsView()
-                    case .sup: SUPDocumentsView()
+                    case .sup: FlatDocumentsView(documentType: .sup)
+                    case .aic: FlatDocumentsView(documentType: .aic)
+                    case .amdt: FlatDocumentsView(documentType: .amdt)
                     case .notam: NOTAMDocumentsView()
                     }
                 }
@@ -200,8 +202,10 @@ struct AIPDocumentsView: View {
     }
 }
 
-// MARK: - SUP文档视图
-struct SUPDocumentsView: View {
+// MARK: - SUP / AIC / AMDT 文档视图
+struct FlatDocumentsView: View {
+    let documentType: DocumentType
+    private var title: String { documentType.rawValue.uppercased() }
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
@@ -230,7 +234,7 @@ struct SUPDocumentsView: View {
             CompactSearchFilterBar(
                 searchText: $searchText,
                 selectedSort: $sortOption,
-                searchPlaceholder: "搜索 SUP 文档",
+                searchPlaceholder: "搜索 \(title) 文档",
                 sortOptions: SUPDocumentSortOption.allCases,
                 sortTitle: "排序",
                 sortLabel: { $0.displayName }
@@ -239,15 +243,15 @@ struct SUPDocumentsView: View {
             LoadingStateView(
                 isLoading: isLoading,
                 errorMessage: errorMessage,
-                loadingMessage: "加载SUP文档...",
-                retryAction: { await loadSUPDocuments() }
+                loadingMessage: "加载 \(title) 文档...",
+                retryAction: { await loadDocuments() }
             ) {
                 List(filteredDocuments, id: \.id) { document in
                     Group {
                         if let binding = selectedChartBinding {
                             Button {
                                 LoggerService.shared.info(
-                                    module: "SUPDocumentsView",
+                                    module: "FlatDocumentsView",
                                     message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
                                 )
                                 binding.wrappedValue = ChartResponse(
@@ -257,14 +261,14 @@ struct SUPDocumentsView: View {
                                     icao: nil,
                                     nameEn: document.subject,
                                     nameCn: document.localSubject,
-                                    chartType: "SUP",
+                                    chartType: title,
                                     pdfPath: document.pdfPath,
                                     htmlPath: nil,
                                     htmlEnPath: nil,
                                     airacVersion: document.airacVersion,
                                     isModified: document.isModified ?? false,
                                     isOpened: nil,
-                                    documentType: .sup
+                                    documentType: documentType
                                 )
                             } label: {
                                 SUPDocumentRowView(document: document)
@@ -275,9 +279,9 @@ struct SUPDocumentsView: View {
                         } else {
                             NavigationLink {
                                 PDFReaderView(
-                                    chartID: "sup_\(document.id)",
+                                    chartID: "\(documentType.rawValue)_\(document.id)",
                                     displayName: document.localSubject,
-                                    documentType: .sup,
+                                    documentType: documentType,
                                     airacVersion: document.airacVersion
                                 )
                             } label: {
@@ -287,13 +291,13 @@ struct SUPDocumentsView: View {
                     }
                     .compactListRow()
                 }
-                .refreshable { await loadSUPDocuments() }
+                .refreshable { await loadDocuments() }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
                     if filteredDocuments.isEmpty {
                         SearchEmptyStateView(
                             searchText: $searchText,
-                            title: "暂无 SUP 文档",
+                            title: "暂无 \(title) 文档",
                             systemImage: "doc.text",
                             description: "当前分类中没有文档，可尝试切换分类或导入其他数据包。"
                         )
@@ -301,129 +305,16 @@ struct SUPDocumentsView: View {
                 }
             }
         }
-        .airacPageTask(key: "\(airacService.dataRevision)") {
-            await loadSUPDocuments(force: false)
+        .airacPageTask(key: "\(documentType.rawValue)|\(airacService.dataRevision)") {
+            await loadDocuments(force: false)
         }
     }
 
-    private func loadSUPDocuments(force: Bool = true) async {
-        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载SUP文档失败：") { [modelContext] in
-            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "sup")
+    private func loadDocuments(force: Bool = true) async {
+        await page.load(key: "\(documentType.rawValue)|\(airacService.dataRevision)", force: force, errorPrefix: "加载\(title)文档失败：") { [modelContext, documentType] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: documentType.rawValue)
             return loaded.map { $0.toSUPDocumentResponse() }
         }
-    }
-}
-
-// MARK: - AMDT文档视图
-struct AMDTDocumentsView: View {
-    @Environment(\.modelContext) private var modelContext
-    @ObservedObject private var airacService = AIRACService.shared
-    @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @State private var documents: [AMDTDocumentResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-    @State private var searchText = ""
-    @State private var sortOption: AMDTDocumentSortOption = .updatedFirst
-
-    private var filteredDocuments: [AMDTDocumentResponse] {
-        let searchFiltered = documents.filter { document in
-            guard !searchText.isEmpty else { return true }
-            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !keyword.isEmpty else { return true }
-            return document.localSubject.localizedCaseInsensitiveContains(keyword)
-                || document.subject.localizedCaseInsensitiveContains(keyword)
-                || document.serial.localizedCaseInsensitiveContains(keyword)
-        }
-
-        return searchFiltered.sorted(by: sortOption.sorter)
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            CompactSearchFilterBar(
-                searchText: $searchText,
-                selectedSort: $sortOption,
-                searchPlaceholder: "搜索 AMDT 文档",
-                sortOptions: AMDTDocumentSortOption.allCases,
-                sortTitle: "排序",
-                sortLabel: { $0.displayName }
-            )
-
-            LoadingStateView(
-                isLoading: isLoading,
-                errorMessage: errorMessage,
-                loadingMessage: "加载AMDT文档...",
-                retryAction: { await loadAMDTDocuments() }
-            ) {
-                List(filteredDocuments, id: \.id) { document in
-                    Group {
-                        if let binding = selectedChartBinding {
-                            Button {
-                                LoggerService.shared.info(
-                                    module: "AMDTDocumentsView",
-                                    message: "点击文档: ID=\(document.id), Subject=\(document.localSubject)"
-                                )
-                                binding.wrappedValue = ChartResponse(
-                                    id: document.id,
-                                    documentId: "\(document.id)",
-                                    parentId: nil,
-                                    icao: nil,
-                                    nameEn: document.subject,
-                                    nameCn: document.localSubject,
-                                    chartType: "AMDT",
-                                    pdfPath: document.pdfPath,
-                                    htmlPath: nil,
-                                    htmlEnPath: nil,
-                                    airacVersion: document.airacVersion,
-                                    isModified: document.isModified ?? false,
-                                    isOpened: nil,
-                                    documentType: .amdt
-                                )
-                            } label: {
-                                AMDTDocumentRowView(document: document)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            NavigationLink {
-                                PDFReaderView(
-                                    chartID: "amdt_\(document.id)",
-                                    displayName: document.localSubject,
-                                    documentType: .amdt,
-                                    airacVersion: document.airacVersion
-                                )
-                            } label: {
-                                AMDTDocumentRowView(document: document)
-                            }
-                        }
-                    }
-                    .compactListRow()
-                }
-                .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
-                .overlay {
-                    if filteredDocuments.isEmpty {
-                        SearchEmptyStateView(
-                            searchText: $searchText,
-                            title: "暂无 AMDT 文档",
-                            systemImage: "doc.text",
-                            description: "当前分类中没有文档，可尝试切换分类或导入其他数据包。"
-                        )
-                    }
-                }
-            }
-        }
-        .task(id: airacService.dataRevision) {
-            await loadAMDTDocuments()
-        }
-    }
-
-    private func loadAMDTDocuments() async {
-        // 注：官方 Web 包的 AMDT.JSON 目前未纳入本地导入解析范围，此列表暂时始终为空。
-        isLoading = true
-        errorMessage = nil
-        documents = []
-        isLoading = false
     }
 }
 
@@ -694,12 +585,16 @@ struct NOTAMDocumentRowView: View {
 enum DocumentCategory: String, CaseIterable {
     case aip = "aip"
     case sup = "sup"
+    case aic = "aic"
+    case amdt = "amdt"
     case notam = "notam"
 
     var displayName: String {
         switch self {
         case .aip: return "AIP"
         case .sup: return "SUP"
+        case .aic: return "AIC"
+        case .amdt: return "AMDT"
         case .notam: return "NOTAM"
         }
     }
@@ -709,12 +604,14 @@ enum AIPCategory: String, CaseIterable {
     case all = "ALL"
     case gen = "GEN"
     case enr = "ENR"
+    case ad = "AD"
 
     var displayName: String {
         switch self {
         case .all: return "全部"
         case .gen: return "GEN"
         case .enr: return "ENR"
+        case .ad: return "AD"
         }
     }
 }

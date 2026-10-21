@@ -112,15 +112,27 @@ nonisolated final class AIRACFileStore: Sendable {
 
     /// 清理先移走文件，再提交数据库删除；数据库失败时可以原样移回。
     func quarantineAll() throws -> QuarantinedAIRACCache {
+        try quarantine(paths: ["PDFCache", "DataCache"])
+    }
+
+    func quarantineVersions(_ versions: [String]) throws -> QuarantinedAIRACCache {
+        try quarantine(paths: ["PDFCache", "DataCache"].flatMap { root in
+            versions.map { "\(root)/\(AIRACDocumentIdentity.fileComponent($0))" }
+        })
+    }
+
+    private func quarantine(paths: [String]) throws -> QuarantinedAIRACCache {
         let directory = documentsDirectory.appendingPathComponent(".AIRACTrash")
             .appendingPathComponent(UUID().uuidString)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         var moved: [String] = []
         do {
-            for name in ["PDFCache", "DataCache"] {
+            for name in paths {
                 let source = documentsDirectory.appendingPathComponent(name)
                 if fileManager.fileExists(atPath: source.path) {
-                    try fileManager.moveItem(at: source, to: directory.appendingPathComponent(name))
+                    let destination = directory.appendingPathComponent(name)
+                    try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try fileManager.moveItem(at: source, to: destination)
                     moved.append(name)
                 }
             }
@@ -135,6 +147,9 @@ nonisolated final class AIRACFileStore: Sendable {
 
     func restore(_ quarantine: QuarantinedAIRACCache) throws {
         for name in quarantine.movedDirectories {
+            try fileManager.createDirectory(
+                at: documentsDirectory.appendingPathComponent(name).deletingLastPathComponent(),
+                withIntermediateDirectories: true)
             try fileManager.moveItem(
                 at: quarantine.directory.appendingPathComponent(name),
                 to: documentsDirectory.appendingPathComponent(name))
@@ -144,6 +159,23 @@ nonisolated final class AIRACFileStore: Sendable {
 
     func finishRemoval(_ quarantine: QuarantinedAIRACCache) throws {
         try fileManager.removeItem(at: quarantine.directory)
+    }
+
+    /// 扫描不创建目录；仅在后台读取文件大小，避免个人页阻塞主线程。
+    func totalCacheSize() throws -> Int64 {
+        var size: Int64 = 0
+        for name in ["PDFCache", "DataCache"] {
+            let root = documentsDirectory.appendingPathComponent(name)
+            guard fileManager.fileExists(atPath: root.path) else { continue }
+            guard let enumerator = fileManager.enumerator(at: root,
+                includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]) else { continue }
+            for case let url as URL in enumerator {
+                try Task.checkCancellation()
+                let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+                if values.isRegularFile == true { size += Int64(values.fileSize ?? 0) }
+            }
+        }
+        return size
     }
 
     private func versionDirectory(_ version: String) -> URL {

@@ -104,8 +104,7 @@ struct PDFViewRepresentable: UIViewRepresentable {
         context.coordinator.drawingGesture?.isEnabled = isAnnotationMode
 
         // 更新旋转
-        if context.coordinator.currentRotation != rotation {
-            context.coordinator.currentRotation = rotation
+        if context.coordinator.rotationState.apply(rotation, to: document) {
             applyRotation(to: pdfView, rotation: rotation)
         }
 
@@ -141,13 +140,6 @@ struct PDFViewRepresentable: UIViewRepresentable {
         // 保存当前页面索引
         let currentPageIndex = pdfView.currentPage.flatMap { document.index(for: $0) } ?? 0
 
-        // 设置所有页面的旋转
-        for pageIndex in 0..<document.pageCount {
-            if let page = document.page(at: pageIndex) {
-                page.rotation = rotation
-            }
-        }
-
         // 强制 PDFView 重新布局和渲染
         pdfView.layoutDocumentView()
 
@@ -177,7 +169,7 @@ struct PDFViewRepresentable: UIViewRepresentable {
     class Coordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDelegate {
         let parent: PDFViewRepresentable
         var isAnnotationMode = false
-        var currentRotation = 0
+        let rotationState = PDFDocumentRotation()
         var drawingGesture: UIPanGestureRecognizer?
         private var currentDrawingPath: UIBezierPath?
         private var currentAnnotationLayer: CAShapeLayer?

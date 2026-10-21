@@ -41,7 +41,7 @@ nonisolated struct EAIPTreeNode: Codable {
     }
 }
 
-/// Data/JsonPath/{SUP,AIC}.JSON 里的平铺文档记录
+/// Data/JsonPath/{SUP,AIC,AMDT}.JSON 里的平铺文档记录
 nonisolated struct EAIPFlatDocument: Codable {
     let id: String
     let document: String

@@ -45,15 +45,19 @@ nonisolated struct ParsedAIRACPackage: Sendable {
 }
 
 nonisolated enum LocalAIRACPackageParser {
+    static let requiredSections = ["AD", "GEN", "ENR"]
+    static let optionalSections = ["SUP", "AIC", "AMDT", "NOTAM"]
+    static var allSections: [String] { requiredSections + optionalSections }
+
     static func parse(folderURL: URL) throws -> ParsedAIRACPackage {
         let dataURL = folderURL.appendingPathComponent("Data")
         let jsonPathURL = dataURL.appendingPathComponent("JsonPath")
 
         let customers = try Data(contentsOf: dataURL.appendingPathComponent("Customers.js"))
         var indexes: [String: Data] = [:]
-        for name in ["AD", "GEN", "ENR", "SUP", "NOTAM"] {
+        for name in allSections {
             let url = jsonPathURL.appendingPathComponent("\(name).JSON")
-            if ["SUP", "NOTAM"].contains(name), !FileManager.default.fileExists(atPath: url.path) { continue }
+            if optionalSections.contains(name), !FileManager.default.fileExists(atPath: url.path) { continue }
             indexes[name] = try Data(contentsOf: url)
         }
         return try parse(customers: customers, indexes: indexes)
@@ -78,7 +82,9 @@ nonisolated enum LocalAIRACPackageParser {
         if let data = indexes["AD"] { try parseAD(data, charts: &pendingCharts, airports: &pendingAirports) }
         if let data = indexes["GEN"] { try parseGEN(data, charts: &pendingCharts) }
         if let data = indexes["ENR"] { try parseENR(data, charts: &pendingCharts) }
-        if let data = indexes["SUP"] { try parseSUP(data, charts: &pendingCharts) }
+        for section in ["SUP", "AIC", "AMDT"] {
+            if let data = indexes[section] { try parseFlatDocuments(data, section: section, charts: &pendingCharts) }
+        }
         if let data = indexes["NOTAM"] { try parseNOTAM(data, charts: &pendingCharts) }
 
         guard !requireDocuments || !pendingCharts.isEmpty else {
@@ -86,6 +92,7 @@ nonisolated enum LocalAIRACPackageParser {
         }
         var documentIDs = Set<String>()
         for chart in pendingCharts {
+            try Task.checkCancellation()
             guard !chart.documentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 documentIDs.insert(chart.readerID).inserted
             else {
@@ -163,6 +170,7 @@ nonisolated enum LocalAIRACPackageParser {
         let nodes = try JSONDecoder().decode([EAIPTreeNode].self, from: data)
         var byID: [String: EAIPTreeNode] = [:]
         for node in nodes {
+            try Task.checkCancellation()
             guard !node.id.isEmpty, byID.updateValue(node, forKey: node.id) == nil else {
                 throw AIRACPackageError.invalidPackage("\(name) 存在空节点 ID 或重复 ID：\(node.id)")
             }
@@ -170,6 +178,7 @@ nonisolated enum LocalAIRACPackageParser {
         // 迭代检查父链，避免循环关系导致无限遍历，深层目录也不会耗尽调用栈。
         var validated = Set<String>()
         for node in nodes where !validated.contains(node.id) {
+            try Task.checkCancellation()
             var path = Set<String>()
             var current = node.id
             while let ancestor = byID[current], !validated.contains(current) {
@@ -191,46 +200,50 @@ nonisolated enum LocalAIRACPackageParser {
         let nodes = try loadNodes(raw, name: "AD.JSON")
         let byParent = Dictionary(grouping: nodes, by: { $0.pId })
 
-        let airportRoots = nodes.filter { ($0.airporticao?.isEmpty == false) }
-        for root in airportRoots {
-            guard let icao = root.airporticao else { continue }
-
-            let nameEn = stripIcaoPrefix(root.name, icao: icao)
-            let nameCn = stripIcaoPrefix(root.nameCn, icao: icao)
-            airports[icao] = (nameEn: nameEn, nameCn: nameCn, isModified: root.isModified == "Y")
-
-            if !root.pdfPath.isEmpty {
-                charts.append(
-                    ParsedAIRACPackage.Chart(
-                        documentID: root.id, nameEn: root.name,
-                        nameCn: root.nameCn, chartType: "AD", documentType: "ad",
-                        pdfPath: root.pdfPath, icao: icao, parentID: nil,
-                        isModified: root.isModified == "Y", category: nil, serialNumber: nil,
-                        subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
-                        outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil,
-                        generateTimeEn: nil))
+        let byID = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+        // 沿目录树传递所属机场和航图分组，任意深度的 PDF 都必须进入目录。
+        typealias Owner = (icao: String, rootID: String)
+        var stack: [(node: EAIPTreeNode, owner: Owner?, isChart: Bool)] = nodes
+            .filter { byID[$0.pId] == nil }.reversed().map { ($0, nil, false) }
+        while let item = stack.popLast() {
+            try Task.checkCancellation()
+            let node = item.node
+            var owner = item.owner
+            var isChart = item.isChart
+            if let code = node.airporticao, !code.isEmpty, owner?.icao != code {
+                owner = (code, node.id)
+                isChart = false
+                airports[code] = (stripIcaoPrefix(node.name, icao: code),
+                    stripIcaoPrefix(node.nameCn, icao: code), node.isModified == "Y")
             }
-
-            let children = byParent[root.id] ?? []
-            guard
-                let chartSection = children.first(where: {
-                    $0.name.localizedCaseInsensitiveContains("Charts related to an aerodrome")
-                })
-            else { continue }
-
-            let chartLeaves = byParent[chartSection.id] ?? []
-            for leaf in chartLeaves where !leaf.pdfPath.isEmpty {
-                charts.append(
-                    ParsedAIRACPackage.Chart(
-                        documentID: leaf.id, nameEn: leaf.name,
-                        nameCn: leaf.nameCn, chartType: EAIPChartClassifier.classify(name: leaf.name),
-                        documentType: "chart", pdfPath: leaf.pdfPath, icao: icao, parentID: root.id,
-                        isModified: leaf.isModified == "Y", category: nil, serialNumber: nil,
-                        subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
-                        outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil,
-                        generateTimeEn: nil))
+            if owner != nil,
+                node.name.localizedCaseInsensitiveContains("Charts related to an aerodrome")
+                    || node.nameCn.contains("机场航图") || node.nameCn.contains("机场有关的航图")
+                    || node.nameCn.contains("机场相关航图") {
+                isChart = true
+            }
+            if !node.pdfPath.isEmpty {
+                let documentType = owner == nil ? "aip" : isChart ? "chart" : "ad"
+                charts.append(treeChart(node, documentType: documentType,
+                    chartType: owner == nil ? "AIP" : isChart ? EAIPChartClassifier.classify(name: node.name) : "AD",
+                    icao: owner?.icao, parentID: node.id == owner?.rootID ? nil : owner?.rootID,
+                    category: owner == nil ? "AD" : nil))
+            }
+            for child in (byParent[node.id] ?? []).reversed() {
+                stack.append((child, owner, isChart))
             }
         }
+    }
+
+    private static func treeChart(
+        _ node: EAIPTreeNode, documentType: String, chartType: String,
+        icao: String? = nil, parentID: String? = nil, category: String? = nil
+    ) -> ParsedAIRACPackage.Chart {
+        ParsedAIRACPackage.Chart(documentID: node.id, nameEn: node.name, nameCn: node.nameCn,
+            chartType: chartType, documentType: documentType, pdfPath: node.pdfPath,
+            icao: icao, parentID: parentID, isModified: node.isModified == "Y", category: category,
+            serialNumber: nil, subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
+            outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil, generateTimeEn: nil)
     }
 
     private static func stripIcaoPrefix(_ name: String, icao: String) -> String {
@@ -244,6 +257,7 @@ nonisolated enum LocalAIRACPackageParser {
     private static func parseGEN(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
         let nodes = try loadNodes(raw, name: "GEN.JSON")
         for node in nodes where !node.pdfPath.isEmpty {
+            try Task.checkCancellation()
             charts.append(
                 ParsedAIRACPackage.Chart(
                     documentID: node.id, nameEn: node.name,
@@ -260,27 +274,9 @@ nonisolated enum LocalAIRACPackageParser {
         let nodes = try loadNodes(raw, name: "ENR.JSON")
         let byParent = Dictionary(grouping: nodes, by: { $0.pId })
 
-        guard
-            let enrChartsRoot = nodes.first(where: {
-                $0.name.localizedCaseInsensitiveContains("EN-ROUTE CHARTS")
-            })
-        else {
-            for node in nodes where !node.pdfPath.isEmpty {
-                charts.append(
-                    ParsedAIRACPackage.Chart(
-                        documentID: node.id, nameEn: node.name,
-                        nameCn: node.nameCn, chartType: "AIP", documentType: "aip",
-                        pdfPath: node.pdfPath, icao: nil, parentID: nil,
-                        isModified: node.isModified == "Y", category: "ENR", serialNumber: nil,
-                        subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
-                        outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil,
-                        generateTimeEn: nil))
-            }
-            return
-        }
-
-        var enrouteIds = Set<String>()
-        var stack = [enrChartsRoot.id]
+        let chartRoots = nodes.filter { $0.name.localizedCaseInsensitiveContains("EN-ROUTE CHARTS") }
+        var enrouteIds = Set(chartRoots.map(\.id))
+        var stack = chartRoots.map(\.id)
         while let current = stack.popLast() {
             for child in byParent[current] ?? [] {
                 guard enrouteIds.insert(child.id).inserted else { continue }
@@ -289,6 +285,7 @@ nonisolated enum LocalAIRACPackageParser {
         }
 
         for node in nodes where !node.pdfPath.isEmpty {
+            try Task.checkCancellation()
             if enrouteIds.contains(node.id) {
                 let enrouteType = EAIPChartClassifier.classifyEnroute(name: node.name, nameCn: node.nameCn)
                 charts.append(
@@ -300,7 +297,7 @@ nonisolated enum LocalAIRACPackageParser {
                         subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
                         outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil,
                         generateTimeEn: nil))
-            } else if node.id != enrChartsRoot.id {
+            } else {
                 charts.append(
                     ParsedAIRACPackage.Chart(
                         documentID: node.id, nameEn: node.name,
@@ -314,15 +311,17 @@ nonisolated enum LocalAIRACPackageParser {
         }
     }
 
-    private static func parseSUP(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
+    private static func parseFlatDocuments(_ raw: Data, section: String, charts: inout [ParsedAIRACPackage.Chart]) throws {
         let data = stripBOM(raw)
         let docs = try JSONDecoder().decode([EAIPFlatDocument].self, from: data)
         for doc in docs {
+            try Task.checkCancellation()
             charts.append(
                 ParsedAIRACPackage.Chart(
                     documentID: doc.id,
-                    nameEn: doc.subject ?? "", nameCn: doc.localSubject ?? "",
-                    chartType: "SUP", documentType: "sup", pdfPath: doc.document,
+                    nameEn: doc.subject ?? doc.localSubject ?? doc.serial ?? section,
+                    nameCn: doc.localSubject ?? doc.subject ?? doc.serial ?? section,
+                    chartType: section, documentType: section.lowercased(), pdfPath: doc.document,
                     icao: nil, parentID: nil, isModified: doc.isModified == "Y", category: nil,
                     serialNumber: doc.serial, subject: doc.subject, localSubject: doc.localSubject,
                     chapterType: doc.chapterType, effectiveTime: doc.effectiveTime,
@@ -335,6 +334,7 @@ nonisolated enum LocalAIRACPackageParser {
         let data = stripBOM(raw)
         let docs = try JSONDecoder().decode([EAIPNotamDocument].self, from: data)
         for doc in docs {
+            try Task.checkCancellation()
             let stableID = "\(doc.seriesName)_\(doc.generateTime)"
             charts.append(
                 ParsedAIRACPackage.Chart(

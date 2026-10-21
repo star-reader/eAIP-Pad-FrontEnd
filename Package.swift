@@ -14,7 +14,7 @@ let package = Package(
             dependencies: [.product(name: "ZIPFoundation", package: "ZIPFoundation")],
             path: "eAIP Pad/eAIP Pad",
             exclude: [
-                "App.swift", "ContentView.swift", "Assets.xcassets", "Configs", "DependencyInjection", "Views",
+                "App.swift", "ContentView.swift", "Assets.xcassets", "Configs/AppEnvironment.swift", "Configs/SharedKey.swift", "DependencyInjection", "Views",
                 "eAIP Pad.entitlements", "Common/Imports.swift", "Common/AIRACHelper.swift",
                 "Common/ColorScheme.swift", "Common/VersionIntroManager.swift", "Common/Extensions",
                 "Services/AIRACService.swift", "Services/LoggerService.swift", "Services/PDFCacheService.swift"
@@ -26,7 +26,8 @@ let package = Package(
                 "Models/SwiftDataModels+Mapping.swift", "Services/LocalAIRACPackageParser.swift",
                 "Services/AIRACFileStore.swift", "Services/AIRACPackageStore.swift",
                 "Services/AIRACArchiveExtractor.swift", "Services/AIRACServerClient.swift",
-                "Services/AIRACOnlineData.swift", "Services/AIRACPageLoader.swift"
+                "Services/AIRACOnlineData.swift", "Services/AIRACPageLoader.swift",
+                "Services/PDFDocumentRotation.swift", "Services/AIRACPDFLoader.swift", "Configs/AppVersion.swift"
             ],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),

@@ -184,7 +184,7 @@ struct AIRACDataCoreTests {
         fixture.context.insert(PinnedChart(chartID: "chart_chart_one", displayName: "Saved", icao: "ZBAA", type: "SID", documentType: "chart", airacVersion: "2601"))
         fixture.context.insert(ChartAnnotation(chartID: "chart_chart_one", pageNumber: 0, pathsJSON: "[]", documentType: "chart"))
         try fixture.context.save()
-        try fixture.store.clearAll(modelContext: fixture.context)
+        try await fixture.store.clearAll(modelContext: fixture.context)
         #expect(try fixture.context.fetch(FetchDescriptor<AIRACVersion>()).isEmpty)
         #expect(try fixture.context.fetch(FetchDescriptor<LocalChart>()).isEmpty)
         #expect(try fixture.context.fetch(FetchDescriptor<Airport>()).isEmpty)
@@ -200,7 +200,7 @@ struct AIRACDataCoreTests {
         try await fixture.install(version: "2601", date: "2601010000")
         let failingStore = AIRACPackageStore(files: fixture.files) { _ in throw InjectedFailure.database }
         do {
-            try failingStore.clearAll(modelContext: fixture.context)
+            try await failingStore.clearAll(modelContext: fixture.context)
             Issue.record("Expected clear failure")
         } catch {}
         try fixture.expectCurrent("2601", pages: 1)
@@ -213,7 +213,7 @@ struct AIRACDataCoreTests {
         try await fixture.install(version: "2601", date: "2601010000")
         try Data("blocked".utf8).write(to: fixture.cacheRoot.appendingPathComponent(".AIRACTrash"))
         do {
-            try fixture.store.clearAll(modelContext: fixture.context)
+            try await fixture.store.clearAll(modelContext: fixture.context)
             Issue.record("Expected file removal failure")
         } catch {}
         try fixture.expectCurrent("2601", pages: 1)

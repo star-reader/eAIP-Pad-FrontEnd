@@ -22,6 +22,7 @@ struct RegulationsView: View {
     @State private var selectionError: String?
     private var errorMessage: String? { selectionError ?? page.errorMessage }
     @State private var selectedRegulation: RegulationNavigation?
+    @State private var selectedRegulationAirport: AirportResponse?
     @State private var isLoadingRegulation = false
 
     // 过滤后的机场列表
@@ -114,6 +115,9 @@ struct RegulationsView: View {
                     airacVersion: regulation.airacVersion
                 )
             }
+            .navigationDestination(item: $selectedRegulationAirport) { airport in
+                AirportRegulationsView(airport: airport)
+            }
         }
         .airacPageTask(key: "\(airacService.dataRevision)") {
             await loadAirports(force: false)
@@ -129,7 +133,7 @@ struct RegulationsView: View {
         }
     }
 
-    // MARK: - 打开第一个细则
+    // MARK: - 单份细则直接打开，多份细则提供完整列表
     private func openFirstRegulation(for airport: AirportResponse) async {
         isLoadingRegulation = true
 
@@ -140,7 +144,9 @@ struct RegulationsView: View {
             let regulations = localCharts.map { $0.toAIPDocumentResponse() }
 
             await MainActor.run {
-                if let firstRegulation = regulations.first {
+                if regulations.count > 1 {
+                    selectedRegulationAirport = airport
+                } else if let firstRegulation = regulations.first {
                     if let binding = selectedChartBinding {
                         // iPad 模式：设置选中的航图
                         binding.wrappedValue = ChartResponse(
@@ -224,6 +230,7 @@ struct AirportRegulationRowView: View {
 struct AirportRegulationsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     let airport: AirportResponse
     @StateObject private var page = AIRACPageLoader(initialValue: [AIPDocumentResponse]())
     private var regulations: [AIPDocumentResponse] { page.value }
@@ -274,17 +281,33 @@ struct AirportRegulationsView: View {
                 )
 
                 List(filteredRegulations, id: \.id) { regulation in
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "ad_\(regulation.id)",
-                            displayName: regulation.nameCn,
-                            documentType: .ad,
-                            airacVersion: regulation.airacVersion
-                        )
-                    } label: {
-                        RegulationDocumentRowView(regulation: regulation)
+                    if let binding = selectedChartBinding {
+                        Button {
+                            binding.wrappedValue = ChartResponse(
+                                id: regulation.id, documentId: regulation.documentId,
+                                parentId: regulation.parentId, icao: regulation.airportIcao,
+                                nameEn: regulation.name, nameCn: regulation.nameCn, chartType: "AD",
+                                pdfPath: regulation.pdfPath, htmlPath: regulation.htmlPath,
+                                htmlEnPath: regulation.htmlEnPath, airacVersion: regulation.airacVersion,
+                                isModified: regulation.isModified ?? false, isOpened: regulation.isOpened,
+                                documentType: .ad)
+                        } label: {
+                            RegulationDocumentRowView(regulation: regulation)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .compactListRow()
+                    } else {
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "ad_\(regulation.id)", displayName: regulation.nameCn,
+                                documentType: .ad, airacVersion: regulation.airacVersion)
+                        } label: {
+                            RegulationDocumentRowView(regulation: regulation)
+                        }
+                        .compactListRow()
                     }
-                    .compactListRow()
                 }
                 .listStyle(.insetGrouped)
                 .refreshable { await loadRegulations() }

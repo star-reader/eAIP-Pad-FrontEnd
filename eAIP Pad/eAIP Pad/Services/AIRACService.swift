@@ -86,19 +86,20 @@ final class AIRACService: ObservableObject {
         }
     }
 
-    /// 删除导入内容和所有周期标记，保留用户收藏和标注。
-    func clearAllCache(modelContext: ModelContext) async -> Bool {
+    /// 默认仅清理旧周期；全部删除必须由用户明确选择并确认，收藏和标注始终保留。
+    func clearAllCache(modelContext: ModelContext, includingCurrent: Bool = false) async -> Bool {
         guard !isUpdating else { return false }
         isUpdating = true
         errorMessage = nil
-        updateMessage = "清理 AIRAC 数据..."
+        updateMessage = includingCurrent ? "删除全部 AIRAC 数据..." : "清理旧周期数据..."
         defer {
             isUpdating = false
             // 即使最后的文件回收报错，页面也应重新读取已经提交的数据状态。
             dataRevision &+= 1
         }
         do {
-            try packageStore.clearAll(modelContext: modelContext)
+            if includingCurrent { try await packageStore.clearAll(modelContext: modelContext) }
+            else { try await packageStore.clearOldVersions(modelContext: modelContext) }
             URLCache.shared.removeAllCachedResponses()
             updateMessage = "缓存清理完成"
             return true

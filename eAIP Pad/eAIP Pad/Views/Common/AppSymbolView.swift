@@ -35,6 +35,7 @@ extension DocumentType {
         case .enroute: return AppSymbols.enroute
         case .aip, .ad: return AppSymbols.regulations
         case .sup: return "doc.badge.ellipsis"
+        case .aic: return "info.bubble"
         case .amdt: return "square.and.pencil"
         case .notam: return "bell.fill"
         }
@@ -45,6 +46,7 @@ extension DocumentType {
         case .chart, .enroute, .aip: return .blue
         case .ad: return .indigo
         case .sup: return .orange
+        case .aic: return .teal
         case .amdt: return .green
         case .notam: return .purple
         }

@@ -46,7 +46,21 @@ struct PinboardCompactView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \PinnedChart.pinnedAt, order: .reverse) private var pinnedCharts: [PinnedChart]
-    @AppStorage("pinboardStyle") private var selectedStyle: PinboardStyle = .compact
+    @Query private var userSettings: [UserSettings]
+
+    private var selectedStyle: PinboardStyle {
+        PinboardStyle(rawValue: userSettings.first?.pinboardStyle ?? "") ?? .compact
+    }
+
+    private var styleBinding: Binding<PinboardStyle> {
+        Binding(get: { selectedStyle }, set: { style in
+            let settings: UserSettings
+            if let existing = userSettings.first { settings = existing }
+            else { settings = UserSettings(); modelContext.insert(settings) }
+            settings.pinboardStyle = style.rawValue
+            try? modelContext.save()
+        })
+    }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
@@ -81,7 +95,7 @@ struct PinboardCompactView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        Picker("显示方式", selection: $selectedStyle) {
+                        Picker("显示方式", selection: styleBinding) {
                             Label("紧凑列表", systemImage: "list.bullet")
                                 .tag(PinboardStyle.compact)
                             Label("预览模式", systemImage: "square.grid.2x2")

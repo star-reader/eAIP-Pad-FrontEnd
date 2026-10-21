@@ -14,6 +14,9 @@ struct ProfileView: View {
     @State private var showingAIRACImport = false
     @State private var showingCacheCleared = false
     @State private var showingCacheError = false
+    @State private var showingCacheActions = false
+    @State private var showingDeleteAllConfirmation = false
+    @State private var cacheResultMessage = ""
     @State private var showingEmailAlert = false
     @State private var showingBugReportOptions = false
     @State private var cacheSizeText: String = ""
@@ -68,18 +71,27 @@ struct ProfileView: View {
                 }
 
                 Button {
-                    Task {
-                        await clearCache()
-                    }
+                    showingCacheActions = true
                 } label: {
                     SettingRow(
                         icon: "trash.fill",
-                        title: "清理缓存",
+                        title: "管理 AIRAC 数据",
                         color: .red,
                         trailingText: cacheSizeText
                     )
                 }
                 .disabled(airacService.isUpdating)
+                .confirmationDialog("管理 AIRAC 数据", isPresented: $showingCacheActions, titleVisibility: .visible) {
+                    Button("清理旧周期") {
+                        Task { await clearCache() }
+                    }
+                    Button("删除全部 AIRAC 数据", role: .destructive) {
+                        showingDeleteAllConfirmation = true
+                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("清理旧周期会保留当前周期的离线资料、服务器配置、收藏和标注。")
+                }
             }
             .compactListRow()
 
@@ -201,10 +213,18 @@ struct ProfileView: View {
         .sheet(isPresented: $showingAIRACImport) {
             AIRACUpdateView()
         }
-        .alert("缓存已清理", isPresented: $showingCacheCleared) {
+        .alert("删除全部 AIRAC 数据？", isPresented: $showingDeleteAllConfirmation) {
+            Button("删除全部数据", role: .destructive) {
+                Task { await clearCache(includingCurrent: true) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将删除所有周期的离线资料和在线服务器配置，需要重新导入或配置后才能浏览。收藏和标注会保留。")
+        }
+        .alert("数据清理完成", isPresented: $showingCacheCleared) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("已成功清理所有AIRAC数据与PDF缓存文件。")
+            Text(cacheResultMessage)
         }
         .alert("清理缓存失败", isPresented: $showingCacheError) {
             Button("确定", role: .cancel) {}
@@ -233,12 +253,15 @@ struct ProfileView: View {
     
     // MARK: - 缓存管理
     
-    private func clearCache() async {
+    private func clearCache(includingCurrent: Bool = false) async {
         showingCacheCleared = false
         showingCacheError = false
-        let succeeded = await airacService.clearAllCache(modelContext: modelContext)
+        let succeeded = await airacService.clearAllCache(modelContext: modelContext, includingCurrent: includingCurrent)
         await updateCacheSize()
         if succeeded {
+            cacheResultMessage = includingCurrent
+                ? "已删除全部 AIRAC 数据和服务器配置，收藏和标注已保留。"
+                : "已清理旧周期，当前离线资料、服务器配置、收藏和标注已保留。"
             showingCacheCleared = true
         } else {
             errorMessage = airacService.errorMessage ?? "已有 AIRAC 操作正在进行，请稍后重试"
@@ -247,9 +270,15 @@ struct ProfileView: View {
     }
 
     private func updateCacheSize() async {
-        let formatted = PDFCacheService.shared.getFormattedTotalCacheSize()
-        await MainActor.run {
-            cacheSizeText = formatted
+        let scan = Task.detached(priority: .utility) { try AIRACFileStore.shared.totalCacheSize() }
+        do {
+            let size = try await withTaskCancellationHandler {
+                try await scan.value
+            } onCancel: { scan.cancel() }
+            guard !Task.isCancelled else { return }
+            cacheSizeText = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        } catch {
+            if !Task.isCancelled { cacheSizeText = "暂不可用" }
         }
     }
     
@@ -338,7 +367,7 @@ struct ProfileView: View {
         系统信息：
         • 设备型号：\(UIDevice.current.model)
         • 系统版本：iOS \(UIDevice.current.systemVersion)
-        • App 版本：1.0.0 (Build 1)
+        • App 版本：\(AppVersion.appVersion)
         """
     }
 }

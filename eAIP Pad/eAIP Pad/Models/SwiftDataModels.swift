@@ -84,6 +84,20 @@ final class UserSettings {
     }
 }
 
+extension UserSettings {
+    /// 兼容旧快速访问窗口的独立偏好；已有非默认设置优先，保存成功后移除旧键。
+    static func migratePinboardStyle(in context: ModelContext, defaults: UserDefaults = .standard) throws {
+        guard let legacy = defaults.string(forKey: "pinboardStyle"),
+            let style = PinboardStyle(rawValue: legacy) else { return }
+        let settings: UserSettings
+        if let existing = try context.fetch(FetchDescriptor<UserSettings>()).first { settings = existing }
+        else { settings = UserSettings(); context.insert(settings) }
+        if settings.pinboardStyle == PinboardStyle.compact.rawValue { settings.pinboardStyle = style.rawValue }
+        try context.save()
+        defaults.removeObject(forKey: "pinboardStyle")
+    }
+}
+
 // MARK: - 本地航图元数据
 @Model
 final class LocalChart {
@@ -182,6 +196,7 @@ enum DocumentType: String, Codable, CaseIterable {
     case aip = "aip"
     case ad = "ad"
     case sup = "sup"
+    case aic = "aic"
     case amdt = "amdt"
     case notam = "notam"
 
@@ -192,6 +207,7 @@ enum DocumentType: String, Codable, CaseIterable {
         case .aip: return "AIP文档"
         case .ad: return "AD细则"
         case .sup: return "SUP文档"
+        case .aic: return "AIC文档"
         case .amdt: return "AMDT文档"
         case .notam: return "NOTAM文档"
         }

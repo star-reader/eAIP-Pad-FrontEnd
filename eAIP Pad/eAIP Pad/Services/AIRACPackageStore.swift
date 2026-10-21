@@ -112,17 +112,9 @@ final class AIRACPackageStore {
             documentCount: configuration.mode == .copy ? parsed.charts.count : 0)
         do {
             if configuration.mode == .copy {
-                for (index, chart) in parsed.charts.enumerated() {
-                    try Task.checkCancellation()
-                    await progress?(0.1 + 0.8 * Double(index) / Double(parsed.charts.count),
-                        "复制 PDF \(index + 1) / \(parsed.charts.count)...")
-                    let data = try await client.fetch(chart.pdfPath!, from: configuration)!
-                    let files = self.files
-                    // PDF 校验与磁盘写入不阻塞主线程。
-                    try await Task.detached(priority: .utility) {
-                        try files.savePDF(data, version: parsed.version, revision: prepared.revision,
-                            documentType: chart.documentType, id: chart.cacheDocumentID)
-                    }.value
+                try await client.copyPDFs(parsed, from: configuration, to: files, revision: prepared.revision) { completed in
+                    await progress?(0.1 + 0.8 * Double(completed) / Double(parsed.charts.count),
+                        "复制 PDF \(completed) / \(parsed.charts.count)...")
                 }
                 let latest = try await client.metadata(from: configuration)
                 guard latest.version == parsed.version, latest.effectiveDate == parsed.effectiveDate else {
@@ -273,25 +265,47 @@ final class AIRACPackageStore {
         }
     }
 
-    func clearAll(modelContext: ModelContext) throws {
+    func clearAll(modelContext: ModelContext) async throws {
+        try await removeData(modelContext: modelContext, includingCurrent: true)
+    }
+
+    func clearOldVersions(modelContext: ModelContext) async throws {
+        try await removeData(modelContext: modelContext, includingCurrent: false)
+    }
+
+    private func removeData(modelContext: ModelContext, includingCurrent: Bool) async throws {
         guard !isImporting else { throw AIRACPackageError.invalidPackage("正在导入 AIRAC 数据，请稍后清理") }
+        isImporting = true
+        defer { isImporting = false }
         if modelContext.hasChanges { try modelContext.save() }
-        let quarantine = try files.quarantineAll()
+        let versions = try modelContext.fetch(FetchDescriptor<AIRACVersion>())
+        let removed = versions.filter { includingCurrent || !$0.isCurrent }
+        let removedNames = Set(removed.map(\.version))
+        let files = self.files
+        // 移走和物理删除放在后台；数据库失败仍可恢复原文件。
+        let quarantine = try await Task.detached(priority: .utility) {
+            try includingCurrent ? files.quarantineAll() : files.quarantineVersions(Array(removedNames))
+        }.value
         let autosave = modelContext.autosaveEnabled
         modelContext.autosaveEnabled = false
         defer { modelContext.autosaveEnabled = autosave }
         do {
-            for chart in try modelContext.fetch(FetchDescriptor<LocalChart>()) { modelContext.delete(chart) }
-            for version in try modelContext.fetch(FetchDescriptor<AIRACVersion>()) { modelContext.delete(version) }
-            for airport in try modelContext.fetch(FetchDescriptor<Airport>()) { modelContext.delete(airport) }
+            for chart in try modelContext.fetch(FetchDescriptor<LocalChart>())
+                where includingCurrent || removedNames.contains(chart.airacVersion) {
+                modelContext.delete(chart)
+            }
+            for version in removed { modelContext.delete(version) }
+            if includingCurrent {
+                for airport in try modelContext.fetch(FetchDescriptor<Airport>()) { modelContext.delete(airport) }
+            }
             try saveChanges(modelContext)
         } catch {
             modelContext.rollback()
-            do { try files.restore(quarantine) }
+            do { try await Task.detached(priority: .utility) { try files.restore(quarantine) }.value }
             catch { throw AIRACPackageError.fileOperation("恢复缓存", error.localizedDescription) }
             throw error
         }
-        try files.finishRemoval(quarantine)
+        try await Task.detached(priority: .utility) { try files.finishRemoval(quarantine) }.value
     }
 
     static func currentVersion(modelContext: ModelContext) throws -> AIRACVersion? {

@@ -72,9 +72,9 @@ extension LocalChart {
         SUPDocumentResponse(
             id: documentID,
             documentId: documentID,
-            serial: serialNumber ?? "",
-            subject: subject ?? "",
-            localSubject: localSubject ?? "",
+            serial: serialNumber ?? documentID,
+            subject: subject ?? nameEn,
+            localSubject: localSubject ?? nameCn,
             chapterType: chapterType ?? "",
             pdfPath: pdfPath,
             effectiveTime: effectiveTime,

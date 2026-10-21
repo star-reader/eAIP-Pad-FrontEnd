@@ -132,18 +132,29 @@ and `Data`, with no authentication or additional API required:
   Data/JsonPath/GEN.JSON
   Data/JsonPath/ENR.JSON
   Data/JsonPath/SUP.JSON       (optional)
+  Data/JsonPath/AIC.JSON       (optional)
+  Data/JsonPath/AMDT.JSON      (optional)
   Data/JsonPath/NOTAM.JSON     (optional)
   ...PDF files referenced by the indexes
 ```
 
 - **复制** downloads and validates every referenced PDF before activating the
-  source. Catalog metadata and PDFs remain available offline.
+  source, with up to four concurrent downloads. Temporary network and server
+  failures retry up to two times with backoff; permanent errors fail immediately.
+  Catalog metadata and PDFs remain available offline.
 - **请求** saves the server and cycle configuration. Lists and PDFs are fetched
   when opened, without persistent content caching; browsing requires a connection.
 - Switching tabs or document categories keeps visited pages and their in-memory
   results, including requests still in progress. Pull to refresh to fetch again;
   importing, configuring, or clearing a source invalidates previous results.
   Request mode does not persist these results to disk.
+- AD general documents appear under **文档 → AIP → AD**. Nested airport charts
+  are included, unclassified charts remain visible under **全部 / 其他**, and
+  AIC and AMDT have their own document tabs. Airports with multiple AD documents
+  open a selectable list of regulations.
+- **个人 → 管理 AIRAC 数据 → 清理旧周期** preserves the active cycle's PDFs,
+  server configuration, pins, and annotations. **删除全部 AIRAC 数据** requires
+  an additional confirmation and preserves pins and annotations only.
 - A missing optional index may return HTTP 404. Other HTTP errors and malformed
   indexes fail validation. Failed initialization preserves the previous source.
 - If the server's AIRAC cycle changes, configure it again before browsing that
@@ -172,7 +183,8 @@ Key configuration files:
 - Unit tests for services and view models
 - Integration tests for network requests
 - UI tests for critical user flows
-- Run all tests: Cmd+U in Xcode
+- Run data-core regression tests: `swift test`
+- Verify application integration with an iOS Simulator build in Xcode
 
 ## Contributing
 

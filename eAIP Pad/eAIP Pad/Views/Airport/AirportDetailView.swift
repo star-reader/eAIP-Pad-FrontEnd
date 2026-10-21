@@ -18,13 +18,11 @@ struct AirportDetailView: View {
 
     // 过滤后的航图列表
     private var filteredCharts: [ChartResponse] {
-        let nonOthersCharts = charts.filter { $0.chartType != "OTHERS" }
-
         let typeFiltered: [ChartResponse]
         if selectedChartType == .all {
-            typeFiltered = nonOthersCharts
+            typeFiltered = charts
         } else {
-            typeFiltered = nonOthersCharts.filter { $0.chartType == selectedChartType.rawValue }
+            typeFiltered = charts.filter { $0.chartType == selectedChartType.rawValue }
         }
 
         let searchFiltered = typeFiltered.filter { chart in
@@ -61,9 +59,7 @@ struct AirportDetailView: View {
                 // 使用原生 Picker 作为分段控制器
                 Picker("航图类型", selection: $selectedChartType) {
                     ForEach(ChartType.allCases, id: \.self) { type in
-                        if type != .others {
-                            Text(type.displayName).tag(type)
-                        }
+                        Text(type.displayName).tag(type)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -369,7 +365,7 @@ enum ChartType: String, CaseIterable {
         case .star: return "STAR"
         case .app: return "APP"
         case .apt: return "APT"
-        case .others: return "OTHER"
+        case .others: return "其他"
         }
     }
 

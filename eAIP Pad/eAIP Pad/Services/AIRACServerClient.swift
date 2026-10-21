@@ -53,8 +53,10 @@ nonisolated final class AIRACServerClient: Sendable {
     typealias Transport = @Sendable (URL) async throws -> AIRACServerResponse
     static let shared = AIRACServerClient()
     private let transport: Transport
+    private let retryDelayNanoseconds: UInt64
 
-    init(transport: Transport? = nil) {
+    init(retryDelayNanoseconds: UInt64 = 300_000_000, transport: Transport? = nil) {
+        self.retryDelayNanoseconds = retryDelayNanoseconds
         if let transport { self.transport = transport }
         else {
             let configuration = URLSessionConfiguration.ephemeral
@@ -73,14 +75,69 @@ nonisolated final class AIRACServerClient: Sendable {
     }
 
     func fetch(_ path: String, from configuration: AIRACServerConfiguration, optional: Bool = false) async throws -> Data? {
-        try Task.checkCancellation()
-        let response = try await transport(configuration.resourceURL(path))
-        try Task.checkCancellation()
-        if optional, response.statusCode == 404 { return nil }
-        guard response.statusCode == 200 else {
-            throw AIRACPackageError.invalidPackage("请求 \(path) 失败（HTTP \(response.statusCode)）")
+        let url = try configuration.resourceURL(path)
+        for attempt in 0..<3 {
+            try Task.checkCancellation()
+            let response: AIRACServerResponse
+            do {
+                response = try await transport(url)
+            } catch {
+                try Task.checkCancellation()
+                let transientCodes: Set<URLError.Code> = [
+                    .timedOut, .networkConnectionLost, .cannotConnectToHost,
+                    .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet
+                ]
+                guard attempt < 2, let error = error as? URLError,
+                    transientCodes.contains(error.code) else { throw error }
+                try await retryDelay(attempt)
+                continue
+            }
+            try Task.checkCancellation()
+            if optional, response.statusCode == 404 { return nil }
+            if response.statusCode == 200 { return response.data }
+            guard attempt < 2, [408, 429, 500, 502, 503, 504].contains(response.statusCode) else {
+                throw AIRACPackageError.invalidPackage("请求 \(path) 失败（HTTP \(response.statusCode)）")
+            }
+            try await retryDelay(attempt)
         }
-        return response.data
+        throw AIRACPackageError.invalidPackage("请求 \(path) 失败")
+    }
+
+    private func retryDelay(_ attempt: Int) async throws {
+        try await Task.sleep(nanoseconds: retryDelayNanoseconds * UInt64(1 << attempt))
+    }
+
+    /// 仅保留有限份 PDF 在内存中；任务组退出前等待所有写入结束，失败时可安全回收整批文件。
+    @concurrent
+    func copyPDFs(
+        _ parsed: ParsedAIRACPackage, from configuration: AIRACServerConfiguration,
+        to files: AIRACFileStore, revision: String, maximumConcurrentDownloads: Int = 4,
+        progress: (@MainActor (Int) async -> Void)? = nil
+    ) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            var pending = parsed.charts.makeIterator()
+            func enqueue(_ chart: ParsedAIRACPackage.Chart) {
+                group.addTask {
+                    guard let path = chart.pdfPath,
+                        let data = try await self.fetch(path, from: configuration) else {
+                        throw AIRACPackageError.missingPDF(chart.readerID)
+                    }
+                    try Task.checkCancellation()
+                    try files.savePDF(data, version: parsed.version, revision: revision,
+                        documentType: chart.documentType, id: chart.cacheDocumentID)
+                }
+            }
+            for _ in 0..<max(1, maximumConcurrentDownloads) {
+                if let chart = pending.next() { enqueue(chart) }
+            }
+            var completed = 0
+            while try await group.next() != nil {
+                try Task.checkCancellation()
+                completed += 1
+                await progress?(completed)
+                if let chart = pending.next() { enqueue(chart) }
+            }
+        }
     }
 
     func metadata(from configuration: AIRACServerConfiguration) async throws -> (version: String, effectiveDate: Date) {
@@ -90,7 +147,7 @@ nonisolated final class AIRACServerClient: Sendable {
 
     func catalog(
         from configuration: AIRACServerConfiguration,
-        sections: [String] = ["AD", "GEN", "ENR", "SUP", "NOTAM"],
+        sections: [String] = LocalAIRACPackageParser.allSections,
         expectedVersion: String? = nil, expectedDate: Date? = nil,
         requireDocuments: Bool = true
     ) async throws -> ParsedAIRACPackage {
@@ -106,10 +163,16 @@ nonisolated final class AIRACServerClient: Sendable {
         for section in sections {
             indexes[section] = try await fetch(
                 "Data/JsonPath/\(section).JSON", from: configuration,
-                optional: section == "SUP" || section == "NOTAM")
+                optional: LocalAIRACPackageParser.optionalSections.contains(section))
         }
-        let parsed = try LocalAIRACPackageParser.parse(
-            customers: customers, indexes: indexes, requireDocuments: requireDocuments)
+        let parseTask = Task.detached(priority: .userInitiated) { [indexes] in
+            try LocalAIRACPackageParser.parse(
+                customers: customers, indexes: indexes, requireDocuments: requireDocuments)
+        }
+        let parsed = try await withTaskCancellationHandler {
+            try await parseTask.value
+        } onCancel: { parseTask.cancel() }
+        try Task.checkCancellation()
         for chart in parsed.charts { _ = try configuration.resourceURL(chart.pdfPath ?? "") }
         // 阻止服务器在读取目录的过程中切换周期，避免新旧索引混用。
         let latest = try await fetch("Data/Customers.js", from: configuration)!
@@ -123,8 +186,10 @@ nonisolated final class AIRACServerClient: Sendable {
         switch documentType {
         case "chart", "ad": return ["AD"]
         case "enroute": return ["ENR"]
-        case "aip": return ["GEN", "ENR"]
-        case "sup", "amdt": return ["SUP"]
+        case "aip": return ["GEN", "ENR", "AD"]
+        case "sup": return ["SUP"]
+        case "aic": return ["AIC"]
+        case "amdt": return ["AMDT"]
         case "notam": return ["NOTAM"]
         default: return []
         }
