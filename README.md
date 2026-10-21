@@ -150,8 +150,9 @@ and `Data`, with no authentication or additional API required:
   Request mode does not persist these results to disk.
 - AD general documents appear under **文档 → AIP → AD**. Nested airport charts
   are included, unclassified charts remain visible under **全部 / 其他**, and
-  AIC and AMDT have their own document tabs. Airports with multiple AD documents
-  open a selectable list of regulations.
+  AIC has its own document tab. The AMDT tab is temporarily hidden until its
+  official index format is supported. Airports with multiple AD documents open
+  a selectable list of regulations.
 - **个人 → 管理 AIRAC 数据 → 清理旧周期** preserves the active cycle's PDFs,
   server configuration, pins, and annotations. **删除全部 AIRAC 数据** requires
   an additional confirmation and preserves pins and annotations only.

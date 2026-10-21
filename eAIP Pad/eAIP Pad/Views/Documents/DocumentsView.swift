@@ -19,7 +19,6 @@ struct DocumentsView: View {
                     case .aip: AIPDocumentsView()
                     case .sup: FlatDocumentsView(documentType: .sup)
                     case .aic: FlatDocumentsView(documentType: .aic)
-                    case .amdt: FlatDocumentsView(documentType: .amdt)
                     case .notam: NOTAMDocumentsView()
                     }
                 }
@@ -586,7 +585,6 @@ enum DocumentCategory: String, CaseIterable {
     case aip = "aip"
     case sup = "sup"
     case aic = "aic"
-    case amdt = "amdt"
     case notam = "notam"
 
     var displayName: String {
@@ -594,7 +592,6 @@ enum DocumentCategory: String, CaseIterable {
         case .aip: return "AIP"
         case .sup: return "SUP"
         case .aic: return "AIC"
-        case .amdt: return "AMDT"
         case .notam: return "NOTAM"
         }
     }
