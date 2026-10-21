@@ -8,9 +8,10 @@ struct AirportListView: View {
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
     @State private var searchText = ""
-    @State private var airports: [AirportResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [AirportResponse]())
+    private var airports: [AirportResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
 
     // 过滤后的机场列表
     private var filteredAirports: [AirportResponse] {
@@ -54,6 +55,7 @@ struct AirportListView: View {
                     }
                     .compactListRow()
                 }
+                .refreshable { await loadAirports() }
                 .scrollContentBackground(filteredAirports.isEmpty ? .hidden : .automatic)
                 .overlay {
                     if filteredAirports.isEmpty {
@@ -86,25 +88,16 @@ struct AirportListView: View {
                 }
             }
         }
-        .task(id: airacService.dataRevision) {
-            await loadAirports()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadAirports(force: false)
         }
     }
 
-    private func loadAirports() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
+    private func loadAirports(force: Bool = true) async {
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载机场数据失败：") { [modelContext] in
             let loaded = try await AIRACPackageStore.loadAirports(modelContext: modelContext)
-            try Task.checkCancellation()
-            airports = loaded.map { $0.toResponse() }
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "加载机场数据失败: \(error.localizedDescription)"
+            return loaded.map { $0.toResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -116,7 +109,7 @@ struct AirportRowView: View {
         HStack(spacing: 12) {
             AppSymbolView(systemImage: AppSymbols.airport)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(airport.icao)
                         .font(.headline)

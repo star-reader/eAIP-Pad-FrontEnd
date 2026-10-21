@@ -5,9 +5,10 @@ struct EnrouteView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @State private var enrouteCharts: [ChartResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [ChartResponse]())
+    private var enrouteCharts: [ChartResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var selectedChartType: EnrouteChartType = .enroute
 
     private var filteredCharts: [ChartResponse] {
@@ -72,6 +73,7 @@ struct EnrouteView: View {
                             .compactListRow()
                         }
                         .listStyle(.insetGrouped)
+                        .refreshable { await loadEnrouteCharts() }
                     }
                 }
             }
@@ -83,27 +85,16 @@ struct EnrouteView: View {
                 }
             }
         }
-        .task(id: airacService.dataRevision) {
-            await loadEnrouteCharts()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadEnrouteCharts(force: false)
         }
     }
     
-    private func loadEnrouteCharts() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let loaded = try await AIRACPackageStore.loadCharts(
-                modelContext: modelContext, documentType: "enroute"
-            )
-            try Task.checkCancellation()
-            enrouteCharts = loaded.map { $0.toChartResponse() }
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
+    private func loadEnrouteCharts(force: Bool = true) async {
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载航路图数据失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "enroute")
+            return loaded.map { $0.toChartResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -126,7 +117,7 @@ struct EnrouteChartRowView: View {
         HStack(spacing: 12) {
             AppSymbolView(systemImage: AppSymbols.enroute)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(chart.nameCn)
                         .font(.subheadline)

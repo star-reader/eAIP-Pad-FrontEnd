@@ -16,6 +16,7 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             ForEach(SidebarItem.allCases) { item in
                 page(for: item)
+                    .environment(\.isAIRACPageActive, selectedTab == item)
                     .tabItem {
                         Label(item.title, systemImage: item.icon)
                             .symbolRenderingMode(.hierarchical)

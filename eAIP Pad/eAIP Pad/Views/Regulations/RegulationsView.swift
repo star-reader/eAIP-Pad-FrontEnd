@@ -15,9 +15,11 @@ struct RegulationsView: View {
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var searchText = ""
-    @State private var isLoading = false
-    @State private var airports: [AirportResponse] = []
-    @State private var errorMessage: String?
+    private var isLoading: Bool { page.isLoading }
+    @StateObject private var page = AIRACPageLoader(initialValue: [AirportResponse]())
+    private var airports: [AirportResponse] { page.value }
+    @State private var selectionError: String?
+    private var errorMessage: String? { selectionError ?? page.errorMessage }
     @State private var selectedRegulation: RegulationNavigation?
     @State private var isLoadingRegulation = false
 
@@ -74,6 +76,7 @@ struct RegulationsView: View {
                         .compactListRow()
                     }
                     .listStyle(.insetGrouped)
+                    .refreshable { await loadAirports() }
                 }
             }
             .overlay {
@@ -110,31 +113,18 @@ struct RegulationsView: View {
                 )
             }
         }
-        .task(id: airacService.dataRevision) {
-            await loadAirports()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadAirports(force: false)
         }
     }
 
     // MARK: - 加载机场数据
-    private func loadAirports() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let localAirports = try await AIRACPackageStore.loadAirports(modelContext: modelContext)
-            try Task.checkCancellation()
-
-            await MainActor.run {
-                self.airports = localAirports.map { $0.toResponse() }
-            }
-        } catch {
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
-            }
+    private func loadAirports(force: Bool = true) async {
+        selectionError = nil
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载机场数据失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadAirports(modelContext: modelContext)
+            return loaded.map { $0.toResponse() }
         }
-
-        isLoading = false
     }
 
     // MARK: - 打开第一个细则
@@ -177,14 +167,14 @@ struct RegulationsView: View {
                     }
                 } else {
                     // 没有细则，显示错误
-                    errorMessage = "\(airport.icao) 暂无AD细则"
+                    selectionError = "\(airport.icao) 暂无AD细则"
                 }
                 isLoadingRegulation = false
             }
         } catch {
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                errorMessage = "加载AD细则失败: \(error.localizedDescription)"
+                selectionError = "加载AD细则失败: \(error.localizedDescription)"
                 isLoadingRegulation = false
             }
         }
@@ -199,7 +189,7 @@ struct AirportRegulationRowView: View {
         HStack(spacing: 12) {
             AppSymbolView(systemImage: AppSymbols.regulations)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(airport.icao)
                         .font(.headline)
@@ -233,9 +223,10 @@ struct AirportRegulationsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
     let airport: AirportResponse
-    @State private var regulations: [AIPDocumentResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [AIPDocumentResponse]())
+    private var regulations: [AIPDocumentResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var searchText = ""
     @State private var sortOption: RegulationSortOption = .updatedFirst
 
@@ -294,6 +285,7 @@ struct AirportRegulationsView: View {
                     .compactListRow()
                 }
                 .listStyle(.insetGrouped)
+                .refreshable { await loadRegulations() }
                 .scrollContentBackground(filteredRegulations.isEmpty ? .hidden : .automatic)
                 .overlay {
                     if filteredRegulations.isEmpty {
@@ -309,32 +301,16 @@ struct AirportRegulationsView: View {
         }
         .navigationTitle("\(airport.icao) AD细则")
         .navigationBarTitleDisplayMode(.large)
-        .task(id: airacService.dataRevision) {
-            await loadRegulations()
+        .airacPageTask(key: "\(airport.icao)|\(airacService.dataRevision)") {
+            await loadRegulations(force: false)
         }
     }
 
-    private func loadRegulations() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let localCharts = try await AIRACPackageStore.loadCharts(
-                modelContext: modelContext, documentType: "ad", icao: airport.icao)
-            try Task.checkCancellation()
-            let localRegulations = localCharts
-
-            await MainActor.run {
-                self.regulations = localRegulations.map { $0.toAIPDocumentResponse() }
-            }
-        } catch {
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self.errorMessage = "加载AD细则失败: \(error.localizedDescription)"
-            }
+    private func loadRegulations(force: Bool = true) async {
+        await page.load(key: "\(airport.icao)|\(airacService.dataRevision)", force: force, errorPrefix: "加载AD细则失败：") { [modelContext, icao = airport.icao] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "ad", icao: icao)
+            return loaded.map { $0.toAIPDocumentResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -379,7 +355,7 @@ struct RegulationDocumentRowView: View {
     let regulation: AIPDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(regulation.nameCn)
                 .font(.subheadline)
                 .fontWeight(.medium)

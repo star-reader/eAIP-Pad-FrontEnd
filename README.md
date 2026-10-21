@@ -140,6 +140,10 @@ and `Data`, with no authentication or additional API required:
   source. Catalog metadata and PDFs remain available offline.
 - **请求** saves the server and cycle configuration. Lists and PDFs are fetched
   when opened, without persistent content caching; browsing requires a connection.
+- Switching tabs or document categories keeps visited pages and their in-memory
+  results, including requests still in progress. Pull to refresh to fetch again;
+  importing, configuring, or clearing a source invalidates previous results.
+  Request mode does not persist these results to disk.
 - A missing optional index may return HTTP 404. Other HTTP errors and malformed
   indexes fail validation. Failed initialization preserves the previous source.
 - If the server's AIRAC cycle changes, configure it again before browsing that

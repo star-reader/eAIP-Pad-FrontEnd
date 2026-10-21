@@ -1,12 +1,12 @@
 import SwiftUI
 
-// 列表卡片只保留必要留白；文字变大时由内容自然撑高。
+// 列表行统一保留充足留白；文字变大时内边距随动态字体缩放。
 private struct CompactListRowModifier: ViewModifier {
-    @ScaledMetric(relativeTo: .body) private var verticalInset = 6
+    @ScaledMetric(relativeTo: .body) private var verticalInset = 12
 
     func body(content: Content) -> some View {
         content.listRowInsets(
-            EdgeInsets(top: verticalInset, leading: 16, bottom: verticalInset, trailing: 16)
+            EdgeInsets(top: verticalInset, leading: 20, bottom: verticalInset, trailing: 20)
         )
     }
 }

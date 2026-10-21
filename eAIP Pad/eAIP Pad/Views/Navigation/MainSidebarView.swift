@@ -35,7 +35,7 @@ extension EnvironmentValues {
 struct MainSidebarView: View {
     @ObservedObject private var airacService = AIRACService.shared
     @State private var selectedSidebarItem: SidebarItem? = .airports
-    @State private var selectedChart: ChartResponse?
+    @State private var selectedCharts: [SidebarItem: ChartResponse] = [:]
     @State private var selectedAirport: AirportResponse?
     @State private var columnVisibility = NavigationSplitViewVisibility.doubleColumn
 
@@ -45,55 +45,28 @@ struct MainSidebarView: View {
             SidebarView(selectedItem: $selectedSidebarItem)
                 .navigationSplitViewColumnWidth(min: 140, ideal: 260, max: 200)
         } content: {
-            // 第二栏：内容视图
-            if let item = selectedSidebarItem {
-                ContentListView(
-                    selectedItem: item,
-                    selectedAirport: $selectedAirport
-                )
-                .environment(\.selectedChartBinding, $selectedChart)
-                .environment(\.selectedAirportBinding, $selectedAirport)
-                .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 450)
-                .id(item.rawValue)  // 强制在切换页面时重新创建视图
-                .onChange(of: item) { oldValue, newValue in
-                    // 切换页面时清空选中的航图和机场
-                    if oldValue != newValue {
-                        LoggerService.shared.info(
-                            module: "MainSidebarView",
-                            message: "切换页面: \(oldValue.title) -> \(newValue.title)")
-                        selectedChart = nil
-                        selectedAirport = nil
-                    }
-                }
-                .onChange(of: selectedChart) { oldValue, newValue in
-                    LoggerService.shared.info(
-                        module: "MainSidebarView",
-                        message:
-                            "selectedChart 变化: ID从 \(oldValue?.id ?? "nil") -> \(newValue?.id ?? "nil"), Type: \(newValue?.chartType ?? "nil")"
-                    )
-                }
-            } else {
-                EmptyStateView(
-                    title: "选择一个项目",
-                    systemImage: "sidebar.left",
-                    description: "从侧边栏选择一个项目开始"
-                )
+            KeepAlivePages(selection: selectedSidebarItem ?? .airports, pages: SidebarItem.allCases) { item in
+                ContentListView(selectedItem: item, selectedAirport: $selectedAirport)
+                    .environment(\.selectedChartBinding, chartSelection(for: item))
+                    .environment(\.selectedAirportBinding, $selectedAirport)
             }
+            .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 450)
         } detail: {
-            // 第三栏：详情视图
-            DetailView(
-                selectedItem: selectedSidebarItem,
-                selectedChart: selectedChart
-            )
-            .environment(\.columnVisibilityBinding, $columnVisibility)
-            .id(selectedChart?.id ?? "none")  // 强制根据 selectedChart 重新创建视图
+            KeepAlivePages(selection: selectedSidebarItem ?? .airports, pages: SidebarItem.allCases) { item in
+                DetailView(selectedItem: item, selectedChart: selectedCharts[item])
+                    .environment(\.columnVisibilityBinding, $columnVisibility)
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .tint(.primaryBlue)
         .onChange(of: airacService.dataRevision) { _, _ in
-            selectedChart = nil
+            selectedCharts.removeAll()
             selectedAirport = nil
         }
+    }
+
+    private func chartSelection(for item: SidebarItem) -> Binding<ChartResponse?> {
+        Binding(get: { selectedCharts[item] }, set: { selectedCharts[item] = $0 })
     }
 }
 
@@ -162,25 +135,24 @@ struct ContentListView: View {
         Group {
             switch selectedItem {
             case .airports:
-                // 机场页面需要处理机场选择
-                if let binding = selectedAirportBinding, let airport = selectedAirport {
-                    // iPad 模式且已选中机场：显示航图列表
-                    AirportDetailView(airport: airport)
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button {
-                                    binding.wrappedValue = nil
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "chevron.left")
-                                        Text("机场")
+                KeepAlivePages(selection: selectedAirport != nil, pages: [false, true]) { showsDetails in
+                    if showsDetails {
+                        if let binding = selectedAirportBinding, let airport = selectedAirport {
+                            NavigationStack {
+                                AirportDetailView(airport: airport)
+                                    .toolbar {
+                                        ToolbarItem(placement: .navigationBarLeading) {
+                                            Button("机场", systemImage: "chevron.left") {
+                                                binding.wrappedValue = nil
+                                            }
+                                        }
                                     }
-                                }
                             }
+                            .id(airport.icao)
                         }
-                } else {
-                    // 显示机场列表
-                    AirportListView()
+                    } else {
+                        AirportListView()
+                    }
                 }
             case .enroute:
                 EnrouteView()
@@ -189,8 +161,7 @@ struct ContentListView: View {
             case .documents:
                 DocumentsView()
             case .profile:
-                // 个人中心使用 sheet 显示设置，不需要 NavigationStack
-                ProfileView()
+                NavigationStack { ProfileView() }
             }
         }
     }

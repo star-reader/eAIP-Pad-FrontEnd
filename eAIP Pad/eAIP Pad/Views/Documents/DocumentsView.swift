@@ -13,17 +13,11 @@ struct DocumentsView: View {
                 DocumentTypeSelector(selectedType: $selectedDocumentType)
 
                 // 文档内容
-                Group {
-                    switch selectedDocumentType {
-                    case .aip:
-                        AIPDocumentsView()
-                            .transition(.opacity)
-                    case .sup:
-                        SUPDocumentsView()
-                            .transition(.opacity)
-                    case .notam:
-                        NOTAMDocumentsView()
-                            .transition(.opacity)
+                KeepAlivePages(selection: selectedDocumentType, pages: DocumentCategory.allCases) { category in
+                    switch category {
+                    case .aip: AIPDocumentsView()
+                    case .sup: SUPDocumentsView()
+                    case .notam: NOTAMDocumentsView()
                     }
                 }
                 .animation(
@@ -64,9 +58,10 @@ struct AIPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @State private var documents: [AIPDocumentResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [AIPDocumentResponse]())
+    private var documents: [AIPDocumentResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var selectedCategory: AIPCategory = .all
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
@@ -186,29 +181,19 @@ struct AIPDocumentsView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .refreshable { await loadAIPDocuments() }
             }
         }
-        .task(id: airacService.dataRevision) {
-            await loadAIPDocuments()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadAIPDocuments(force: false)
         }
     }
 
-    private func loadAIPDocuments() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let loaded = try await AIRACPackageStore.loadCharts(
-                modelContext: modelContext, documentType: "aip"
-            )
-            try Task.checkCancellation()
-            documents = loaded.map { $0.toAIPDocumentResponse() }
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "加载AIP文档失败: \(error.localizedDescription)"
+    private func loadAIPDocuments(force: Bool = true) async {
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载AIP文档失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "aip")
+            return loaded.map { $0.toAIPDocumentResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -217,9 +202,10 @@ struct SUPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @State private var documents: [SUPDocumentResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [SUPDocumentResponse]())
+    private var documents: [SUPDocumentResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var searchText = ""
     @State private var sortOption: SUPDocumentSortOption = .updatedFirst
 
@@ -298,6 +284,7 @@ struct SUPDocumentsView: View {
                     }
                     .compactListRow()
                 }
+                .refreshable { await loadSUPDocuments() }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
                     if filteredDocuments.isEmpty {
@@ -311,27 +298,16 @@ struct SUPDocumentsView: View {
                 }
             }
         }
-        .task(id: airacService.dataRevision) {
-            await loadSUPDocuments()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadSUPDocuments(force: false)
         }
     }
 
-    private func loadSUPDocuments() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let loaded = try await AIRACPackageStore.loadCharts(
-                modelContext: modelContext, documentType: "sup"
-            )
-            try Task.checkCancellation()
-            documents = loaded.map { $0.toSUPDocumentResponse() }
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "加载SUP文档失败: \(error.localizedDescription)"
+    private func loadSUPDocuments(force: Bool = true) async {
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载SUP文档失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "sup")
+            return loaded.map { $0.toSUPDocumentResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -453,9 +429,10 @@ struct NOTAMDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @State private var documents: [NOTAMDocumentResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [NOTAMDocumentResponse]())
+    private var documents: [NOTAMDocumentResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var searchText = ""
     @State private var sortOption: NOTAMDocumentSortOption = .latestFirst
 
@@ -532,6 +509,7 @@ struct NOTAMDocumentsView: View {
                     }
                     .compactListRow()
                 }
+                .refreshable { await loadNOTAMDocuments() }
                 .scrollContentBackground(filteredDocuments.isEmpty ? .hidden : .automatic)
                 .overlay {
                     if filteredDocuments.isEmpty {
@@ -545,27 +523,16 @@ struct NOTAMDocumentsView: View {
                 }
             }
         }
-        .task(id: airacService.dataRevision) {
-            await loadNOTAMDocuments()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadNOTAMDocuments(force: false)
         }
     }
 
-    private func loadNOTAMDocuments() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let loaded = try await AIRACPackageStore.loadCharts(
-                modelContext: modelContext, documentType: "notam"
-            )
-            try Task.checkCancellation()
-            documents = loaded.map { $0.toNOTAMDocumentResponse() }
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
+    private func loadNOTAMDocuments(force: Bool = true) async {
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载NOTAM文档失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "notam")
+            return loaded.map { $0.toNOTAMDocumentResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -576,7 +543,7 @@ struct AIPDocumentRowView: View {
     let document: AIPDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(document.nameCn)
                 .font(.subheadline)
                 .fontWeight(.medium)
@@ -615,7 +582,7 @@ struct SUPDocumentRowView: View {
     let document: SUPDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("SUP \(document.serial)")
                     .font(.caption)
@@ -656,7 +623,7 @@ struct AMDTDocumentRowView: View {
     let document: AMDTDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("AMDT \(document.serial)")
                     .font(.caption)
@@ -697,7 +664,7 @@ struct NOTAMDocumentRowView: View {
     let document: NOTAMDocumentResponse
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("NOTAM \(document.seriesName)")
                     .font(.caption)

@@ -7,9 +7,10 @@ struct AirportDetailView: View {
     let airport: AirportResponse
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
-    @State private var charts: [ChartResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [ChartResponse]())
+    private var charts: [ChartResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var selectedChartType: ChartType = .all
     @State private var searchText = ""
     @State private var sortOption: AirportChartSortOption = .updatedFirst
@@ -98,6 +99,7 @@ struct AirportDetailView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .refreshable { await loadCharts() }
                 .scrollContentBackground(filteredCharts.isEmpty ? .hidden : .automatic)
                 .overlay {
                     if filteredCharts.isEmpty {
@@ -129,27 +131,16 @@ struct AirportDetailView: View {
                 }
             }
         }
-        .task(id: "\(airport.icao)|\(airacService.dataRevision)") {
-            await loadCharts()
+        .airacPageTask(key: "\(airport.icao)|\(airacService.dataRevision)") {
+            await loadCharts(force: false)
         }
     }
 
-    private func loadCharts() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let loaded = try await AIRACPackageStore.loadCharts(
-                modelContext: modelContext, documentType: "chart", icao: airport.icao
-            )
-            try Task.checkCancellation()
-            charts = loaded.map { $0.toChartResponse() }
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = "加载航图数据失败: \(error.localizedDescription)"
+    private func loadCharts(force: Bool = true) async {
+        await page.load(key: "\(airport.icao)|\(airacService.dataRevision)", force: force, errorPrefix: "加载航图数据失败：") { [modelContext, icao = airport.icao] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "chart", icao: icao)
+            return loaded.map { $0.toChartResponse() }
         }
-
-        isLoading = false
     }
 }
 
@@ -287,7 +278,7 @@ struct ChartRowView: View {
                 .frame(width: 4)
 
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(chart.nameCn)
                             .font(.subheadline)

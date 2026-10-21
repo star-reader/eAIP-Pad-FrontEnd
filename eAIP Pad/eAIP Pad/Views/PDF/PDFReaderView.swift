@@ -20,11 +20,13 @@ struct PDFReaderView: View {
     @Query private var userSettings: [UserSettings]
     @ObservedObject private var airacService = AIRACService.shared
 
-    @State private var pdfDocument: PDFDocument?
-    @State private var loadedChart: LocalChart?
-    @State private var loadedVersion: String?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    private typealias LoadedDocument = (chart: LocalChart, version: AIRACVersion, document: PDFDocument)
+    @StateObject private var page = AIRACPageLoader<LoadedDocument?>(initialValue: nil)
+    private var pdfDocument: PDFDocument? { page.value?.document }
+    private var loadedChart: LocalChart? { page.value?.chart }
+    private var loadedVersion: String? { page.value?.version.version }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var showingAnnotationTools = false
     @State private var currentPage = 0
     @State private var totalPages = 0
@@ -237,11 +239,11 @@ struct PDFReaderView: View {
                 }
             }
         }
-        .task(id: "\(chartID)|\(airacVersion ?? "current")|\(airacService.dataRevision)") {
+        .airacPageTask(key: "\(chartID)|\(airacVersion ?? "current")|\(airacService.dataRevision)") {
             LoggerService.shared.info(
                 module: "PDFReaderView",
                 message: "task 触发 - chartID: \(chartID), documentType: \(documentType.rawValue)")
-            await loadPDF()
+            await loadPDF(force: false)
         }
         .onAppear {
             LoggerService.shared.info(
@@ -253,27 +255,17 @@ struct PDFReaderView: View {
         }
     }
 
-    private func loadPDF() async {
-        isLoading = true
-        errorMessage = nil
-        pdfDocument = nil
-        loadedChart = nil
-        loadedVersion = nil
-        totalPages = 0
-        currentPage = 0
-        defer { if !Task.isCancelled { isLoading = false } }
-        do {
-            let resolved = try await AIRACPackageStore.loadDocument(
-                chartID: chartID, documentType: documentType.rawValue,
+    private func loadPDF(force: Bool = true) async {
+        let previous = pdfDocument
+        await page.load(key: "\(chartID)|\(documentType.rawValue)|\(airacVersion ?? "current")|\(airacService.dataRevision)", force: force) {
+            [modelContext, chartID, documentType, airacVersion] in
+            try await AIRACPackageStore.loadDocument(chartID: chartID, documentType: documentType.rawValue,
                 version: airacVersion, modelContext: modelContext)
-            try Task.checkCancellation()
-            loadedChart = resolved.chart
-            loadedVersion = resolved.version.version
-            pdfDocument = resolved.document
-            totalPages = resolved.document.pageCount
-        } catch {
-            guard !Task.isCancelled else { return }
-            errorMessage = error.localizedDescription
+        }
+        guard !Task.isCancelled, let document = pdfDocument else { return }
+        if previous !== document || totalPages == 0 {
+            currentPage = 0
+            totalPages = document.pageCount
         }
     }
 
