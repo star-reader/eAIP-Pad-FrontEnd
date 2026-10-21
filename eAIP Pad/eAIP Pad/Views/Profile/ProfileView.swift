@@ -160,8 +160,7 @@ struct ProfileView: View {
             }
             .compactListRow()
         }
-        .navigationTitle("个人")
-        .navigationBarTitleDisplayMode(.large)
+        .airacNavigationTitle("个人")
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()

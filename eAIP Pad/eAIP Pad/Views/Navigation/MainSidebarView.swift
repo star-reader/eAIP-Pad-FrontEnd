@@ -45,16 +45,25 @@ struct MainSidebarView: View {
             SidebarView(selectedItem: $selectedSidebarItem)
                 .navigationSplitViewColumnWidth(min: 140, ideal: 260, max: 200)
         } content: {
-            KeepAlivePages(selection: selectedSidebarItem ?? .airports, pages: SidebarItem.allCases) { item in
-                ContentListView(selectedItem: item, selectedAirport: $selectedAirport)
-                    .environment(\.selectedChartBinding, chartSelection(for: item))
-                    .environment(\.selectedAirportBinding, $selectedAirport)
+            NavigationStack {
+                KeepAlivePages(selection: selectedSidebarItem ?? .airports, pages: SidebarItem.allCases) { item in
+                    ContentListView(selectedItem: item, selectedAirport: $selectedAirport)
+                        .environment(\.selectedChartBinding, chartSelection(for: item))
+                        .environment(\.selectedAirportBinding, $selectedAirport)
+                }
+                .environment(\.columnVisibilityBinding, $columnVisibility)
+                .environment(\.airacColumnTitle, contentTitle)
             }
             .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 450)
         } detail: {
-            KeepAlivePages(selection: selectedSidebarItem ?? .airports, pages: SidebarItem.allCases) { item in
-                DetailView(selectedItem: item, selectedChart: selectedCharts[item])
-                    .environment(\.columnVisibilityBinding, $columnVisibility)
+            NavigationStack {
+                KeepAlivePages(selection: selectedSidebarItem ?? .airports, pages: SidebarItem.allCases) { item in
+                    DetailView(selectedItem: item, selectedChart: selectedCharts[item])
+                }
+                .environment(\.columnVisibilityBinding, $columnVisibility)
+                .environment(\.airacColumnTitle, selectedCharts[selectedSidebarItem ?? .airports]?.nameCn ?? "")
+                .navigationTitle(selectedCharts[selectedSidebarItem ?? .airports]?.nameCn ?? "")
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
         .navigationSplitViewStyle(.balanced)
@@ -62,6 +71,16 @@ struct MainSidebarView: View {
         .onChange(of: airacService.dataRevision) { _, _ in
             selectedCharts.removeAll()
             selectedAirport = nil
+        }
+    }
+
+    private var contentTitle: String {
+        switch selectedSidebarItem ?? .airports {
+        case .airports: return selectedAirport?.icao ?? "机场"
+        case .enroute: return "航路图"
+        case .regulations: return "机场细则"
+        case .documents: return "文档"
+        case .profile: return "个人"
         }
     }
 
@@ -130,6 +149,7 @@ struct ContentListView: View {
     let selectedItem: SidebarItem
     @Binding var selectedAirport: AirportResponse?
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
+    @Environment(\.isAIRACPageActive) private var isPageActive
 
     var body: some View {
         Group {
@@ -138,13 +158,15 @@ struct ContentListView: View {
                 KeepAlivePages(selection: selectedAirport != nil, pages: [false, true]) { showsDetails in
                     if showsDetails {
                         if let binding = selectedAirportBinding, let airport = selectedAirport {
-                            NavigationStack {
+                            AIRACNavigationContainer {
                                 AirportDetailView(airport: airport)
                                     .toolbar {
+                                        if isPageActive {
                                         ToolbarItem(placement: .navigationBarLeading) {
                                             Button("机场", systemImage: "chevron.left") {
                                                 binding.wrappedValue = nil
                                             }
+                                        }
                                         }
                                     }
                             }
@@ -161,7 +183,7 @@ struct ContentListView: View {
             case .documents:
                 DocumentsView()
             case .profile:
-                NavigationStack { ProfileView() }
+                AIRACNavigationContainer { ProfileView() }
             }
         }
     }
@@ -176,7 +198,7 @@ struct DetailView: View {
     var body: some View {
         // 个人中心页面不在右侧显示，留空
         if selectedItem == .profile {
-            placeholderView
+            placeholderView.airacNavigationTitle("", displayMode: .inline)
         } else if let chart = selectedChart {
             // 与 iPhone 使用相同的文档来源和标识，读取正确缓存并共享收藏、标注。
             PDFReaderView(
@@ -187,8 +209,8 @@ struct DetailView: View {
             )
             .id(chart.readerChartID)
         } else {
-            // 占位符
-            placeholderView
+            // 空白状态自有导航容器，不继承其他页面的文档标题或工具栏。
+            placeholderView.airacNavigationTitle("", displayMode: .inline)
         }
     }
 
@@ -236,3 +258,4 @@ struct DetailView: View {
 #Preview("Main Sidebar") {
     MainSidebarView()
 }
+

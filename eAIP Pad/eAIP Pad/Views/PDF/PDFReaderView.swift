@@ -14,6 +14,8 @@ struct PDFReaderView: View {
     var airacVersion: String? = nil
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.isAIRACPageActive) private var isPageActive
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.columnVisibilityBinding) private var columnVisibilityBinding
     @Query private var annotations: [ChartAnnotation]
     @Query private var pinnedCharts: [PinnedChart]
@@ -61,7 +63,7 @@ struct PDFReaderView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             ZStack {
                 if isLoading {
                     LoadingIndicatorView(message: "加载 PDF…")
@@ -104,127 +106,132 @@ struct PDFReaderView: View {
                     }
                 }
             }
-            .navigationTitle(displayName)
-            .navigationBarTitleDisplayMode(.inline)
+            .airacNavigationTitle(displayName, displayMode: .inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .modifier(ReaderNavigationBackground(reduceTransparency: reduceTransparency))
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    // 页面信息
-                    if totalPages > 0 {
-                        Text("\(currentPage + 1)/\(totalPages)")
+                if isPageActive, pdfDocument != nil {
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        // 页面信息
+                        if totalPages > 0 {
+                            Text("\(currentPage + 1)/\(totalPages)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.trailing, 8)
-                    }
+                        }
 
-                    // iPad 侧边栏切换按钮（仅在 iPad 模式下显示）
-                    if let binding = columnVisibilityBinding {
-                        Button {
-                            withAnimation {
-                                // 切换侧边栏显示状态
-                                if binding.wrappedValue == .all
+                        // iPad 侧边栏切换按钮（仅在 iPad 模式下显示）
+                        if let binding = columnVisibilityBinding {
+                            Button {
+                                withAnimation {
+                                    // 切换侧边栏显示状态
+                                    if binding.wrappedValue == .all
                                     || binding.wrappedValue == .doubleColumn
-                                {
-                                    binding.wrappedValue = .detailOnly
-                                } else {
-                                    binding.wrappedValue = .doubleColumn
+                                    {
+                                        binding.wrappedValue = .detailOnly
+                                    } else {
+                                        binding.wrappedValue = .doubleColumn
+                                    }
+                                }
+                            } label: {
+                                Image(
+                                systemName: "sidebar.left"
+                                // systemName: binding.wrappedValue == .detailOnly ? "sidebar.left" : "sidebar.left.fill"
+                                )
+                                .foregroundColor(.primary)
+                            }
+                            .accessibilityLabel("切换侧边栏")
+                        }
+
+                        // Pinboard 按钮
+                        Button {
+                            togglePin()
+                        } label: {
+                            PinSymbolView(isPinned: isPinned)
+                        }
+                        .accessibilityLabel(isPinned ? "取消收藏" : "收藏文档")
+
+                        // 更多操作菜单
+                        Menu {
+
+                            // 视图操作
+                            Section {
+                                Button {
+                                    // 左旋转
+                                    pdfRotation = (pdfRotation - 90 + 360) % 360
+                                } label: {
+                                    Label("向左旋转", systemImage: "rotate.left")
+                                }
+
+                                Button {
+                                    // 右旋转
+                                    pdfRotation = (pdfRotation + 90) % 360
+                                } label: {
+                                    Label("向右旋转", systemImage: "rotate.right")
+                                }
+
+                                Button {
+                                    showingThumbnails = true
+                                } label: {
+                                    Label("查看缩略图", systemImage: "square.grid.3x3")
                                 }
                             }
+
+                            Section {
+                                Button {
+                                    sharePDF()
+                                } label: {
+                                    Label("分享", systemImage: "square.and.arrow.up")
+                                }
+
+                                Button {
+                                    downloadPDF()
+                                } label: {
+                                    Label("下载到文件", systemImage: "arrow.down.doc")
+                                }
+
+                                Button {
+                                    printPDF()
+                                } label: {
+                                    Label("打印", systemImage: "printer")
+                                }
+                            }
+
+                            // 搜索和标注
+                            // Section {
+                                // Button {
+                                    //     // TODO: 搜索文本；这个v2升级做
+                                    // } label: {
+                                    //     Label("搜索", systemImage: "magnifyingglass")
+                                    // }
+
+                                // 标注工具按钮 - 暂时隐藏
+                                // Button {
+                                    //     showingAnnotationTools.toggle()
+                                    // } label: {
+                                    //     Label("标注工具", systemImage: "pencil.tip.crop.circle")
+                                    // }
+                                // }
+
+                            // 页面导航
+                            Section {
+                                Button {
+                                    goToFirstPage()
+                                } label: {
+                                    Label("跳转到首页", systemImage: "arrow.up.to.line")
+                                }
+
+                                Button {
+                                    goToLastPage()
+                                } label: {
+                                    Label("跳转到末页", systemImage: "arrow.down.to.line")
+                                }
+                            }
+
                         } label: {
-                            Image(
-                                systemName: "sidebar.left"
-                                    // systemName: binding.wrappedValue == .detailOnly ? "sidebar.left" : "sidebar.left.fill"
-                            )
-                            .foregroundColor(.primary)
+                            Image(systemName: "ellipsis.circle")
                         }
-                    }
-
-                    // Pinboard 按钮
-                    Button {
-                        togglePin()
-                    } label: {
-                        PinSymbolView(isPinned: isPinned)
-                    }
-                    .accessibilityLabel(isPinned ? "取消收藏" : "收藏文档")
-
-                    // 更多操作菜单
-                    Menu {
-
-                        // 视图操作
-                        Section {
-                            Button {
-                                // 左旋转
-                                pdfRotation = (pdfRotation - 90 + 360) % 360
-                            } label: {
-                                Label("向左旋转", systemImage: "rotate.left")
-                            }
-
-                            Button {
-                                // 右旋转
-                                pdfRotation = (pdfRotation + 90) % 360
-                            } label: {
-                                Label("向右旋转", systemImage: "rotate.right")
-                            }
-
-                            Button {
-                                showingThumbnails = true
-                            } label: {
-                                Label("查看缩略图", systemImage: "square.grid.3x3")
-                            }
-                        }
-
-                        Section {
-                            Button {
-                                sharePDF()
-                            } label: {
-                                Label("分享", systemImage: "square.and.arrow.up")
-                            }
-
-                            Button {
-                                downloadPDF()
-                            } label: {
-                                Label("下载到文件", systemImage: "arrow.down.doc")
-                            }
-
-                            Button {
-                                printPDF()
-                            } label: {
-                                Label("打印", systemImage: "printer")
-                            }
-                        }
-
-                        // 搜索和标注
-                        // Section {
-                        // Button {
-                        //     // TODO: 搜索文本；这个v2升级做
-                        // } label: {
-                        //     Label("搜索", systemImage: "magnifyingglass")
-                        // }
-
-                        // 标注工具按钮 - 暂时隐藏
-                        // Button {
-                        //     showingAnnotationTools.toggle()
-                        // } label: {
-                        //     Label("标注工具", systemImage: "pencil.tip.crop.circle")
-                        // }
-                        // }
-
-                        // 页面导航
-                        Section {
-                            Button {
-                                goToFirstPage()
-                            } label: {
-                                Label("跳转到首页", systemImage: "arrow.up.to.line")
-                            }
-
-                            Button {
-                                goToLastPage()
-                            } label: {
-                                Label("跳转到末页", systemImage: "arrow.down.to.line")
-                            }
-                        }
-
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                        .accessibilityLabel("更多文档操作")
                     }
                 }
             }
@@ -630,8 +637,7 @@ struct PDFThumbnailView: View {
                 }
                 .padding(16)
             }
-            .navigationTitle("缩略图")
-            .navigationBarTitleDisplayMode(.inline)
+            .airacNavigationTitle("缩略图", displayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") {
@@ -684,4 +690,18 @@ struct PDFPageThumbnail: UIViewRepresentable {
         documentType: .chart
     )
     .modelContainer(for: ChartAnnotation.self, inMemory: true)
+}
+
+/// 导航栏始终保留系统毛玻璃背板，避免航图线条穿过标题与按钮区域。
+/// iOS 26 及以上仍由系统绘制 Liquid Glass 工具按钮；旧系统使用原生 material 模糊。
+private struct ReaderNavigationBackground: ViewModifier {
+    let reduceTransparency: Bool
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+        } else {
+            content.toolbarBackground(.regularMaterial, for: .navigationBar)
+        }
+    }
 }

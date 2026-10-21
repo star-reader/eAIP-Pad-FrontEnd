@@ -13,6 +13,7 @@ struct RegulationNavigation: Identifiable, Hashable {
 struct RegulationsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var searchText = ""
     private var isLoading: Bool { page.isLoading }
@@ -37,7 +38,7 @@ struct RegulationsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             VStack(spacing: 0) {
                 // 搜索栏
                 SearchBar(text: $searchText, placeholder: "搜索机场...")
@@ -97,11 +98,12 @@ struct RegulationsView: View {
                     }
                 }
             }
-            .navigationTitle("机场细则")
-            .navigationBarTitleDisplayMode(.large)
+            .airacNavigationTitle("机场细则")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    PinboardToolbarButton()
+                if isPageActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        PinboardToolbarButton()
+                    }
                 }
             }
             .navigationDestination(item: $selectedRegulation) { regulation in
@@ -299,8 +301,7 @@ struct AirportRegulationsView: View {
                 }
             }
         }
-        .navigationTitle("\(airport.icao) AD细则")
-        .navigationBarTitleDisplayMode(.large)
+        .airacNavigationTitle("\(airport.icao) AD细则")
         .airacPageTask(key: "\(airport.icao)|\(airacService.dataRevision)") {
             await loadRegulations(force: false)
         }

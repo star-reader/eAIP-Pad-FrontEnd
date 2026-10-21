@@ -6,6 +6,7 @@ import SwiftUI
 struct AirportListView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
     @State private var searchText = ""
     @StateObject private var page = AIRACPageLoader(initialValue: [AirportResponse]())
@@ -27,13 +28,18 @@ struct AirportListView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             LoadingStateView(
                 isLoading: isLoading,
                 errorMessage: errorMessage,
                 loadingMessage: "加载机场数据...",
                 retryAction: { await loadAirports() }
             ) {
+                VStack(spacing: 0) {
+                    if selectedAirportBinding != nil {
+                        SearchBar(text: $searchText, placeholder: "搜索机场 ICAO 或名称")
+                            .padding()
+                    }
                 List {
                     ForEach(filteredAirports, id: \.icao) { airport in
                         if let binding = selectedAirportBinding {
@@ -55,6 +61,7 @@ struct AirportListView: View {
                     }
                     .compactListRow()
                 }
+                .listStyle(.insetGrouped)
                 .refreshable { await loadAirports() }
                 .scrollContentBackground(filteredAirports.isEmpty ? .hidden : .automatic)
                 .overlay {
@@ -67,23 +74,25 @@ struct AirportListView: View {
                         )
                     }
                 }
-                .searchable(text: $searchText, prompt: "搜索机场 ICAO 或名称")
+                }
+                .modifier(AirportSearchPresentation(searchText: $searchText, usesNativeSearch: selectedAirportBinding == nil))
             }
-            .navigationTitle("机场")
-            .navigationBarTitleDisplayMode(.large)
+            .airacNavigationTitle("机场")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        PinboardToolbarButton()
+                if isPageActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        HStack(spacing: 16) {
+                            PinboardToolbarButton()
 
-                        Button {
-                            Task {
-                                await loadAirports()
+                            Button {
+                                Task {
+                                    await loadAirports()
+                                }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
                             }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
+                            .disabled(isLoading)
                         }
-                        .disabled(isLoading)
                     }
                 }
             }
@@ -143,4 +152,17 @@ struct AirportRowView: View {
         AirportListView()
     }
     .modelContainer(for: Airport.self, inMemory: true)
+}
+
+private struct AirportSearchPresentation: ViewModifier {
+    @Binding var searchText: String
+    let usesNativeSearch: Bool
+
+    func body(content: Content) -> some View {
+        if usesNativeSearch {
+            content.searchable(text: $searchText, prompt: "搜索机场 ICAO 或名称")
+        } else {
+            content
+        }
+    }
 }

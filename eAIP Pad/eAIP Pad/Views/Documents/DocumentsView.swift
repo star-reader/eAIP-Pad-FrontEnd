@@ -3,11 +3,12 @@ import SwiftUI
 
 // MARK: - 文档视图
 struct DocumentsView: View {
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @State private var selectedDocumentType: DocumentCategory = .aip
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             VStack(spacing: 0) {
                 // 文档类型选择器
                 DocumentTypeSelector(selectedType: $selectedDocumentType)
@@ -25,11 +26,12 @@ struct DocumentsView: View {
                     value: selectedDocumentType
                 )
             }
-            .navigationTitle("文档")
-            .navigationBarTitleDisplayMode(.large)
+            .airacNavigationTitle("文档")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    PinboardToolbarButton()
+                if isPageActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        PinboardToolbarButton()
+                    }
                 }
             }
         }
@@ -57,6 +59,7 @@ struct DocumentTypeSelector: View {
 struct AIPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @StateObject private var page = AIRACPageLoader(initialValue: [AIPDocumentResponse]())
     private var documents: [AIPDocumentResponse] { page.value }

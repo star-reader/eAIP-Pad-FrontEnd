@@ -7,6 +7,7 @@ struct AirportDetailView: View {
     let airport: AirportResponse
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @StateObject private var page = AIRACPageLoader(initialValue: [ChartResponse]())
     private var charts: [ChartResponse] { page.value }
     private var isLoading: Bool { page.isLoading }
@@ -113,21 +114,22 @@ struct AirportDetailView: View {
                 }
             }
         }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
+        .airacNavigationTitle("", displayMode: .inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
-                    PinboardToolbarButton()
+            if isPageActive {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 16) {
+                        PinboardToolbarButton()
 
-                    Button {
-                        Task {
-                            await loadCharts()
+                        Button {
+                            Task {
+                                await loadCharts()
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
                         }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
+                        .disabled(isLoading)
                     }
-                    .disabled(isLoading)
                 }
             }
         }

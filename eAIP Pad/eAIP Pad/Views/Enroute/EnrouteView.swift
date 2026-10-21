@@ -4,6 +4,7 @@ import SwiftUI
 struct EnrouteView: View {
     @Environment(\.modelContext) private var modelContext
     @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @StateObject private var page = AIRACPageLoader(initialValue: [ChartResponse]())
     private var enrouteCharts: [ChartResponse] { page.value }
@@ -23,7 +24,7 @@ struct EnrouteView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             LoadingStateView(
                 isLoading: isLoading,
                 errorMessage: errorMessage,
@@ -77,11 +78,12 @@ struct EnrouteView: View {
                     }
                 }
             }
-            .navigationTitle("航路图")
-            .navigationBarTitleDisplayMode(.large)
+            .airacNavigationTitle("航路图")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    PinboardToolbarButton()
+                if isPageActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        PinboardToolbarButton()
+                    }
                 }
             }
         }
