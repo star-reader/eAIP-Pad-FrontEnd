@@ -4,38 +4,31 @@ import SwiftData
 @MainActor
 class AIRACHelper {
     static let shared = AIRACHelper()
-    
+
+    static let missingDataErrorDomain = "AIRACHelper"
+    static let missingDataErrorCode = -1001
+    static let missingDataMessage = "暂无 AIRAC 数据，请先在「个人」中导入数据包或配置在线服务器"
+
     private init() {}
-    
+
+    /// 返回已启用的数据源周期；尚未导入或配置时返回 nil
     func getCurrentAIRACVersion(modelContext: ModelContext) async -> String? {
-        if let cached = PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) {
-            return cached
-        }
-        
-        do {
-            let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-            let version = airacResponse.version
-            
-            let newVersion = AIRACVersion(
-                version: version,
-                effectiveDate: ISO8601DateFormatter().date(from: airacResponse.effectiveDate) ?? Date(),
-                isCurrent: true
-            )
-            modelContext.insert(newVersion)
-            try? modelContext.save()
-            
-            return version
-        } catch {
-            LoggerService.shared.error(module: "AIRACHelper", message: "获取 AIRAC 版本失败: \(error.localizedDescription)")
-            return nil
-        }
+        return PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
     }
-    
-    func loadCachedData<T: Codable>(_ type: T.Type, airacVersion: String, dataType: String) -> T? {
-        return PDFCacheService.shared.loadCachedData(type, airacVersion: airacVersion, dataType: dataType)
+
+    func hasLocalAIRACData(modelContext: ModelContext) -> Bool {
+        PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
     }
-    
-    func cacheData<T: Codable>(_ data: T, airacVersion: String, dataType: String) {
-        try? PDFCacheService.shared.cacheData(data, airacVersion: airacVersion, dataType: dataType)
+
+    static func makeMissingDataError() -> NSError {
+        NSError(
+            domain: missingDataErrorDomain,
+            code: missingDataErrorCode,
+            userInfo: [NSLocalizedDescriptionKey: missingDataMessage]
+        )
+    }
+
+    static func isMissingDataError(_ message: String) -> Bool {
+        message.contains(missingDataMessage)
     }
 }

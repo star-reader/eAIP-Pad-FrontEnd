@@ -11,17 +11,24 @@ struct PDFReaderView: View {
     let chartID: String
     let displayName: String
     let documentType: DocumentType
+    var airacVersion: String? = nil
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.isAIRACPageActive) private var isPageActive
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.columnVisibilityBinding) private var columnVisibilityBinding
     @Query private var annotations: [ChartAnnotation]
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var userSettings: [UserSettings]
+    @ObservedObject private var airacService = AIRACService.shared
 
-    @State private var pdfDocument: PDFDocument?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    private typealias LoadedDocument = (chart: LocalChart, version: AIRACVersion, document: PDFDocument)
+    @StateObject private var page = AIRACPageLoader<LoadedDocument?>(initialValue: nil)
+    private var pdfDocument: PDFDocument? { page.value?.document }
+    private var loadedChart: LocalChart? { page.value?.chart }
+    private var loadedVersion: String? { page.value?.version.version }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var showingAnnotationTools = false
     @State private var currentPage = 0
     @State private var totalPages = 0
@@ -29,8 +36,6 @@ struct PDFReaderView: View {
     @State private var showingThumbnails = false  // 显示缩略图目录
     @State private var showingShareSheet = false  // 显示分享菜单
     @State private var pdfFileToShare: URL?  // 要分享的 PDF 文件 URL
-    @State private var showingLoginSheet = false       // 未登录时弹出登录引导
-    @State private var showingSubscriptionSheet = false // 未订阅时弹出订阅页面
 
     private var currentSettings: UserSettings {
         userSettings.first ?? UserSettings()
@@ -42,6 +47,14 @@ struct PDFReaderView: View {
 
     private var chartAnnotations: [ChartAnnotation] {
         annotations.filter { $0.chartID == chartID && $0.documentType == documentType.rawValue }
+    }
+
+    private var usesExtendedChartBackground: Bool {
+        if #available(iOS 26.0, *) {
+            return columnVisibilityBinding != nil && pdfDocument != nil
+                && !isLoading && errorMessage == nil && !reduceTransparency
+        }
+        return false
     }
 
     private var shouldUseDarkMode: Bool {
@@ -58,28 +71,18 @@ struct PDFReaderView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             ZStack {
                 if isLoading {
-                    ProgressView("加载PDF...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingIndicatorView(message: "加载 PDF…")
+                } else if let errorMessage = errorMessage,
+                          AIRACHelper.isMissingDataError(errorMessage) {
+                    NoLocalDataStateView()
                 } else if let errorMessage = errorMessage {
-                    VStack(spacing: 20) {
-                        if showingLoginSheet == false && showingSubscriptionSheet == false {
-                            // 用于非授权类错误的通用错误 UI
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.largeTitle)
-                                .foregroundColor(.orange)
-                            Text(errorMessage)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                            Button("重试") {
-                                Task { await loadPDF() }
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ErrorStateView(
+                        message: errorMessage,
+                        retryAction: { await loadPDF() }
+                    )
                 } else if let pdfDocument = pdfDocument {
                     PDFViewRepresentable(
                         document: pdfDocument,
@@ -94,9 +97,9 @@ struct PDFReaderView: View {
                         }
                     )
                     .ignoresSafeArea(.all, edges: .bottom)
+                    .modifier(ReaderChartBackground(isEnabled: usesExtendedChartBackground))
                 } else {
-                    Text("无法加载PDF")
-                        .foregroundColor(.secondary)
+                    ErrorStateView(message: "无法读取此 PDF，请尝试重新打开或导入数据包。")
                 }
 
                 // 标注工具栏
@@ -112,127 +115,134 @@ struct PDFReaderView: View {
                     }
                 }
             }
-            .navigationTitle(displayName)
-            .navigationBarTitleDisplayMode(.inline)
+            .airacNavigationTitle(displayName, displayMode: .inline)
+            .modifier(ReaderNavigationBackground(
+                reduceTransparency: reduceTransparency,
+                usesExtendedChartBackground: usesExtendedChartBackground
+            ))
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    // 页面信息
-                    if totalPages > 0 {
-                        Text("\(currentPage + 1)/\(totalPages)")
+                if isPageActive, pdfDocument != nil {
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        // 页面信息
+                        if totalPages > 0 {
+                            Text("\(currentPage + 1)/\(totalPages)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .padding(.trailing, 8)
-                    }
+                        }
 
-                    // iPad 侧边栏切换按钮（仅在 iPad 模式下显示）
-                    if let binding = columnVisibilityBinding {
-                        Button {
-                            withAnimation {
-                                // 切换侧边栏显示状态
-                                if binding.wrappedValue == .all
+                        // iPad 侧边栏切换按钮（仅在 iPad 模式下显示）
+                        if let binding = columnVisibilityBinding {
+                            Button {
+                                withAnimation {
+                                    // 切换侧边栏显示状态
+                                    if binding.wrappedValue == .all
                                     || binding.wrappedValue == .doubleColumn
-                                {
-                                    binding.wrappedValue = .detailOnly
-                                } else {
-                                    binding.wrappedValue = .doubleColumn
+                                    {
+                                        binding.wrappedValue = .detailOnly
+                                    } else {
+                                        binding.wrappedValue = .doubleColumn
+                                    }
+                                }
+                            } label: {
+                                Image(
+                                systemName: "sidebar.left"
+                                // systemName: binding.wrappedValue == .detailOnly ? "sidebar.left" : "sidebar.left.fill"
+                                )
+                                .foregroundColor(.primary)
+                            }
+                            .accessibilityLabel("切换侧边栏")
+                        }
+
+                        // Pinboard 按钮
+                        Button {
+                            togglePin()
+                        } label: {
+                            PinSymbolView(isPinned: isPinned)
+                        }
+                        .accessibilityLabel(isPinned ? "取消收藏" : "收藏文档")
+
+                        // 更多操作菜单
+                        Menu {
+
+                            // 视图操作
+                            Section {
+                                Button {
+                                    // 左旋转
+                                    pdfRotation = (pdfRotation - 90 + 360) % 360
+                                } label: {
+                                    Label("向左旋转", systemImage: "rotate.left")
+                                }
+
+                                Button {
+                                    // 右旋转
+                                    pdfRotation = (pdfRotation + 90) % 360
+                                } label: {
+                                    Label("向右旋转", systemImage: "rotate.right")
+                                }
+
+                                Button {
+                                    showingThumbnails = true
+                                } label: {
+                                    Label("查看缩略图", systemImage: "square.grid.3x3")
                                 }
                             }
+
+                            Section {
+                                Button {
+                                    sharePDF()
+                                } label: {
+                                    Label("分享", systemImage: "square.and.arrow.up")
+                                }
+
+                                Button {
+                                    downloadPDF()
+                                } label: {
+                                    Label("下载到文件", systemImage: "arrow.down.doc")
+                                }
+
+                                Button {
+                                    printPDF()
+                                } label: {
+                                    Label("打印", systemImage: "printer")
+                                }
+                            }
+
+                            // 搜索和标注
+                            // Section {
+                                // Button {
+                                    //     // TODO: 搜索文本；这个v2升级做
+                                    // } label: {
+                                    //     Label("搜索", systemImage: "magnifyingglass")
+                                    // }
+
+                                // 标注工具按钮 - 暂时隐藏
+                                // Button {
+                                    //     showingAnnotationTools.toggle()
+                                    // } label: {
+                                    //     Label("标注工具", systemImage: "pencil.tip.crop.circle")
+                                    // }
+                                // }
+
+                            // 页面导航
+                            Section {
+                                Button {
+                                    goToFirstPage()
+                                } label: {
+                                    Label("跳转到首页", systemImage: "arrow.up.to.line")
+                                }
+
+                                Button {
+                                    goToLastPage()
+                                } label: {
+                                    Label("跳转到末页", systemImage: "arrow.down.to.line")
+                                }
+                            }
+
                         } label: {
-                            Image(
-                                systemName: "sidebar.left"
-                                    // systemName: binding.wrappedValue == .detailOnly ? "sidebar.left" : "sidebar.left.fill"
-                            )
-                            .foregroundColor(.primary)
+                            Image(systemName: "ellipsis.circle")
                         }
-                    }
-
-                    // Pinboard 按钮
-                    Button {
-                        togglePin()
-                    } label: {
-                        Image(systemName: isPinned ? "pin.fill" : "pin")
-                            .foregroundColor(isPinned ? .orange : .primary)
-                    }
-
-                    // 更多操作菜单
-                    Menu {
-
-                        // 视图操作
-                        Section {
-                            Button {
-                                // 左旋转
-                                pdfRotation = (pdfRotation - 90 + 360) % 360
-                            } label: {
-                                Label("向左旋转", systemImage: "rotate.left")
-                            }
-
-                            Button {
-                                // 右旋转
-                                pdfRotation = (pdfRotation + 90) % 360
-                            } label: {
-                                Label("向右旋转", systemImage: "rotate.right")
-                            }
-
-                            Button {
-                                showingThumbnails = true
-                            } label: {
-                                Label("查看缩略图", systemImage: "square.grid.3x3")
-                            }
-                        }
-
-                        Section {
-                            Button {
-                                sharePDF()
-                            } label: {
-                                Label("分享", systemImage: "square.and.arrow.up")
-                            }
-
-                            Button {
-                                downloadPDF()
-                            } label: {
-                                Label("下载到文件", systemImage: "arrow.down.doc")
-                            }
-
-                            Button {
-                                printPDF()
-                            } label: {
-                                Label("打印", systemImage: "printer")
-                            }
-                        }
-
-                        // 搜索和标注
-                        // Section {
-                        // Button {
-                        //     // TODO: 搜索文本；这个v2升级做
-                        // } label: {
-                        //     Label("搜索", systemImage: "magnifyingglass")
-                        // }
-
-                        // 标注工具按钮 - 暂时隐藏
-                        // Button {
-                        //     showingAnnotationTools.toggle()
-                        // } label: {
-                        //     Label("标注工具", systemImage: "pencil.tip.crop.circle")
-                        // }
-                        // }
-
-                        // 页面导航
-                        Section {
-                            Button {
-                                goToFirstPage()
-                            } label: {
-                                Label("跳转到首页", systemImage: "arrow.up.to.line")
-                            }
-
-                            Button {
-                                goToLastPage()
-                            } label: {
-                                Label("跳转到末页", systemImage: "arrow.down.to.line")
-                            }
-                        }
-
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+                        .accessibilityLabel("更多文档操作")
                     }
                 }
             }
@@ -246,40 +256,12 @@ struct PDFReaderView: View {
                     ShareSheet(items: [pdfFile])
                 }
             }
-            // 未登录：弹出登录页面
-            .sheet(isPresented: $showingLoginSheet) {
-                NavigationStack {
-                    LoginView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button("关闭") {
-                                    showingLoginSheet = false
-                                    dismiss()
-                                }
-                            }
-                        }
-                }
-            }
-            // 未订阅：弹出订阅页面
-            .sheet(isPresented: $showingSubscriptionSheet) {
-                UnifiedSubscriptionView(onDismiss: {
-                    showingSubscriptionSheet = false
-                    dismiss()
-                })
-            }
         }
-        .task(id: chartID) {
+        .airacPageTask(key: "\(chartID)|\(airacVersion ?? "current")|\(airacService.dataRevision)") {
             LoggerService.shared.info(
                 module: "PDFReaderView",
                 message: "task 触发 - chartID: \(chartID), documentType: \(documentType.rawValue)")
-            await loadPDF()
-        }
-        .onChange(of: chartID) { oldValue, newValue in
-            LoggerService.shared.info(
-                module: "PDFReaderView", message: "chartID 变化: \(oldValue) -> \(newValue)")
-            Task {
-                await loadPDF()
-            }
+            await loadPDF(force: false)
         }
         .onAppear {
             LoggerService.shared.info(
@@ -291,179 +273,18 @@ struct PDFReaderView: View {
         }
     }
 
-    private func loadPDF() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            // 提取实际的 ID - 从 chartID 中提取最后一个下划线后的数字
-            let actualID: String
-            if let lastUnderscoreIndex = chartID.lastIndex(of: "_") {
-                actualID = String(chartID[chartID.index(after: lastUnderscoreIndex)...])
-            } else {
-                actualID = chartID
-            }
-
-            LoggerService.shared.info(
-                module: "PDFReaderView",
-                message:
-                    "chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)"
-            )
-
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "PDFReaderView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "PDFReaderView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    LoggerService.shared.warning(
-                        module: "PDFReaderView",
-                        message: "无法从 API 获取 AIRAC 版本，使用默认值: \(error.localizedDescription)")
-                    // 使用一个默认的 AIRAC 版本（用于降级处理）
-                    currentAIRAC = "unknown"
-                }
-            }
-
-            // 确保 airacVersion 不为 nil（如果 API 获取失败，已设置为 "unknown"）
-            let airacVersion = currentAIRAC ?? "unknown"
-
-            // 1. 先尝试从缓存加载
-            if let cachedDocument = PDFCacheService.shared.loadFromCache(
-                airacVersion: airacVersion,
-                documentType: documentType.rawValue,
-                id: actualID
-            ) {
-                await MainActor.run {
-                    self.pdfDocument = cachedDocument
-                    self.totalPages = cachedDocument.pageCount
-                }
-                isLoading = false
-                return
-            }
-
-            // 2. 缓存未命中 — 先验证权限，再发网络请求
-            let authService = AuthenticationService.shared
-            let subscriptionService = SubscriptionService.shared
-
-            guard authService.authenticationState == .authenticated else {
-                // 未登录：直接抛出，不发无用请求
-                throw NetworkError.unauthorized
-            }
-
-            guard subscriptionService.hasValidSubscription else {
-                // 已登录但无订阅
-                throw AppError.subscriptionNotFound
-            }
-
-            // 根据文档类型获取签名URL
-            let signedURLResponse: SignedURLResponse
-            switch documentType {
-            case .chart:
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getChartSignedURL(id: id)
-            case .enroute:
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getEnrouteSignedURL(id: id)
-            case .ad:
-                // AD 细则使用 documents/ad API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "ad", id: id)
-            case .aip:
-                // AIP 使用 documents/aip API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "aip", id: id)
-            case .sup:
-                // SUP 使用 documents/sup API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "sup", id: id)
-            case .amdt:
-                // AMDT 使用 documents/amdt API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "amdt", id: id)
-            case .notam:
-                // NOTAM 使用 documents/notam API
-                let id = Int(actualID) ?? 0
-                signedURLResponse = try await NetworkService.shared.getDocumentSignedURL(
-                    type: "notam", id: id)
-            }
-
-            // 构建完整URL - 将 /api/v1/ 替换为 /eaip/v1/
-            let correctedPath = signedURLResponse.url.replacingOccurrences(
-                of: "/api/v1/", with: "/eaip/v1/")
-            let fullURL = URL(string: NetworkConfig.baseURL + correctedPath)!
-
-            // 下载PDF - 需要带Authorization头
-            var pdfRequest = URLRequest(url: fullURL)
-
-            // 从NetworkService获取当前的access token
-            if let accessToken = NetworkService.shared.getCurrentAccessToken() {
-                pdfRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-            }
-
-            let (data, _) = try await URLSession.shared.data(for: pdfRequest)
-
-            // 3. 保存到缓存（只在有有效 AIRAC 版本时才缓存）
-            if airacVersion != "unknown" {
-                try? PDFCacheService.shared.saveToCache(
-                    pdfData: data,
-                    airacVersion: airacVersion,
-                    documentType: documentType.rawValue,
-                    id: actualID
-                )
-            }
-
-            await MainActor.run {
-                if let document = PDFDocument(data: data) {
-                    self.pdfDocument = document
-                    self.totalPages = document.pageCount
-                } else {
-                    self.errorMessage = "无法解析PDF文档"
-                }
-            }
-        } catch {
-            await MainActor.run {
-                // 识别错误类型，弹出对应引导而不是显示错误文本
-                let appError = AppError.from(error)
-                switch appError {
-                case .unauthorized, .tokenExpired:
-                    // 未登录或 Token 过期
-                    self.showingLoginSheet = true
-                    self.errorMessage = nil
-                case .subscriptionNotFound, .subscriptionExpired:
-                    // 已登录但无有效订阅
-                    self.showingSubscriptionSheet = true
-                    self.errorMessage = nil
-                default:
-                    self.errorMessage = "加载PDF失败: \(error.localizedDescription)"
-                }
-            }
+    private func loadPDF(force: Bool = true) async {
+        let previous = pdfDocument
+        await page.load(key: "\(chartID)|\(documentType.rawValue)|\(airacVersion ?? "current")|\(airacService.dataRevision)", force: force) {
+            [modelContext, chartID, documentType, airacVersion] in
+            try await AIRACPackageStore.loadDocument(chartID: chartID, documentType: documentType.rawValue,
+                version: airacVersion, modelContext: modelContext)
         }
-
-        isLoading = false
+        guard !Task.isCancelled, let document = pdfDocument else { return }
+        if previous !== document || totalPages == 0 {
+            currentPage = 0
+            totalPages = document.pageCount
+        }
     }
 
     private func togglePin() {
@@ -473,30 +294,14 @@ struct PDFReaderView: View {
                 modelContext.delete(pinToRemove)
             }
         } else {
-            // 从chartID中提取ICAO
-            // 格式通常为: {icao}_{type}_{id}
-            let icaoCode: String
-            if let firstUnderscoreIndex = chartID.firstIndex(of: "_") {
-                icaoCode = String(chartID[..<firstUnderscoreIndex])
-            } else {
-                icaoCode = ""  // 如果无法提取，则使用空字符串
-            }
-
-            LoggerService.shared.info(module: "PDFReaderView", message: "猜测的ICAO: \(icaoCode)")
-
-            // 获取当前AIRAC版本
-            let currentAIRAC =
-                PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-                ?? "unknown"
-
-            // 添加收藏
+            guard let loadedChart, let loadedVersion else { return }
             let newPin = PinnedChart(
-                chartID: chartID,
-                displayName: displayName,
-                icao: icaoCode,
-                type: documentType.rawValue,
+                chartID: loadedChart.readerChartID,
+                displayName: loadedChart.nameCn,
+                icao: loadedChart.icao ?? "",
+                type: loadedChart.effectiveChartType,
                 documentType: documentType.rawValue,
-                airacVersion: currentAIRAC
+                airacVersion: loadedVersion
             )
             modelContext.insert(newPin)
         }
@@ -843,8 +648,7 @@ struct PDFThumbnailView: View {
                 }
                 .padding(16)
             }
-            .navigationTitle("缩略图")
-            .navigationBarTitleDisplayMode(.inline)
+            .airacNavigationTitle("缩略图", displayMode: .inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") {
@@ -897,4 +701,69 @@ struct PDFPageThumbnail: UIViewRepresentable {
         documentType: .chart
     )
     .modelContainer(for: ChartAnnotation.self, inMemory: true)
+}
+
+/// 只延展航图的模糊背景，原始 PDF 仍留在安全区内，避免首行内容被导航栏遮住。
+private struct ReaderChartBackground: ViewModifier {
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *), isEnabled {
+            content
+                .backgroundExtensionEffect()
+                .overlay {
+                    GeometryReader { geometry in
+                        let topInset = geometry.safeAreaInsets.top
+                        let transitionHeight: CGFloat = 48
+                        let height = topInset + transitionHeight
+
+                        // 从顶部就开始减弱材质，底部完全透明，避免形成厚重的背板或阴影边界。
+                        if topInset > 0 {
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                                .mask {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .black.opacity(0.5), location: 0),
+                                            .init(color: .black.opacity(0.32), location: 0.3),
+                                            .init(color: .black.opacity(0.12), location: 0.6),
+                                            .init(color: .black.opacity(0.02), location: 0.85),
+                                            .init(color: .clear, location: 0.95),
+                                            .init(color: .clear, location: 1),
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                }
+                                .frame(height: height)
+                                .offset(y: -topInset)
+                        }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// iPad 延展背景时交由航图背板承接原生 Liquid Glass 按钮，避免叠加整块白色导航背景。
+private struct ReaderNavigationBackground: ViewModifier {
+    let reduceTransparency: Bool
+    let usesExtendedChartBackground: Bool
+
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content
+                .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        } else if usesExtendedChartBackground {
+            content.toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            content
+                .toolbarBackground(.regularMaterial, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
 }

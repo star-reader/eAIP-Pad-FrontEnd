@@ -3,10 +3,13 @@ import SwiftUI
 
 struct EnrouteView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @State private var enrouteCharts: [ChartResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [ChartResponse]())
+    private var enrouteCharts: [ChartResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
     @State private var selectedChartType: EnrouteChartType = .enroute
 
     private var filteredCharts: [ChartResponse] {
@@ -21,7 +24,7 @@ struct EnrouteView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             LoadingStateView(
                 isLoading: isLoading,
                 errorMessage: errorMessage,
@@ -45,67 +48,55 @@ struct EnrouteView: View {
                         )
                     } else {
                         List(filteredCharts, id: \.id) { chart in
-                            if let binding = selectedChartBinding {
-                                Button {
-                                    binding.wrappedValue = chart
-                                } label: {
-                                    EnrouteChartRowView(chart: chart)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                NavigationLink {
-                                    PDFReaderView(
-                                        chartID: "enroute_\(chart.id)",
-                                        displayName: chart.nameCn,
-                                        documentType: .enroute
-                                    )
-                                } label: {
-                                    EnrouteChartRowView(chart: chart)
+                            Group {
+                                if let binding = selectedChartBinding {
+                                    Button {
+                                        binding.wrappedValue = chart
+                                    } label: {
+                                        EnrouteChartRowView(chart: chart)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink {
+                                        PDFReaderView(
+                                            chartID: "enroute_\(chart.id)",
+                                            displayName: chart.nameCn,
+                                            documentType: .enroute,
+                                            airacVersion: chart.airacVersion
+                                        )
+                                    } label: {
+                                        EnrouteChartRowView(chart: chart)
+                                    }
                                 }
                             }
+                            .compactListRow()
                         }
                         .listStyle(.insetGrouped)
+                        .refreshable { await loadEnrouteCharts() }
                     }
                 }
             }
-            .navigationTitle("航路图")
-            .navigationBarTitleDisplayMode(.large)
+            .airacNavigationTitle("航路图")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    PinboardToolbarButton()
+                if isPageActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        PinboardToolbarButton()
+                    }
                 }
             }
         }
-        .task {
-            await loadEnrouteCharts()
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadEnrouteCharts(force: false)
         }
     }
     
-    private func loadEnrouteCharts() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            guard let airacVersion = await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) else {
-                throw NSError(domain: "EnrouteView", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-            
-            if let cached = AIRACHelper.shared.loadCachedData([ChartResponse].self, airacVersion: airacVersion, dataType: PDFCacheService.DataType.enrouteCharts) {
-                enrouteCharts = cached
-                isLoading = false
-                return
-            }
-            
-            let charts = try await NetworkService.shared.getEnrouteCharts(type: nil)
-            AIRACHelper.shared.cacheData(charts, airacVersion: airacVersion, dataType: PDFCacheService.DataType.enrouteCharts)
-            enrouteCharts = charts
-        } catch {
-            errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
+    private func loadEnrouteCharts(force: Bool = true) async {
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载航路图数据失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "enroute")
+            return loaded.map { $0.toChartResponse() }
         }
-        
-        isLoading = false
     }
 }
 
@@ -113,6 +104,7 @@ struct EnrouteView: View {
 struct EnrouteChartRowView: View {
     let chart: ChartResponse
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Query private var pinnedCharts: [PinnedChart]
 
     private var chartID: String {
@@ -124,7 +116,9 @@ struct EnrouteChartRowView: View {
     }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: AppSymbols.enroute)
+
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(chart.nameCn)
@@ -166,10 +160,10 @@ struct EnrouteChartRowView: View {
             Button {
                 togglePin()
             } label: {
-                Image(systemName: isPinned ? "pin.fill" : "pin")
-                    .foregroundColor(isPinned ? .orange : .secondary)
+                PinSymbolView(isPinned: isPinned)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isPinned ? "取消收藏" : "收藏航图")
         }
     }
 

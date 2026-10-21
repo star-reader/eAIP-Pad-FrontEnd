@@ -6,202 +6,202 @@ import Foundation
 // MARK: - 个人中心视图
 struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var userSettings: [UserSettings]
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var airacVersions: [AIRACVersion]
-    @StateObject private var subscriptionService = SubscriptionService.shared
-    @StateObject private var authService = AuthenticationService.shared
+    @ObservedObject private var airacService = AIRACService.shared
     @State private var showingSettings = false
     @State private var showingAbout = false
-    @State private var showingSubscription = false
+    @State private var showingAIRACImport = false
     @State private var showingCacheCleared = false
     @State private var showingCacheError = false
+    @State private var showingCacheActions = false
+    @State private var showingDeleteAllConfirmation = false
+    @State private var cacheResultMessage = ""
     @State private var showingEmailAlert = false
-    @State private var showingMailComposer = false
     @State private var showingBugReportOptions = false
     @State private var cacheSizeText: String = ""
     @State private var errorMessage: String = ""
     @State private var mailData: MailData?
-    @State private var showingSignOutConfirmation = false
-    @State private var showingLoginSheet = false
-    
-    private var currentSettings: UserSettings {
-        userSettings.first ?? UserSettings()
-    }
-    
+
     private var currentAIRAC: AIRACVersion? {
         airacVersions.first { $0.isCurrent }
     }
     
     var body: some View {
         List {
-            // 订阅状态卡片
-            Section {
-                SubscriptionStatusCard(
-                    subscriptionService: subscriptionService,
-                    isAuthenticated: authService.authenticationState == .authenticated,
-                    onSubscribe: {
-                        if authService.authenticationState == .authenticated {
-                            showingSubscription = true
-                        } else {
-                            showingLoginSheet = true
-                        }
-                    }
-                )
-            }
-            
             // 统计信息
             Section("使用统计") {
+                StatisticRow(
+                    icon: "pin.fill",
+                    title: "收藏航图",
+                    value: "\(pinnedCharts.count) 个",
+                    color: .orange
+                )
+
+                if let currentAIRAC = currentAIRAC {
                     StatisticRow(
-                        icon: "pin.fill",
-                        title: "收藏航图",
-                        value: "\(pinnedCharts.count) 个",
+                        icon: "arrow.clockwise",
+                        title: "当前AIRAC",
+                        value: currentAIRAC.version,
+                        color: .blue
+                    )
+                }
+            }
+            .compactListRow()
+
+            Section("应用设置") {
+                Button {
+                    showingAIRACImport = true
+                } label: {
+                    SettingRow(
+                        icon: "tray.and.arrow.down.fill",
+                        title: "导入 AIRAC 数据包",
+                        color: .blue
+                    )
+                }
+
+                Button {
+                    showingSettings = true
+                } label: {
+                    SettingRow(
+                        icon: "gearshape.fill",
+                        title: "偏好设置",
+                        color: .gray
+                    )
+                }
+
+                Button {
+                    showingCacheActions = true
+                } label: {
+                    SettingRow(
+                        icon: "trash.fill",
+                        title: "管理 AIRAC 数据",
+                        color: .red,
+                        trailingText: cacheSizeText
+                    )
+                }
+                .disabled(airacService.isUpdating)
+                .confirmationDialog("管理 AIRAC 数据", isPresented: $showingCacheActions, titleVisibility: .visible) {
+                    Button("清理旧周期") {
+                        Task { await clearCache() }
+                    }
+                    Button("删除全部 AIRAC 数据", role: .destructive) {
+                        showingDeleteAllConfirmation = true
+                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("清理旧周期会保留当前周期的离线资料、服务器配置、收藏和标注。")
+                }
+            }
+            .compactListRow()
+
+            Section("帮助与支持") {
+                Button {
+                    showingAbout = true
+                } label: {
+                    SettingRow(
+                        icon: "info.circle.fill",
+                        title: "关于应用",
+                        color: .blue
+                    )
+                }
+
+                if let url = URL(string: "https://testflight.apple.com/join/4ctRjbAq") {
+                    Link(destination: url) {
+                        HStack(spacing: 12) {
+                            AppSymbolView(systemImage: "app.badge", size: .compact)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("加入 TestFlight")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                Text("抢先体验新功能，帮助改进 eAIP Pad")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            Spacer(minLength: 8)
+
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("打开 TestFlight 邀请页面")
+                }
+
+                Button {
+                    openGitHub()
+                } label: {
+                    SettingRow(
+                        icon: "link.circle.fill",
+                        title: "GitHub 仓库",
+                        color: .green
+                    )
+                }
+
+                Button {
+                    sendNewIdeaEmail()
+                } label: {
+                    SettingRow(
+                        icon: "lightbulb.fill",
+                        title: "我有新想法",
                         color: .orange
                     )
-                    
-                    if let currentAIRAC = currentAIRAC {
-                        StatisticRow(
-                            icon: "arrow.clockwise",
-                            title: "当前AIRAC",
-                            value: currentAIRAC.version,
-                            color: .blue
-                        )
-                    }
                 }
-                
-                // 应用设置
-                Section("应用设置") {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        SettingRow(
-                            icon: "gearshape.fill",
-                            title: "偏好设置",
-                            color: .gray
-                        )
-                    }
-                    
-                    Button {
-                        Task {
-                            await clearCache()
-                            await MainActor.run {
-                                showingCacheCleared = true
-                            }
-                        }
-                    } label: {
-                        SettingRow(
-                            icon: "trash.fill",
-                            title: "清理缓存",
-                            color: .red,
-                            trailingText: cacheSizeText
-                        )
-                    }
-                }
-                
-                // 帮助与支持
-                Section("帮助与支持") {
-                    Button {
-                        showingAbout = true
-                    } label: {
-                        SettingRow(
-                            icon: "info.circle.fill",
-                            title: "关于应用",
-                            color: .blue
-                        )
-                    }
-                    
-                    Button {
-                        openGitHub()
-                    } label: {
-                        SettingRow(
-                            icon: "link.circle.fill",
-                            title: "GitHub 仓库",
-                            color: .green
-                        )
-                    }
-                    
-                    Button {
-                        sendNewIdeaEmail()
-                    } label: {
-                        SettingRow(
-                            icon: "lightbulb.fill",
-                            title: "我有新想法",
-                            color: .yellow
-                        )
-                    }
-                    
-                    Button {
-                        showingBugReportOptions = true
-                    } label: {
-                        SettingRow(
-                            icon: "ladybug.fill",
-                            title: "反馈bug",
-                            color: .red
-                        )
-                    }
-                }
-                
-                // 法律信息
-                Section("法律信息") {
-                    Button {
-                        openPrivacyPolicy()
-                    } label: {
-                        SettingRow(
-                            icon: "hand.raised.fill",
-                            title: "隐私政策",
-                            color: .purple
-                        )
-                    }
-                    
-                    Button {
-                        openTermsOfService()
-                    } label: {
-                        SettingRow(
-                            icon: "doc.text.fill",
-                            title: "服务条款",
-                            color: .indigo
-                        )
-                    }
-                }
-                
-                // 账户管理
-                Section {
-                    if authService.authenticationState == .authenticated {
-                        Button {
-                            showingSignOutConfirmation = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .foregroundColor(.red)
-                                    .frame(width: 24)
 
-                                Text("退出登录")
-                                    .font(.subheadline)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    } else {
-                        Button {
-                            showingLoginSheet = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.plus")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 24)
-
-                                Text("前往登录")
-                                    .font(.subheadline)
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                    }
+                Button {
+                    showingBugReportOptions = true
+                } label: {
+                    SettingRow(
+                        icon: "ladybug.fill",
+                        title: "反馈bug",
+                        color: .red
+                    )
                 }
+                .confirmationDialog("是否附带日志文件？", isPresented: $showingBugReportOptions) {
+                    Button("附带日志") {
+                        sendBugReportEmail(withLogs: true)
+                    }
+                    Button("不附带") {
+                        sendBugReportEmail(withLogs: false)
+                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("附带日志文件可以帮助开发者更好地定位问题")
+                }
+            }
+            .compactListRow()
+
+            Section("法律信息") {
+                Button {
+                    openPrivacyPolicy()
+                } label: {
+                    SettingRow(
+                        icon: "hand.raised.fill",
+                        title: "隐私政策",
+                        color: .purple
+                    )
+                }
+
+                Button {
+                    openTermsOfService()
+                } label: {
+                    SettingRow(
+                        icon: "doc.text.fill",
+                        title: "服务条款",
+                        color: .indigo
+                    )
+                }
+            }
+            .compactListRow()
         }
-        .navigationTitle("个人")
-        .navigationBarTitleDisplayMode(.large)
-        .sheet(isPresented: $showingSubscription) {
-            UnifiedSubscriptionView()
-        }
+        .airacNavigationTitle("个人")
         .sheet(isPresented: $showingSettings) {
             NavigationStack {
                 SettingsView()
@@ -210,22 +210,21 @@ struct ProfileView: View {
         .sheet(isPresented: $showingAbout) {
             AboutView()
         }
-        .sheet(isPresented: $showingLoginSheet) {
-            NavigationStack {
-                LoginView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button("关闭") {
-                                showingLoginSheet = false
-                            }
-                        }
-                    }
-            }
+        .sheet(isPresented: $showingAIRACImport) {
+            AIRACUpdateView()
         }
-        .alert("缓存已清理", isPresented: $showingCacheCleared) {
+        .alert("删除全部 AIRAC 数据？", isPresented: $showingDeleteAllConfirmation) {
+            Button("删除全部数据", role: .destructive) {
+                Task { await clearCache(includingCurrent: true) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将删除所有周期的离线资料和在线服务器配置，需要重新导入或配置后才能浏览。收藏和标注会保留。")
+        }
+        .alert("数据清理完成", isPresented: $showingCacheCleared) {
             Button("确定", role: .cancel) {}
         } message: {
-            Text("已成功清理所有AIRAC数据与PDF缓存文件。")
+            Text(cacheResultMessage)
         }
         .alert("清理缓存失败", isPresented: $showingCacheError) {
             Button("确定", role: .cancel) {}
@@ -237,25 +236,6 @@ struct ProfileView: View {
         } message: {
             Text(errorMessage)
         }
-        .confirmationDialog("是否附带日志文件？", isPresented: $showingBugReportOptions) {
-            Button("附带日志") {
-                sendBugReportEmail(withLogs: true)
-            }
-            Button("不附带") {
-                sendBugReportEmail(withLogs: false)
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("附带日志文件可以帮助开发者更好地定位问题")
-        }
-        .confirmationDialog("确定要退出登录吗？", isPresented: $showingSignOutConfirmation) {
-            Button("退出登录", role: .destructive) {
-                handleSignOut()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("退出后将进入游客模式，仍可访问基础页面，登录后可继续使用完整功能")
-        }
         .sheet(item: $mailData) { data in
             MailComposeView(
                 subject: data.subject,
@@ -266,67 +246,40 @@ struct ProfileView: View {
                 }
             )
         }
-        .onAppear {
-            Task { await updateCacheSize() }
-        }
-        .onChange(of: authService.authenticationState) { _, newState in
-            if newState == .authenticated {
-                showingLoginSheet = false
-            }
+        .task(id: airacService.dataRevision) {
+            await updateCacheSize()
         }
     }
     
     // MARK: - 缓存管理
     
-    private func clearCache() async {
-        do {
-            for version in airacVersions {
-                let versionString = version.version
-                let chartsDescriptor = FetchDescriptor<LocalChart>(
-                    predicate: #Predicate<LocalChart> { chart in
-                        chart.airacVersion == versionString
-                    }
-                )
-                let chartsToDelete = try modelContext.fetch(chartsDescriptor)
-                chartsToDelete.forEach { modelContext.delete($0) }
-                
-                PDFCacheService.shared.clearCacheForVersion(versionString)
-                PDFCacheService.shared.clearDataCacheForVersion(versionString)
-                
-                if !version.isCurrent {
-                    modelContext.delete(version)
-                }
-            }
-            
-            URLCache.shared.removeAllCachedResponses()
-            try modelContext.save()
-            await updateCacheSize()
-            
-            await MainActor.run {
-                showingCacheCleared = true
-            }
-        } catch {
-            LoggerService.shared.error(module: "ProfileView", message: "清理缓存失败: \(error.localizedDescription)")
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                showingCacheError = true
-            }
+    private func clearCache(includingCurrent: Bool = false) async {
+        showingCacheCleared = false
+        showingCacheError = false
+        let succeeded = await airacService.clearAllCache(modelContext: modelContext, includingCurrent: includingCurrent)
+        await updateCacheSize()
+        if succeeded {
+            cacheResultMessage = includingCurrent
+                ? "已删除全部 AIRAC 数据和服务器配置，收藏和标注已保留。"
+                : "已清理旧周期，当前离线资料、服务器配置、收藏和标注已保留。"
+            showingCacheCleared = true
+        } else {
+            errorMessage = airacService.errorMessage ?? "已有 AIRAC 操作正在进行，请稍后重试"
+            showingCacheError = true
         }
     }
 
     private func updateCacheSize() async {
-        let formatted = PDFCacheService.shared.getFormattedTotalCacheSize()
-        await MainActor.run {
-            cacheSizeText = formatted
+        let scan = Task.detached(priority: .utility) { try AIRACFileStore.shared.totalCacheSize() }
+        do {
+            let size = try await withTaskCancellationHandler {
+                try await scan.value
+            } onCancel: { scan.cancel() }
+            guard !Task.isCancelled else { return }
+            cacheSizeText = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        } catch {
+            if !Task.isCancelled { cacheSizeText = "暂不可用" }
         }
-    }
-    
-    // MARK: - 账户管理
-    
-    private func handleSignOut() {
-        LoggerService.shared.info(module: "ProfileView", message: "用户点击退出登录")
-        AuthenticationService.shared.signOut()
-        LoggerService.shared.info(module: "ProfileView", message: "用户已成功退出登录")
     }
     
     // MARK: - 外部链接
@@ -414,7 +367,7 @@ struct ProfileView: View {
         系统信息：
         • 设备型号：\(UIDevice.current.model)
         • 系统版本：iOS \(UIDevice.current.systemVersion)
-        • App 版本：1.0.0 (Build 1)
+        • App 版本：\(AppVersion.appVersion)
         """
     }
 }

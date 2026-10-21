@@ -38,45 +38,26 @@ class PDFCacheService {
         LoggerService.shared.info(module: "PDFCacheService", message: "PDF 缓存服务初始化")
     }
 
-    // MARK: - 生成缓存文件路径
-    /// 生成缓存文件路径，格式：PDFCache/{airacVersion}/{documentType}_{id}.pdf
-    private func cacheFilePath(airacVersion: String, documentType: String, id: String) -> URL {
-        let versionDirectory = cacheDirectory.appendingPathComponent(airacVersion)
-
-        // 确保 AIRAC 版本目录存在
-        if !fileManager.fileExists(atPath: versionDirectory.path) {
-            try? fileManager.createDirectory(
-                at: versionDirectory, withIntermediateDirectories: true)
-        }
-
-        let fileName = "\(documentType)_\(id).pdf"
-        return versionDirectory.appendingPathComponent(fileName)
-    }
-
     // MARK: - 检查缓存是否存在
     /// 检查指定 PDF 是否已缓存
-    func isCached(airacVersion: String, documentType: String, id: String) -> Bool {
-        let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
-        return fileManager.fileExists(atPath: filePath.path)
+    func isCached(airacVersion: String, documentType: String, id: String, revision: String? = nil) -> Bool {
+        loadFromCache(airacVersion: airacVersion, documentType: documentType, id: id, revision: revision) != nil
     }
 
     // MARK: - 从缓存加载 PDF
     /// 从缓存加载 PDF 文档
-    func loadFromCache(airacVersion: String, documentType: String, id: String) -> PDFDocument? {
-        let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
-
-        guard fileManager.fileExists(atPath: filePath.path) else {
-            return nil
-        }
-
-        return PDFDocument(url: filePath)
+    func loadFromCache(
+        airacVersion: String, documentType: String, id: String, revision: String? = nil
+    ) -> PDFDocument? {
+        AIRACFileStore.shared.loadPDF(
+            version: airacVersion, revision: revision, documentType: documentType, id: id)
     }
 
     // MARK: - 保存 PDF 到缓存
     /// 保存 PDF 数据到缓存
     func saveToCache(pdfData: Data, airacVersion: String, documentType: String, id: String) throws {
-        let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
-        try pdfData.write(to: filePath)
+        try AIRACFileStore.shared.savePDF(
+            pdfData, version: airacVersion, revision: nil, documentType: documentType, id: id)
         LoggerService.shared.info(
             module: "PDFCacheService", message: "保存 PDF 到缓存: \(documentType)_\(id)")
     }
@@ -253,55 +234,7 @@ class PDFCacheService {
         return statistics
     }
 
-    // MARK: - 数据缓存（机场列表、航路图列表等）
-
-    /// 生成数据缓存文件路径
-    private func dataCacheFilePath(airacVersion: String, dataType: String) -> URL {
-        let versionDirectory = dataCacheDirectory.appendingPathComponent(airacVersion)
-
-        // 确保 AIRAC 版本目录存在
-        if !fileManager.fileExists(atPath: versionDirectory.path) {
-            try? fileManager.createDirectory(
-                at: versionDirectory, withIntermediateDirectories: true)
-        }
-
-        let fileName = "\(dataType).json"
-        return versionDirectory.appendingPathComponent(fileName)
-    }
-
-    /// 缓存 Codable 数据（如机场列表、航路图列表）
-    func cacheData<T: Codable>(_ data: T, airacVersion: String, dataType: String) throws {
-        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = .prettyPrinted
-        let jsonData = try encoder.encode(data)
-        try jsonData.write(to: filePath)
-    }
-
-    /// 从缓存加载 Codable 数据
-    func loadCachedData<T: Codable>(_ type: T.Type, airacVersion: String, dataType: String) -> T? {
-        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
-
-        guard fileManager.fileExists(atPath: filePath.path) else {
-            return nil
-        }
-
-        do {
-            let jsonData = try Data(contentsOf: filePath)
-            let decoder = JSONDecoder()
-            return try decoder.decode(type, from: jsonData)
-        } catch {
-            LoggerService.shared.error(
-                module: "PDFCacheService", message: "加载缓存数据失败: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    /// 检查数据缓存是否存在
-    func isDataCached(airacVersion: String, dataType: String) -> Bool {
-        let filePath = dataCacheFilePath(airacVersion: airacVersion, dataType: dataType)
-        return fileManager.fileExists(atPath: filePath.path)
-    }
+    // MARK: - 数据缓存清理
 
     /// 清理数据缓存
     func clearDataCache() {

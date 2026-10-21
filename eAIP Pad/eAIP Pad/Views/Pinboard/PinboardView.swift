@@ -47,12 +47,11 @@ struct PinboardView: View {
     @ViewBuilder
     private var contentView: some View {
         if pinnedCharts.isEmpty {
-            ContentUnavailableView(
-                "暂无收藏",
+            EmptyStateView(
+                title: "暂无收藏",
                 systemImage: "pin.slash",
-                description: Text("收藏的航图会显示在这里")
+                description: "收藏的航图会显示在这里"
             )
-            .foregroundColor(Color.primaryBlue)
         } else {
             switch currentSettings.pinboardStyle {
             case PinboardStyle.compact.rawValue:
@@ -92,9 +91,9 @@ struct PinboardPreviewGridView: View {
                                 .fill(Color.primaryBlue.opacity(0.1))
                                 .frame(height: 200)
                                 .overlay(
-                                    Image(systemName: "doc.text.fill")
-                                        .font(.system(size: 48))
-                                        .foregroundColor(Color.primaryBlue.opacity(0.3))
+                                    StateSymbolView(
+                                        systemImage: chart.documentSymbol, tint: chart.documentSymbolTint
+                                    )
                                 )
                                 .cornerRadius(8)
 

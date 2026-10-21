@@ -6,18 +6,23 @@ struct RegulationNavigation: Identifiable, Hashable {
     let id = UUID()
     let chartID: String
     let displayName: String
+    let airacVersion: String
 }
 
 // MARK: - 细则视图（AD细则）
 struct RegulationsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.isAIRACPageActive) private var isPageActive
     @Environment(\.selectedChartBinding) private var selectedChartBinding
-    @ObservedObject private var authService = AuthenticationService.shared
     @State private var searchText = ""
-    @State private var isLoading = false
-    @State private var airports: [AirportResponse] = []
-    @State private var errorMessage: String?
+    private var isLoading: Bool { page.isLoading }
+    @StateObject private var page = AIRACPageLoader(initialValue: [AirportResponse]())
+    private var airports: [AirportResponse] { page.value }
+    @State private var selectionError: String?
+    private var errorMessage: String? { selectionError ?? page.errorMessage }
     @State private var selectedRegulation: RegulationNavigation?
+    @State private var selectedRegulationAirport: AirportResponse?
     @State private var isLoadingRegulation = false
 
     // 过滤后的机场列表
@@ -34,7 +39,7 @@ struct RegulationsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        AIRACNavigationContainer {
             VStack(spacing: 0) {
                 // 搜索栏
                 SearchBar(text: $searchText, placeholder: "搜索机场...")
@@ -42,30 +47,22 @@ struct RegulationsView: View {
 
                 // 机场列表
                 if isLoading {
-                    ProgressView("加载机场数据...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingIndicatorView(message: "加载机场数据…")
+                } else if let errorMessage = errorMessage,
+                          AIRACHelper.isMissingDataError(errorMessage) {
+                    NoLocalDataStateView()
                 } else if let errorMessage = errorMessage {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundColor(.orange)
-                        Text(errorMessage)
-                            .multilineTextAlignment(.center)
-                        Button("重试") {
-                            Task {
-                                await loadAirports()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if filteredAirports.isEmpty {
-                    ContentUnavailableView(
-                        "暂无机场数据",
-                        systemImage: "airplane.circle",
-                        description: Text("没有找到相关机场")
+                    ErrorStateView(
+                        message: errorMessage,
+                        retryAction: { await loadAirports() }
                     )
-                    .foregroundColor(.primaryBlue)
+                } else if filteredAirports.isEmpty {
+                    SearchEmptyStateView(
+                        searchText: $searchText,
+                        title: "暂无机场数据",
+                        systemImage: "airplane",
+                        description: "当前数据包中没有机场信息。"
+                    )
                 } else {
                     List(filteredAirports, id: \.icao) { airport in
                         Button {
@@ -78,8 +75,10 @@ struct RegulationsView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .compactListRow()
                     }
                     .listStyle(.insetGrouped)
+                    .refreshable { await loadAirports() }
                 }
             }
             .overlay {
@@ -100,125 +99,54 @@ struct RegulationsView: View {
                     }
                 }
             }
-            .navigationTitle("机场细则")
-            .navigationBarTitleDisplayMode(.large)
+            .airacNavigationTitle("机场细则")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    PinboardToolbarButton()
+                if isPageActive {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        PinboardToolbarButton()
+                    }
                 }
             }
             .navigationDestination(item: $selectedRegulation) { regulation in
                 PDFReaderView(
                     chartID: regulation.chartID,
                     displayName: regulation.displayName,
-                    documentType: .ad
+                    documentType: .ad,
+                    airacVersion: regulation.airacVersion
                 )
             }
-        }
-        .task {
-            // 无需登录即可加载机场细则列表
-            await loadAirports()
-        }
-        .onChange(of: authService.authenticationState) { _, newValue in
-            // 登录成功后重新加载
-            if newValue == .authenticated {
-                Task { await loadAirports() }
+            .navigationDestination(item: $selectedRegulationAirport) { airport in
+                AirportRegulationsView(airport: airport)
             }
+        }
+        .airacPageTask(key: "\(airacService.dataRevision)") {
+            await loadAirports(force: false)
         }
     }
 
     // MARK: - 加载机场数据
-    private func loadAirports() async {
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
-
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "RegulationsView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Regulations", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
-                }
-            }
-
-            guard let currentAIRAC = currentAIRAC else {
-                throw NSError(
-                    domain: "Regulations", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
-            }
-
-            // 1. 先尝试从缓存加载
-            if let cachedAirports = PDFCacheService.shared.loadCachedData(
-                [AirportResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.airports
-            ) {
-                await MainActor.run {
-                    self.airports = cachedAirports
-                }
-                isLoading = false
-                return
-            }
-
-            // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getAirports()
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: PDFCacheService.DataType.airports
-            )
-
-            await MainActor.run {
-                self.airports = response
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "加载机场数据失败: \(error.localizedDescription)"
-            }
+    private func loadAirports(force: Bool = true) async {
+        selectionError = nil
+        await page.load(key: "\(airacService.dataRevision)", force: force, errorPrefix: "加载机场数据失败：") { [modelContext] in
+            let loaded = try await AIRACPackageStore.loadAirports(modelContext: modelContext)
+            return loaded.map { $0.toResponse() }
         }
-
-        isLoading = false
     }
 
-    // MARK: - 打开第一个细则
+    // MARK: - 单份细则直接打开，多份细则提供完整列表
     private func openFirstRegulation(for airport: AirportResponse) async {
         isLoadingRegulation = true
 
         do {
-            let regulations = try await NetworkService.shared.getAIPDocumentsByICAO(
-                icao: airport.icao)
+            let localCharts = try await AIRACPackageStore.loadCharts(
+                modelContext: modelContext, documentType: "ad", icao: airport.icao)
+            try Task.checkCancellation()
+            let regulations = localCharts.map { $0.toAIPDocumentResponse() }
 
             await MainActor.run {
-                if let firstRegulation = regulations.first {
+                if regulations.count > 1 {
+                    selectedRegulationAirport = airport
+                } else if let firstRegulation = regulations.first {
                     if let binding = selectedChartBinding {
                         // iPad 模式：设置选中的航图
                         binding.wrappedValue = ChartResponse(
@@ -234,24 +162,27 @@ struct RegulationsView: View {
                             htmlEnPath: firstRegulation.htmlEnPath,
                             airacVersion: firstRegulation.airacVersion,
                             isModified: firstRegulation.isModified ?? false,
-                            isOpened: firstRegulation.isOpened
+                            isOpened: firstRegulation.isOpened,
+                            documentType: .ad
                         )
                     } else {
                         // iPhone 模式：使用 navigationDestination
                         selectedRegulation = RegulationNavigation(
                             chartID: "ad_\(firstRegulation.id)",
-                            displayName: "\(airport.icao) - \(firstRegulation.nameCn)"
+                            displayName: "\(airport.icao) - \(firstRegulation.nameCn)",
+                            airacVersion: firstRegulation.airacVersion
                         )
                     }
                 } else {
                     // 没有细则，显示错误
-                    errorMessage = "\(airport.icao) 暂无AD细则"
+                    selectionError = "\(airport.icao) 暂无AD细则"
                 }
                 isLoadingRegulation = false
             }
         } catch {
+            guard !Task.isCancelled else { return }
             await MainActor.run {
-                errorMessage = "加载AD细则失败: \(error.localizedDescription)"
+                selectionError = "加载AD细则失败: \(error.localizedDescription)"
                 isLoadingRegulation = false
             }
         }
@@ -263,17 +194,8 @@ struct AirportRegulationRowView: View {
     let airport: AirportResponse
 
     var body: some View {
-        HStack {
-            // 机场图标
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.blue.opacity(0.1))
-                    .frame(width: 40, height: 40)
-
-                Image(systemName: "doc.text")
-                    .foregroundColor(.blue)
-                    .font(.title3)
-            }
+        HStack(spacing: 12) {
+            AppSymbolView(systemImage: AppSymbols.regulations)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -301,148 +223,154 @@ struct AirportRegulationRowView: View {
 
             Spacer()
         }
-        .padding(.vertical, 4)
     }
 }
 
 // MARK: - 机场细则详情视图
 struct AirportRegulationsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
+    @Environment(\.selectedChartBinding) private var selectedChartBinding
     let airport: AirportResponse
-    @State private var regulations: [AIPDocumentResponse] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @StateObject private var page = AIRACPageLoader(initialValue: [AIPDocumentResponse]())
+    private var regulations: [AIPDocumentResponse] { page.value }
+    private var isLoading: Bool { page.isLoading }
+    private var errorMessage: String? { page.errorMessage }
+    @State private var searchText = ""
+    @State private var sortOption: RegulationSortOption = .updatedFirst
+
+    private var filteredRegulations: [AIPDocumentResponse] {
+        let searchFiltered = regulations.filter { regulation in
+            guard !searchText.isEmpty else { return true }
+            let keyword = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !keyword.isEmpty else { return true }
+            return regulation.nameCn.localizedCaseInsensitiveContains(keyword)
+                || regulation.name.localizedCaseInsensitiveContains(keyword)
+                || regulation.category.localizedCaseInsensitiveContains(keyword)
+        }
+
+        return searchFiltered.sorted(by: sortOption.sorter)
+    }
 
     var body: some View {
         VStack {
             if isLoading {
-                ProgressView("加载AD细则...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                LoadingIndicatorView(message: "加载 AD 细则…")
+            } else if let errorMessage = errorMessage,
+                      AIRACHelper.isMissingDataError(errorMessage) {
+                NoLocalDataStateView()
             } else if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-                    Text(errorMessage)
-                        .multilineTextAlignment(.center)
-                    Button("重试") {
-                        Task {
-                            await loadRegulations()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if regulations.isEmpty {
-                ContentUnavailableView(
-                    "暂无AD细则",
-                    systemImage: "doc.text.magnifyingglass",
-                    description: Text("该机场暂无AD细则文档")
+                ErrorStateView(
+                    message: errorMessage,
+                    retryAction: { await loadRegulations() }
                 )
-                .foregroundColor(.primaryBlue)
+            } else if regulations.isEmpty {
+                EmptyStateView(
+                    title: "暂无 AD 细则",
+                    systemImage: "doc.text.magnifyingglass",
+                    description: "当前数据包中没有该机场的 AD 细则。"
+                )
             } else {
-                List(regulations, id: \.id) { regulation in
-                    NavigationLink {
-                        PDFReaderView(
-                            chartID: "ad_\(regulation.id)",
-                            displayName: regulation.nameCn,
-                            documentType: .ad
-                        )
-                    } label: {
-                        RegulationDocumentRowView(regulation: regulation)
+                CompactSearchFilterBar(
+                    searchText: $searchText,
+                    selectedSort: $sortOption,
+                    searchPlaceholder: "搜索细则名称或分类",
+                    sortOptions: RegulationSortOption.allCases,
+                    sortTitle: "排序",
+                    sortLabel: { $0.displayName }
+                )
+
+                List(filteredRegulations, id: \.id) { regulation in
+                    if let binding = selectedChartBinding {
+                        Button {
+                            binding.wrappedValue = ChartResponse(
+                                id: regulation.id, documentId: regulation.documentId,
+                                parentId: regulation.parentId, icao: regulation.airportIcao,
+                                nameEn: regulation.name, nameCn: regulation.nameCn, chartType: "AD",
+                                pdfPath: regulation.pdfPath, htmlPath: regulation.htmlPath,
+                                htmlEnPath: regulation.htmlEnPath, airacVersion: regulation.airacVersion,
+                                isModified: regulation.isModified ?? false, isOpened: regulation.isOpened,
+                                documentType: .ad)
+                        } label: {
+                            RegulationDocumentRowView(regulation: regulation)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .compactListRow()
+                    } else {
+                        NavigationLink {
+                            PDFReaderView(
+                                chartID: "ad_\(regulation.id)", displayName: regulation.nameCn,
+                                documentType: .ad, airacVersion: regulation.airacVersion)
+                        } label: {
+                            RegulationDocumentRowView(regulation: regulation)
+                        }
+                        .compactListRow()
                     }
                 }
                 .listStyle(.insetGrouped)
+                .refreshable { await loadRegulations() }
+                .scrollContentBackground(filteredRegulations.isEmpty ? .hidden : .automatic)
+                .overlay {
+                    if filteredRegulations.isEmpty {
+                        SearchEmptyStateView(
+                            searchText: $searchText,
+                            title: "暂无 AD 细则",
+                            systemImage: "doc.text.magnifyingglass",
+                            description: "当前数据包中没有该机场的 AD 细则。"
+                        )
+                    }
+                }
             }
         }
-        .navigationTitle("\(airport.icao) AD细则")
-        .navigationBarTitleDisplayMode(.large)
-        .task {
-            await loadRegulations()
+        .airacNavigationTitle("\(airport.icao) AD细则")
+        .airacPageTask(key: "\(airport.icao)|\(airacService.dataRevision)") {
+            await loadRegulations(force: false)
         }
     }
 
-    private func loadRegulations() async {
-        isLoading = true
-        errorMessage = nil
+    private func loadRegulations(force: Bool = true) async {
+        await page.load(key: "\(airport.icao)|\(airacService.dataRevision)", force: force, errorPrefix: "加载AD细则失败：") { [modelContext, icao = airport.icao] in
+            let loaded = try await AIRACPackageStore.loadCharts(modelContext: modelContext, documentType: "ad", icao: icao)
+            return loaded.map { $0.toAIPDocumentResponse() }
+        }
+    }
+}
 
-        do {
-            // 获取当前 AIRAC 版本（如果没有则从 API 获取）
-            var currentAIRAC = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
+enum RegulationSortOption: String, CaseIterable {
+    case updatedFirst
+    case nameAsc
+    case nameDesc
 
-            // 如果本地没有 AIRAC 版本，尝试从 API 获取
-            if currentAIRAC == nil {
-                LoggerService.shared.warning(
-                    module: "RegulationsView", message: "本地无 AIRAC 版本，从 API 获取")
-                do {
-                    let airacResponse = try await NetworkService.shared.getCurrentAIRAC()
-                    currentAIRAC = airacResponse.version
+    var displayName: String {
+        switch self {
+        case .updatedFirst: return "更新优先"
+        case .nameAsc: return "名称 A-Z"
+        case .nameDesc: return "名称 Z-A"
+        }
+    }
 
-                    // 保存到本地数据库
-                    let newVersion = AIRACVersion(
-                        version: airacResponse.version,
-                        effectiveDate: ISO8601DateFormatter().date(
-                            from: airacResponse.effectiveDate) ?? Date(),
-                        isCurrent: true
-                    )
-                    modelContext.insert(newVersion)
-                    try? modelContext.save()
-
-                    LoggerService.shared.info(
-                        module: "RegulationsView",
-                        message: "已获取并保存 AIRAC 版本: \(airacResponse.version)")
-                } catch {
-                    throw NSError(
-                        domain: "Regulations", code: -1,
-                        userInfo: [
-                            NSLocalizedDescriptionKey:
-                                "无法获取 AIRAC 版本: \(error.localizedDescription)"
-                        ])
+    var sorter: (AIPDocumentResponse, AIPDocumentResponse) -> Bool {
+        switch self {
+        case .updatedFirst:
+            return { lhs, rhs in
+                let lhsUpdated = (lhs.isModified ?? false) || (lhs.hasUpdate ?? false)
+                let rhsUpdated = (rhs.isModified ?? false) || (rhs.hasUpdate ?? false)
+                if lhsUpdated != rhsUpdated {
+                    return lhsUpdated && !rhsUpdated
                 }
+                return lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
             }
-
-            guard let currentAIRAC = currentAIRAC else {
-                throw NSError(
-                    domain: "Regulations", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "无法获取 AIRAC 版本"])
+        case .nameAsc:
+            return { lhs, rhs in
+                lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedAscending
             }
-
-            // 使用机场 ICAO 作为缓存键
-            let cacheKey = "ad_\(airport.icao)"
-
-            // 1. 先尝试从缓存加载
-            if let cachedRegulations = PDFCacheService.shared.loadCachedData(
-                [AIPDocumentResponse].self,
-                airacVersion: currentAIRAC,
-                dataType: cacheKey
-            ) {
-                await MainActor.run {
-                    self.regulations = cachedRegulations
-                }
-                isLoading = false
-                return
-            }
-            // 2. 缓存未命中，从网络获取
-            let response = try await NetworkService.shared.getAIPDocumentsByICAO(icao: airport.icao)
-
-            // 3. 保存到缓存
-            try? PDFCacheService.shared.cacheData(
-                response,
-                airacVersion: currentAIRAC,
-                dataType: cacheKey
-            )
-
-            await MainActor.run {
-                self.regulations = response
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "加载AD细则失败: \(error.localizedDescription)"
+        case .nameDesc:
+            return { lhs, rhs in
+                lhs.nameCn.localizedStandardCompare(rhs.nameCn) == .orderedDescending
             }
         }
-
-        isLoading = false
     }
 }
 
@@ -483,7 +411,6 @@ struct RegulationDocumentRowView: View {
                 Spacer()
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -493,25 +420,7 @@ struct SearchBar: View {
     let placeholder: String
 
     var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-
-            TextField(placeholder, text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        CompactSearchField(text: $text, placeholder: placeholder)
     }
 }
 

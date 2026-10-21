@@ -1,8 +1,8 @@
 import Foundation
 
 // MARK: - AIP 文档响应
-struct AIPDocumentResponse: Codable {
-    let id: Int
+struct AIPDocumentResponse: Codable, Identifiable {
+    let id: String
     let documentId: String
     let parentId: String?
     let name: String
@@ -36,8 +36,8 @@ struct AIPDocumentResponse: Codable {
 }
 
 // MARK: - SUP 文档响应
-struct SUPDocumentResponse: Codable {
-    let id: Int
+struct SUPDocumentResponse: Codable, Identifiable {
+    let id: String
     let documentId: String
     let serial: String
     let subject: String
@@ -69,8 +69,8 @@ struct SUPDocumentResponse: Codable {
 }
 
 // MARK: - AMDT 文档响应
-struct AMDTDocumentResponse: Codable {
-    let id: Int
+struct AMDTDocumentResponse: Codable, Identifiable {
+    let id: String
     let documentId: String
     let serial: String
     let subject: String
@@ -102,8 +102,8 @@ struct AMDTDocumentResponse: Codable {
 }
 
 // MARK: - NOTAM 文档响应
-struct NOTAMDocumentResponse: Codable {
-    let id: Int
+struct NOTAMDocumentResponse: Codable, Identifiable {
+    let id: String
     let documentId: String
     let seriesName: String
     let pdfPath: String?
@@ -122,23 +122,3 @@ struct NOTAMDocumentResponse: Codable {
     }
 }
 
-// MARK: - 通用文档详情响应
-struct DocumentDetailResponse: Codable {
-    let id: Int
-    let documentId: String
-    let name: String
-    let nameCn: String
-    let type: String
-    let airacVersion: String
-    let isModified: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case documentId = "document_id"
-        case name
-        case nameCn = "name_cn"
-        case type
-        case airacVersion = "airac_version"
-        case isModified = "is_modified"
-    }
-}
