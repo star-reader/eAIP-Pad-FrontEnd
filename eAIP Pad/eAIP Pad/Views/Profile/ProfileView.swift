@@ -94,6 +94,35 @@ struct ProfileView: View {
                     )
                 }
 
+                if let url = URL(string: "https://testflight.apple.com/join/4ctRjbAq") {
+                    Link(destination: url) {
+                        HStack(spacing: 12) {
+                            AppSymbolView(systemImage: "app.badge", size: .compact)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("加入 TestFlight")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                                Text("抢先体验新功能，帮助改进 eAIP Pad")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+
+                            Spacer(minLength: 8)
+
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("打开 TestFlight 邀请页面")
+                }
+
                 Button {
                     openGitHub()
                 } label: {
