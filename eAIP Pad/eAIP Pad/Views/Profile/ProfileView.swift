@@ -123,6 +123,17 @@ struct ProfileView: View {
                         color: .red
                     )
                 }
+                .confirmationDialog("是否附带日志文件？", isPresented: $showingBugReportOptions) {
+                    Button("附带日志") {
+                        sendBugReportEmail(withLogs: true)
+                    }
+                    Button("不附带") {
+                        sendBugReportEmail(withLogs: false)
+                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("附带日志文件可以帮助开发者更好地定位问题")
+                }
             }
             .compactListRow()
 
@@ -176,17 +187,6 @@ struct ProfileView: View {
             Button("确定", role: .cancel) {}
         } message: {
             Text(errorMessage)
-        }
-        .confirmationDialog("是否附带日志文件？", isPresented: $showingBugReportOptions) {
-            Button("附带日志") {
-                sendBugReportEmail(withLogs: true)
-            }
-            Button("不附带") {
-                sendBugReportEmail(withLogs: false)
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("附带日志文件可以帮助开发者更好地定位问题")
         }
         .sheet(item: $mailData) { data in
             MailComposeView(

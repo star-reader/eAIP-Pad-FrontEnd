@@ -71,6 +71,9 @@ struct SettingsView: View {
                             }
                         }
                         .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize(horizontal: true, vertical: false)
+                        .accessibilityLabel("Pinboard 样式")
                     }
                 }
                 .compactListRow()
