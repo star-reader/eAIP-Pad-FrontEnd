@@ -38,45 +38,26 @@ class PDFCacheService {
         LoggerService.shared.info(module: "PDFCacheService", message: "PDF 缓存服务初始化")
     }
 
-    // MARK: - 生成缓存文件路径
-    /// 生成缓存文件路径，格式：PDFCache/{airacVersion}/{documentType}_{id}.pdf
-    private func cacheFilePath(airacVersion: String, documentType: String, id: String) -> URL {
-        let versionDirectory = cacheDirectory.appendingPathComponent(airacVersion)
-
-        // 确保 AIRAC 版本目录存在
-        if !fileManager.fileExists(atPath: versionDirectory.path) {
-            try? fileManager.createDirectory(
-                at: versionDirectory, withIntermediateDirectories: true)
-        }
-
-        let fileName = "\(documentType)_\(id).pdf"
-        return versionDirectory.appendingPathComponent(fileName)
-    }
-
     // MARK: - 检查缓存是否存在
     /// 检查指定 PDF 是否已缓存
-    func isCached(airacVersion: String, documentType: String, id: String) -> Bool {
-        let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
-        return fileManager.fileExists(atPath: filePath.path)
+    func isCached(airacVersion: String, documentType: String, id: String, revision: String? = nil) -> Bool {
+        loadFromCache(airacVersion: airacVersion, documentType: documentType, id: id, revision: revision) != nil
     }
 
     // MARK: - 从缓存加载 PDF
     /// 从缓存加载 PDF 文档
-    func loadFromCache(airacVersion: String, documentType: String, id: String) -> PDFDocument? {
-        let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
-
-        guard fileManager.fileExists(atPath: filePath.path) else {
-            return nil
-        }
-
-        return PDFDocument(url: filePath)
+    func loadFromCache(
+        airacVersion: String, documentType: String, id: String, revision: String? = nil
+    ) -> PDFDocument? {
+        AIRACFileStore.shared.loadPDF(
+            version: airacVersion, revision: revision, documentType: documentType, id: id)
     }
 
     // MARK: - 保存 PDF 到缓存
     /// 保存 PDF 数据到缓存
     func saveToCache(pdfData: Data, airacVersion: String, documentType: String, id: String) throws {
-        let filePath = cacheFilePath(airacVersion: airacVersion, documentType: documentType, id: id)
-        try pdfData.write(to: filePath)
+        try AIRACFileStore.shared.savePDF(
+            pdfData, version: airacVersion, revision: nil, documentType: documentType, id: id)
         LoggerService.shared.info(
             module: "PDFCacheService", message: "保存 PDF 到缓存: \(documentType)_\(id)")
     }

@@ -1,14 +1,14 @@
 import Foundation
 
-struct ParsedAIRACPackage: Sendable {
-    struct AirportInfo: Sendable {
+nonisolated struct ParsedAIRACPackage: Sendable {
+    nonisolated struct AirportInfo: Sendable {
         let icao: String
         let nameEn: String
         let nameCn: String
+        let isModified: Bool
     }
 
-    struct Chart: Sendable {
-        let chartID: String
+    nonisolated struct Chart: Sendable {
         let documentID: String
         let nameEn: String
         let nameCn: String
@@ -29,6 +29,13 @@ struct ParsedAIRACPackage: Sendable {
         let seriesName: String?
         let generateTime: String?
         let generateTimeEn: String?
+
+        var cacheDocumentID: String {
+            AIRACDocumentIdentity.cacheID(
+                documentID: documentID, documentType: documentType, category: category)
+        }
+
+        var readerID: String { "\(documentType)_\(cacheDocumentID)" }
     }
 
     let version: String
@@ -37,7 +44,7 @@ struct ParsedAIRACPackage: Sendable {
     let charts: [Chart]
 }
 
-enum LocalAIRACPackageParser {
+nonisolated enum LocalAIRACPackageParser {
     static func parse(folderURL: URL) throws -> ParsedAIRACPackage {
         let dataURL = folderURL.appendingPathComponent("Data")
         let jsonPathURL = dataURL.appendingPathComponent("JsonPath")
@@ -46,12 +53,12 @@ enum LocalAIRACPackageParser {
         let customersRaw = try String(contentsOf: customersURL, encoding: .utf8)
         let customer = try parseCustomer(customersRaw)
         let version = customer.dataVersion
-        let effectiveDate = parseEAIPDate(customer.effectiveDate) ?? Date()
-
-        _ = try findPackageRoot(under: dataURL)
+        guard let effectiveDate = parseEAIPDate(customer.effectiveDate) else {
+            throw AIRACPackageError.invalidPackage("Customers.js 的生效时间无效，应为 yyMMddHHmm 格式（UTC）")
+        }
 
         var pendingCharts: [ParsedAIRACPackage.Chart] = []
-        var pendingAirports: [String: (nameEn: String, nameCn: String)] = [:]
+        var pendingAirports: [String: (nameEn: String, nameCn: String, isModified: Bool)] = [:]
 
         try parseAD(
             jsonPathURL.appendingPathComponent("AD.JSON"),
@@ -63,8 +70,24 @@ enum LocalAIRACPackageParser {
         try parseSUP(jsonPathURL.appendingPathComponent("SUP.JSON"), charts: &pendingCharts)
         try parseNOTAM(jsonPathURL.appendingPathComponent("NOTAM.JSON"), charts: &pendingCharts)
 
+        guard !pendingCharts.isEmpty else {
+            throw AIRACPackageError.invalidPackage("数据包没有可导入的 PDF 文档")
+        }
+        var documentIDs = Set<String>()
+        for chart in pendingCharts {
+            guard !chart.documentID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                documentIDs.insert(chart.readerID).inserted
+            else {
+                throw AIRACPackageError.invalidPackage("文档标识为空或重复：\(chart.readerID)")
+            }
+            guard let path = chart.pdfPath, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AIRACPackageError.missingPDF(chart.readerID)
+            }
+        }
+
         let airports = pendingAirports.map { icao, info in
-            ParsedAIRACPackage.AirportInfo(icao: icao, nameEn: info.nameEn, nameCn: info.nameCn)
+            ParsedAIRACPackage.AirportInfo(
+                icao: icao, nameEn: info.nameEn, nameCn: info.nameCn, isModified: info.isModified)
         }.sorted { $0.icao < $1.icao }
 
         return ParsedAIRACPackage(
@@ -77,13 +100,17 @@ enum LocalAIRACPackageParser {
 
     private static func parseCustomer(_ raw: String) throws -> EAIPCustomer {
         func extract(_ key: String) -> String? {
-            guard let keyRange = raw.range(of: "\(key):\"") else { return nil }
-            let afterKey = raw[keyRange.upperBound...]
-            guard let endQuote = afterKey.firstIndex(of: "\"") else { return nil }
-            return String(afterKey[..<endQuote])
+            let escapedKey = NSRegularExpression.escapedPattern(for: key)
+            let pattern = "(?:^|[\\s,{])(?:[\"']?\(escapedKey)[\"']?)\\s*:\\s*([\"'])(.*?)\\1"
+            guard let expression = try? NSRegularExpression(pattern: pattern),
+                let match = expression.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+                let range = Range(match.range(at: 2), in: raw)
+            else { return nil }
+            return String(raw[range])
         }
 
-        guard let dataVersion = extract("DataVersion"), !dataVersion.isEmpty,
+        guard let dataVersion = extract("DataVersion"),
+            !dataVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             let effectiveDate = extract("EffectiveDate"), !effectiveDate.isEmpty
         else {
             throw NSError(
@@ -100,25 +127,16 @@ enum LocalAIRACPackageParser {
     }
 
     private static func parseEAIPDate(_ raw: String) -> Date? {
-        guard raw.count == 10 else { return nil }
+        guard raw.count == 10, raw.utf8.allSatisfy({ (48...57).contains($0) }) else { return nil }
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyMMddHHmm"
         formatter.timeZone = TimeZone(identifier: "UTC")
-        return formatter.date(from: raw)
-    }
-
-    private static func findPackageRoot(under dataURL: URL) throws -> URL {
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: dataURL, includingPropertiesForKeys: [.isDirectoryKey])
-        for url in contents {
-            let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDir && url.lastPathComponent != "JsonPath" {
-                return url
-            }
-        }
-        throw NSError(
-            domain: "AIRACService", code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "未找到航图数据目录"])
+        formatter.isLenient = false
+        formatter.twoDigitStartDate = Date(timeIntervalSince1970: 946_684_800)
+        guard let date = formatter.date(from: raw), formatter.string(from: date) == raw else { return nil }
+        return date
     }
 
     private static func stripBOM(_ data: Data) -> Data {
@@ -131,13 +149,33 @@ enum LocalAIRACPackageParser {
 
     private static func loadNodes(_ url: URL) throws -> [EAIPTreeNode] {
         let data = stripBOM(try Data(contentsOf: url))
-        return try JSONDecoder().decode([EAIPTreeNode].self, from: data)
+        let nodes = try JSONDecoder().decode([EAIPTreeNode].self, from: data)
+        var byID: [String: EAIPTreeNode] = [:]
+        for node in nodes {
+            guard !node.id.isEmpty, byID.updateValue(node, forKey: node.id) == nil else {
+                throw AIRACPackageError.invalidPackage("\(url.lastPathComponent) 存在空节点 ID 或重复 ID：\(node.id)")
+            }
+        }
+        // 迭代检查父链，避免循环关系导致无限遍历，深层目录也不会耗尽调用栈。
+        var validated = Set<String>()
+        for node in nodes where !validated.contains(node.id) {
+            var path = Set<String>()
+            var current = node.id
+            while let ancestor = byID[current], !validated.contains(current) {
+                guard path.insert(current).inserted else {
+                    throw AIRACPackageError.invalidPackage("\(url.lastPathComponent) 存在循环父子关系：\(current)")
+                }
+                current = ancestor.pId
+            }
+            validated.formUnion(path)
+        }
+        return nodes
     }
 
     private static func parseAD(
         _ url: URL,
         charts: inout [ParsedAIRACPackage.Chart],
-        airports: inout [String: (nameEn: String, nameCn: String)]
+        airports: inout [String: (nameEn: String, nameCn: String, isModified: Bool)]
     ) throws {
         let nodes = try loadNodes(url)
         let byParent = Dictionary(grouping: nodes, by: { $0.pId })
@@ -148,17 +186,19 @@ enum LocalAIRACPackageParser {
 
             let nameEn = stripIcaoPrefix(root.name, icao: icao)
             let nameCn = stripIcaoPrefix(root.nameCn, icao: icao)
-            airports[icao] = (nameEn: nameEn, nameCn: nameCn)
+            airports[icao] = (nameEn: nameEn, nameCn: nameCn, isModified: root.isModified == "Y")
 
-            charts.append(
-                ParsedAIRACPackage.Chart(
-                    chartID: "ad_\(root.id)", documentID: root.id, nameEn: root.name,
-                    nameCn: root.nameCn, chartType: "AD", documentType: "ad",
-                    pdfPath: root.pdfPath, icao: icao, parentID: nil,
-                    isModified: root.isModified == "Y", category: nil, serialNumber: nil,
-                    subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
-                    outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil,
-                    generateTimeEn: nil))
+            if !root.pdfPath.isEmpty {
+                charts.append(
+                    ParsedAIRACPackage.Chart(
+                        documentID: root.id, nameEn: root.name,
+                        nameCn: root.nameCn, chartType: "AD", documentType: "ad",
+                        pdfPath: root.pdfPath, icao: icao, parentID: nil,
+                        isModified: root.isModified == "Y", category: nil, serialNumber: nil,
+                        subject: nil, localSubject: nil, chapterType: nil, effectiveTime: nil,
+                        outDate: nil, pubDate: nil, seriesName: nil, generateTime: nil,
+                        generateTimeEn: nil))
+            }
 
             let children = byParent[root.id] ?? []
             guard
@@ -171,7 +211,7 @@ enum LocalAIRACPackageParser {
             for leaf in chartLeaves where !leaf.pdfPath.isEmpty {
                 charts.append(
                     ParsedAIRACPackage.Chart(
-                        chartID: "chart_\(leaf.id)", documentID: leaf.id, nameEn: leaf.name,
+                        documentID: leaf.id, nameEn: leaf.name,
                         nameCn: leaf.nameCn, chartType: EAIPChartClassifier.classify(name: leaf.name),
                         documentType: "chart", pdfPath: leaf.pdfPath, icao: icao, parentID: root.id,
                         isModified: leaf.isModified == "Y", category: nil, serialNumber: nil,
@@ -195,7 +235,7 @@ enum LocalAIRACPackageParser {
         for node in nodes where !node.pdfPath.isEmpty {
             charts.append(
                 ParsedAIRACPackage.Chart(
-                    chartID: "aip_\(node.id)", documentID: node.id, nameEn: node.name,
+                    documentID: node.id, nameEn: node.name,
                     nameCn: node.nameCn, chartType: "AIP", documentType: "aip",
                     pdfPath: node.pdfPath, icao: nil, parentID: nil,
                     isModified: node.isModified == "Y", category: "GEN", serialNumber: nil,
@@ -217,7 +257,7 @@ enum LocalAIRACPackageParser {
             for node in nodes where !node.pdfPath.isEmpty {
                 charts.append(
                     ParsedAIRACPackage.Chart(
-                        chartID: "aip_\(node.id)", documentID: node.id, nameEn: node.name,
+                        documentID: node.id, nameEn: node.name,
                         nameCn: node.nameCn, chartType: "AIP", documentType: "aip",
                         pdfPath: node.pdfPath, icao: nil, parentID: nil,
                         isModified: node.isModified == "Y", category: "ENR", serialNumber: nil,
@@ -232,7 +272,7 @@ enum LocalAIRACPackageParser {
         var stack = [enrChartsRoot.id]
         while let current = stack.popLast() {
             for child in byParent[current] ?? [] {
-                enrouteIds.insert(child.id)
+                guard enrouteIds.insert(child.id).inserted else { continue }
                 stack.append(child.id)
             }
         }
@@ -242,7 +282,7 @@ enum LocalAIRACPackageParser {
                 let enrouteType = EAIPChartClassifier.classifyEnroute(name: node.name)
                 charts.append(
                     ParsedAIRACPackage.Chart(
-                        chartID: "enroute_\(node.id)", documentID: node.id, nameEn: node.name,
+                        documentID: node.id, nameEn: node.name,
                         nameCn: node.nameCn, chartType: enrouteType, documentType: "enroute",
                         pdfPath: node.pdfPath, icao: nil, parentID: nil,
                         isModified: node.isModified == "Y", category: nil, serialNumber: nil,
@@ -252,7 +292,7 @@ enum LocalAIRACPackageParser {
             } else if node.id != enrChartsRoot.id {
                 charts.append(
                     ParsedAIRACPackage.Chart(
-                        chartID: "aip_\(node.id)", documentID: node.id, nameEn: node.name,
+                        documentID: node.id, nameEn: node.name,
                         nameCn: node.nameCn, chartType: "AIP", documentType: "aip",
                         pdfPath: node.pdfPath, icao: nil, parentID: nil,
                         isModified: node.isModified == "Y", category: "ENR", serialNumber: nil,
@@ -270,7 +310,7 @@ enum LocalAIRACPackageParser {
         for doc in docs {
             charts.append(
                 ParsedAIRACPackage.Chart(
-                    chartID: "sup_\(doc.id)", documentID: doc.id,
+                    documentID: doc.id,
                     nameEn: doc.subject ?? "", nameCn: doc.localSubject ?? "",
                     chartType: "SUP", documentType: "sup", pdfPath: doc.document,
                     icao: nil, parentID: nil, isModified: doc.isModified == "Y", category: nil,
@@ -289,7 +329,7 @@ enum LocalAIRACPackageParser {
             let stableID = "\(doc.seriesName)_\(doc.generateTime)"
             charts.append(
                 ParsedAIRACPackage.Chart(
-                    chartID: "notam_\(stableID)", documentID: stableID,
+                    documentID: stableID,
                     nameEn: "NOTAM \(doc.seriesName)", nameCn: "NOTAM \(doc.seriesName)",
                     chartType: "NOTAM", documentType: "notam", pdfPath: doc.document,
                     icao: nil, parentID: nil, isModified: false, category: nil,

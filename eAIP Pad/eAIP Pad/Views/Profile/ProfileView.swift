@@ -8,6 +8,7 @@ struct ProfileView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var airacVersions: [AIRACVersion]
+    @ObservedObject private var airacService = AIRACService.shared
     @State private var showingSettings = false
     @State private var showingAbout = false
     @State private var showingAIRACImport = false
@@ -69,9 +70,6 @@ struct ProfileView: View {
                 Button {
                     Task {
                         await clearCache()
-                        await MainActor.run {
-                            showingCacheCleared = true
-                        }
                     }
                 } label: {
                     SettingRow(
@@ -81,6 +79,7 @@ struct ProfileView: View {
                         trailingText: cacheSizeText
                     )
                 }
+                .disabled(airacService.isUpdating)
             }
             .compactListRow()
 
@@ -199,46 +198,23 @@ struct ProfileView: View {
                 }
             )
         }
-        .onAppear {
-            Task { await updateCacheSize() }
+        .task(id: airacService.dataRevision) {
+            await updateCacheSize()
         }
     }
     
     // MARK: - 缓存管理
     
     private func clearCache() async {
-        do {
-            for version in airacVersions {
-                let versionString = version.version
-                let chartsDescriptor = FetchDescriptor<LocalChart>(
-                    predicate: #Predicate<LocalChart> { chart in
-                        chart.airacVersion == versionString
-                    }
-                )
-                let chartsToDelete = try modelContext.fetch(chartsDescriptor)
-                chartsToDelete.forEach { modelContext.delete($0) }
-                
-                PDFCacheService.shared.clearCacheForVersion(versionString)
-                PDFCacheService.shared.clearDataCacheForVersion(versionString)
-                
-                if !version.isCurrent {
-                    modelContext.delete(version)
-                }
-            }
-            
-            URLCache.shared.removeAllCachedResponses()
-            try modelContext.save()
-            await updateCacheSize()
-            
-            await MainActor.run {
-                showingCacheCleared = true
-            }
-        } catch {
-            LoggerService.shared.error(module: "ProfileView", message: "清理缓存失败: \(error.localizedDescription)")
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                showingCacheError = true
-            }
+        showingCacheCleared = false
+        showingCacheError = false
+        let succeeded = await airacService.clearAllCache(modelContext: modelContext)
+        await updateCacheSize()
+        if succeeded {
+            showingCacheCleared = true
+        } else {
+            errorMessage = airacService.errorMessage ?? "已有 AIRAC 操作正在进行，请稍后重试"
+            showingCacheError = true
         }
     }
 

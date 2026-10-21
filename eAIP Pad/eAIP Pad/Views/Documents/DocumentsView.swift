@@ -62,6 +62,7 @@ struct DocumentTypeSelector: View {
 // MARK: - AIP文档视图
 struct AIPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [AIPDocumentResponse] = []
     @State private var isLoading = false
@@ -163,7 +164,8 @@ struct AIPDocumentsView: View {
                                 PDFReaderView(
                                     chartID: "aip_\(document.id)",
                                     displayName: document.nameCn,
-                                    documentType: .aip
+                                    documentType: .aip,
+                                    airacVersion: document.airacVersion
                                 )
                             } label: {
                                 AIPDocumentRowView(document: document)
@@ -186,7 +188,7 @@ struct AIPDocumentsView: View {
                 .listStyle(.insetGrouped)
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadAIPDocuments()
         }
     }
@@ -196,17 +198,9 @@ struct AIPDocumentsView: View {
         errorMessage = nil
 
         do {
-            guard
-                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> { $0.documentType == "aip" }
-            )
-            let localDocuments = try modelContext.fetch(descriptor)
-            documents = localDocuments.map { $0.toAIPDocumentResponse() }
+            documents = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "aip"
+            ).map { $0.toAIPDocumentResponse() }
         } catch {
             errorMessage = "加载AIP文档失败: \(error.localizedDescription)"
         }
@@ -218,6 +212,7 @@ struct AIPDocumentsView: View {
 // MARK: - SUP文档视图
 struct SUPDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [SUPDocumentResponse] = []
     @State private var isLoading = false
@@ -290,7 +285,8 @@ struct SUPDocumentsView: View {
                                 PDFReaderView(
                                     chartID: "sup_\(document.id)",
                                     displayName: document.localSubject,
-                                    documentType: .sup
+                                    documentType: .sup,
+                                    airacVersion: document.airacVersion
                                 )
                             } label: {
                                 SUPDocumentRowView(document: document)
@@ -312,7 +308,7 @@ struct SUPDocumentsView: View {
                 }
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadSUPDocuments()
         }
     }
@@ -322,17 +318,9 @@ struct SUPDocumentsView: View {
         errorMessage = nil
 
         do {
-            guard
-                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> { $0.documentType == "sup" }
-            )
-            let localDocuments = try modelContext.fetch(descriptor)
-            documents = localDocuments.map { $0.toSUPDocumentResponse() }
+            documents = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "sup"
+            ).map { $0.toSUPDocumentResponse() }
         } catch {
             errorMessage = "加载SUP文档失败: \(error.localizedDescription)"
         }
@@ -344,6 +332,7 @@ struct SUPDocumentsView: View {
 // MARK: - AMDT文档视图
 struct AMDTDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [AMDTDocumentResponse] = []
     @State private var isLoading = false
@@ -416,7 +405,8 @@ struct AMDTDocumentsView: View {
                                 PDFReaderView(
                                     chartID: "amdt_\(document.id)",
                                     displayName: document.localSubject,
-                                    documentType: .amdt
+                                    documentType: .amdt,
+                                    airacVersion: document.airacVersion
                                 )
                             } label: {
                                 AMDTDocumentRowView(document: document)
@@ -438,7 +428,7 @@ struct AMDTDocumentsView: View {
                 }
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadAMDTDocuments()
         }
     }
@@ -455,6 +445,7 @@ struct AMDTDocumentsView: View {
 // MARK: - NOTAM文档视图
 struct NOTAMDocumentsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var documents: [NOTAMDocumentResponse] = []
     @State private var isLoading = false
@@ -525,7 +516,8 @@ struct NOTAMDocumentsView: View {
                                 PDFReaderView(
                                     chartID: "notam_\(document.id)",
                                     displayName: "NOTAM \(document.seriesName)",
-                                    documentType: .notam
+                                    documentType: .notam,
+                                    airacVersion: document.airacVersion
                                 )
                             } label: {
                                 NOTAMDocumentRowView(document: document)
@@ -547,7 +539,7 @@ struct NOTAMDocumentsView: View {
                 }
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadNOTAMDocuments()
         }
     }
@@ -557,17 +549,9 @@ struct NOTAMDocumentsView: View {
         errorMessage = nil
 
         do {
-            guard
-                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> { $0.documentType == "notam" }
-            )
-            let localDocuments = try modelContext.fetch(descriptor)
-            documents = localDocuments.map { $0.toNOTAMDocumentResponse() }
+            documents = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "notam"
+            ).map { $0.toNOTAMDocumentResponse() }
         } catch {
             errorMessage = "加载NOTAM文档失败: \(error.localizedDescription)"
         }

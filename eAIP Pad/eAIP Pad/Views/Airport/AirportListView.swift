@@ -5,8 +5,8 @@ import SwiftUI
 // MARK: - 机场列表视图
 struct AirportListView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedAirportBinding) private var selectedAirportBinding
-    @Query private var localAirports: [Airport]
     @State private var searchText = ""
     @State private var airports: [AirportResponse] = []
     @State private var isLoading = false
@@ -86,7 +86,7 @@ struct AirportListView: View {
                 }
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadAirports()
         }
     }
@@ -96,16 +96,7 @@ struct AirportListView: View {
         errorMessage = nil
 
         do {
-            guard
-                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let descriptor = FetchDescriptor<Airport>(
-                sortBy: [SortDescriptor(\.icao)])
-            let localAirports = try modelContext.fetch(descriptor)
-            airports = localAirports.map { $0.toResponse() }
+            airports = try AIRACPackageStore.currentAirports(modelContext: modelContext).map { $0.toResponse() }
         } catch {
             errorMessage = "加载机场数据失败: \(error.localizedDescription)"
         }

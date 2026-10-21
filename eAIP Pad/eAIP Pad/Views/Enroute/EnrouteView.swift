@@ -3,6 +3,7 @@ import SwiftUI
 
 struct EnrouteView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var enrouteCharts: [ChartResponse] = []
     @State private var isLoading = false
@@ -60,7 +61,8 @@ struct EnrouteView: View {
                                         PDFReaderView(
                                             chartID: "enroute_\(chart.id)",
                                             displayName: chart.nameCn,
-                                            documentType: .enroute
+                                            documentType: .enroute,
+                                            airacVersion: chart.airacVersion
                                         )
                                     } label: {
                                         EnrouteChartRowView(chart: chart)
@@ -81,7 +83,7 @@ struct EnrouteView: View {
                 }
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadEnrouteCharts()
         }
     }
@@ -91,17 +93,9 @@ struct EnrouteView: View {
         errorMessage = nil
 
         do {
-            guard
-                await AIRACHelper.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> { $0.documentType == "enroute" }
-            )
-            let localCharts = try modelContext.fetch(descriptor)
-            enrouteCharts = localCharts.map { $0.toChartResponse() }
+            enrouteCharts = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "enroute"
+            ).map { $0.toChartResponse() }
         } catch {
             errorMessage = "加载航路图数据失败: \(error.localizedDescription)"
         }
@@ -114,6 +108,7 @@ struct EnrouteView: View {
 struct EnrouteChartRowView: View {
     let chart: ChartResponse
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Query private var pinnedCharts: [PinnedChart]
 
     private var chartID: String {

@@ -56,6 +56,9 @@ final class AIRACVersion {
     var totalCharts: Int = 0
     var createdAt: Date = Date()
     var source: String = "local"  // 数据来源：目前只有 "local"（手动导入的官方 Web 包）
+    // nil 表示旧版缓存布局；新导入先写入独立目录，再提交此指针。
+    var cacheRevision: String?
+    var airportICAOs: [String]?
 
     init(version: String, effectiveDate: Date, isCurrent: Bool = false, source: String = "local") {
         self.version = version
@@ -83,6 +86,7 @@ final class UserSettings {
 // MARK: - 本地航图元数据
 @Model
 final class LocalChart {
+    // 数据库主键包含周期和文档来源；展示/收藏使用 readerChartID。
     @Attribute(.unique) var chartID: String
     var documentID: String
     var parentID: String?

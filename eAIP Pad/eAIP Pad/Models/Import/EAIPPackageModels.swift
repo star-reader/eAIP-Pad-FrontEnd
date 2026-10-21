@@ -3,8 +3,8 @@ import Foundation
 // MARK: - EAIP 官方 Web 包数据模型
 // 对应从 eAIP China 官网下载的 "Full Package (Web)" 解压后的 Data/ 目录结构。
 
-/// Data/Customers.js 里的 AIRAC 版本元信息（文件本身是 `var Customers=[{...}];`，需要先剥掉变量声明再当 JSON 解析）
-struct EAIPCustomer: Codable {
+/// Data/Customers.js 里的 AIRAC 元信息；只提取对象字段，不执行 JavaScript。
+nonisolated struct EAIPCustomer: Codable {
     let dataName: String
     let dataVersion: String
     let effectiveDate: String
@@ -21,7 +21,7 @@ struct EAIPCustomer: Codable {
 }
 
 /// Data/JsonPath/{AD,GEN,ENR}.JSON 里的树形节点（父子关系通过 id/pId 串联）
-struct EAIPTreeNode: Codable {
+nonisolated struct EAIPTreeNode: Codable {
     let id: String
     let pId: String
     let name: String
@@ -42,7 +42,7 @@ struct EAIPTreeNode: Codable {
 }
 
 /// Data/JsonPath/{SUP,AIC}.JSON 里的平铺文档记录
-struct EAIPFlatDocument: Codable {
+nonisolated struct EAIPFlatDocument: Codable {
     let id: String
     let document: String
     let chapterType: String?
@@ -69,7 +69,7 @@ struct EAIPFlatDocument: Codable {
 }
 
 /// Data/JsonPath/NOTAM.JSON 里的平铺文档记录
-struct EAIPNotamDocument: Codable {
+nonisolated struct EAIPNotamDocument: Codable {
     let seriesName: String
     let document: String
     let generateTime: String
@@ -84,7 +84,7 @@ struct EAIPNotamDocument: Codable {
 }
 
 // MARK: - 航图类型关键字分类
-enum EAIPChartClassifier {
+nonisolated enum EAIPChartClassifier {
     /// 根据航图名称里的关键字，映射到 App 已有的 SID/STAR/APP/APT/OTHERS 分类
     static func classify(name: String) -> String {
         let upper = name.uppercased()

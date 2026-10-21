@@ -11,12 +11,14 @@ struct PDFReaderView: View {
     let chartID: String
     let displayName: String
     let documentType: DocumentType
+    var airacVersion: String? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.columnVisibilityBinding) private var columnVisibilityBinding
     @Query private var annotations: [ChartAnnotation]
     @Query private var pinnedCharts: [PinnedChart]
     @Query private var userSettings: [UserSettings]
+    @ObservedObject private var airacService = AIRACService.shared
 
     @State private var pdfDocument: PDFDocument?
     @State private var isLoading = false
@@ -233,18 +235,11 @@ struct PDFReaderView: View {
                 }
             }
         }
-        .task(id: chartID) {
+        .task(id: "\(chartID)|\(airacVersion ?? "current")|\(airacService.dataRevision)") {
             LoggerService.shared.info(
                 module: "PDFReaderView",
                 message: "task 触发 - chartID: \(chartID), documentType: \(documentType.rawValue)")
             await loadPDF()
-        }
-        .onChange(of: chartID) { oldValue, newValue in
-            LoggerService.shared.info(
-                module: "PDFReaderView", message: "chartID 变化: \(oldValue) -> \(newValue)")
-            Task {
-                await loadPDF()
-            }
         }
         .onAppear {
             LoggerService.shared.info(
@@ -259,45 +254,30 @@ struct PDFReaderView: View {
     private func loadPDF() async {
         isLoading = true
         errorMessage = nil
-
-        // 提取实际的 ID - 从 chartID 中提取最后一个下划线后的数字
-        let actualID: String
-        if let lastUnderscoreIndex = chartID.lastIndex(of: "_") {
-            actualID = String(chartID[chartID.index(after: lastUnderscoreIndex)...])
-        } else {
-            actualID = chartID
+        pdfDocument = nil
+        totalPages = 0
+        currentPage = 0
+        defer { isLoading = false }
+        do {
+            let resolved = try AIRACPackageStore.resolveDocument(
+                chartID: chartID, documentType: documentType.rawValue,
+                version: airacVersion, modelContext: modelContext)
+            var document = PDFCacheService.shared.loadFromCache(
+                airacVersion: resolved.version.version, documentType: documentType.rawValue,
+                id: resolved.chart.cacheDocumentID, revision: resolved.version.cacheRevision)
+            if document == nil, resolved.version.cacheRevision == nil {
+                document = PDFCacheService.shared.loadFromCache(
+                    airacVersion: resolved.version.version, documentType: documentType.rawValue,
+                    id: resolved.chart.documentID)
+            }
+            guard let document else {
+                throw AIRACPackageError.missingPDF(resolved.chart.nameCn)
+            }
+            pdfDocument = document
+            totalPages = document.pageCount
+        } catch {
+            errorMessage = error.localizedDescription
         }
-
-        LoggerService.shared.info(
-            module: "PDFReaderView",
-            message:
-                "chartID: \(chartID), actualID: \(actualID), documentType: \(documentType.rawValue)"
-        )
-
-        // 获取当前 AIRAC 版本（数据完全来自本地导入，没有联网兜底）
-        guard
-            let airacVersion = PDFCacheService.shared.getCurrentAIRACVersion(
-                modelContext: modelContext)
-        else {
-            errorMessage = AIRACHelper.missingDataMessage
-            isLoading = false
-            return
-        }
-
-        // 从本地缓存加载（导入时已把 PDF 拷贝进此目录）
-        if let cachedDocument = PDFCacheService.shared.loadFromCache(
-            airacVersion: airacVersion,
-            documentType: documentType.rawValue,
-            id: actualID
-        ) {
-            self.pdfDocument = cachedDocument
-            self.totalPages = cachedDocument.pageCount
-            isLoading = false
-            return
-        }
-
-        errorMessage = "找不到该文档，可能缓存已被清理，请重新导入 AIRAC 数据包"
-        isLoading = false
     }
 
     private func togglePin() {
@@ -307,30 +287,17 @@ struct PDFReaderView: View {
                 modelContext.delete(pinToRemove)
             }
         } else {
-            // 从chartID中提取ICAO
-            // 格式通常为: {icao}_{type}_{id}
-            let icaoCode: String
-            if let firstUnderscoreIndex = chartID.firstIndex(of: "_") {
-                icaoCode = String(chartID[..<firstUnderscoreIndex])
-            } else {
-                icaoCode = ""  // 如果无法提取，则使用空字符串
-            }
-
-            LoggerService.shared.info(module: "PDFReaderView", message: "猜测的ICAO: \(icaoCode)")
-
-            // 获取当前AIRAC版本
-            let currentAIRAC =
-                PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext)
-                ?? "unknown"
-
-            // 添加收藏
+            guard let resolved = try? AIRACPackageStore.resolveDocument(
+                chartID: chartID, documentType: documentType.rawValue,
+                version: airacVersion, modelContext: modelContext)
+            else { return }
             let newPin = PinnedChart(
-                chartID: chartID,
-                displayName: displayName,
-                icao: icaoCode,
-                type: documentType.rawValue,
+                chartID: resolved.chart.readerChartID,
+                displayName: resolved.chart.nameCn,
+                icao: resolved.chart.icao ?? "",
+                type: resolved.chart.chartType,
                 documentType: documentType.rawValue,
-                airacVersion: currentAIRAC
+                airacVersion: resolved.version.version
             )
             modelContext.insert(newPin)
         }

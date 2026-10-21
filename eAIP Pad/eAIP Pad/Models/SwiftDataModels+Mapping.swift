@@ -17,9 +17,16 @@ extension Airport {
 }
 
 extension LocalChart {
+    var cacheDocumentID: String {
+        AIRACDocumentIdentity.cacheID(
+            documentID: documentID, documentType: documentType, category: category)
+    }
+
+    var readerChartID: String { "\(documentType)_\(cacheDocumentID)" }
+
     func toChartResponse() -> ChartResponse {
         ChartResponse(
-            id: documentID,
+            id: cacheDocumentID,
             documentId: documentID,
             parentId: parentID,
             icao: icao,
@@ -38,7 +45,7 @@ extension LocalChart {
 
     func toAIPDocumentResponse() -> AIPDocumentResponse {
         AIPDocumentResponse(
-            id: documentID,
+            id: cacheDocumentID,
             documentId: documentID,
             parentId: parentID,
             name: nameEn,

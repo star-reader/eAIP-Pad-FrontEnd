@@ -105,7 +105,8 @@ struct PinboardCompactView: View {
                     PDFReaderView(
                         chartID: pin.chartID,
                         displayName: pin.displayName,
-                        documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                        documentType: DocumentType(rawValue: pin.documentType) ?? .chart,
+                        airacVersion: pin.airacVersion
                     )
                 } label: {
                     PinCompactListRow(pin: pin)
@@ -134,7 +135,8 @@ struct PinboardCompactView: View {
                         PDFReaderView(
                             chartID: pin.chartID,
                             displayName: pin.displayName,
-                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart,
+                            airacVersion: pin.airacVersion
                         )
                     } label: {
                         PinPreviewCard(pin: pin)
@@ -165,7 +167,8 @@ struct PinboardCompactView: View {
                         PDFReaderView(
                             chartID: pin.chartID,
                             displayName: pin.displayName,
-                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart,
+                            airacVersion: pin.airacVersion
                         )
                     } label: {
                         PinGridCard(pin: pin)
@@ -312,7 +315,8 @@ struct PinboardListView: View {
                     PDFReaderView(
                         chartID: pin.chartID,
                         displayName: pin.displayName,
-                        documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                        documentType: DocumentType(rawValue: pin.documentType) ?? .chart,
+                        airacVersion: pin.airacVersion
                     )
                 } label: {
                     PinListRow(pin: pin)
@@ -344,7 +348,8 @@ struct PinboardPreviewView: View {
                         PDFReaderView(
                             chartID: pin.chartID,
                             displayName: pin.displayName,
-                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart,
+                            airacVersion: pin.airacVersion
                         )
                     } label: {
                         PinPreviewCard(pin: pin)
@@ -379,7 +384,8 @@ struct PinboardGridView: View {
                         PDFReaderView(
                             chartID: pin.chartID,
                             displayName: pin.displayName,
-                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart
+                            documentType: DocumentType(rawValue: pin.documentType) ?? .chart,
+                            airacVersion: pin.airacVersion
                         )
                     } label: {
                         PinGridCard(pin: pin)

@@ -6,11 +6,13 @@ struct RegulationNavigation: Identifiable, Hashable {
     let id = UUID()
     let chartID: String
     let displayName: String
+    let airacVersion: String
 }
 
 // MARK: - 细则视图（AD细则）
 struct RegulationsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.selectedChartBinding) private var selectedChartBinding
     @State private var searchText = ""
     @State private var isLoading = false
@@ -103,11 +105,12 @@ struct RegulationsView: View {
                 PDFReaderView(
                     chartID: regulation.chartID,
                     displayName: regulation.displayName,
-                    documentType: .ad
+                    documentType: .ad,
+                    airacVersion: regulation.airacVersion
                 )
             }
         }
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadAirports()
         }
     }
@@ -118,13 +121,7 @@ struct RegulationsView: View {
         errorMessage = nil
 
         do {
-            guard PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let descriptor = FetchDescriptor<Airport>(sortBy: [SortDescriptor(\.icao)])
-            let localAirports = try modelContext.fetch(descriptor)
+            let localAirports = try AIRACPackageStore.currentAirports(modelContext: modelContext)
 
             await MainActor.run {
                 self.airports = localAirports.map { $0.toResponse() }
@@ -143,11 +140,9 @@ struct RegulationsView: View {
         isLoadingRegulation = true
 
         do {
-            let icao = airport.icao
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> { $0.icao == icao && $0.documentType == "ad" }
-            )
-            let regulations = try modelContext.fetch(descriptor).map { $0.toAIPDocumentResponse() }
+            let localCharts = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "ad", icao: airport.icao)
+            let regulations = localCharts.map { $0.toAIPDocumentResponse() }
 
             await MainActor.run {
                 if let firstRegulation = regulations.first {
@@ -173,7 +168,8 @@ struct RegulationsView: View {
                         // iPhone 模式：使用 navigationDestination
                         selectedRegulation = RegulationNavigation(
                             chartID: "ad_\(firstRegulation.id)",
-                            displayName: "\(airport.icao) - \(firstRegulation.nameCn)"
+                            displayName: "\(airport.icao) - \(firstRegulation.nameCn)",
+                            airacVersion: firstRegulation.airacVersion
                         )
                     }
                 } else {
@@ -231,6 +227,7 @@ struct AirportRegulationRowView: View {
 // MARK: - 机场细则详情视图
 struct AirportRegulationsView: View {
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     let airport: AirportResponse
     @State private var regulations: [AIPDocumentResponse] = []
     @State private var isLoading = false
@@ -284,7 +281,8 @@ struct AirportRegulationsView: View {
                         PDFReaderView(
                             chartID: "ad_\(regulation.id)",
                             displayName: regulation.nameCn,
-                            documentType: .ad
+                            documentType: .ad,
+                            airacVersion: regulation.airacVersion
                         )
                     } label: {
                         RegulationDocumentRowView(regulation: regulation)
@@ -307,7 +305,7 @@ struct AirportRegulationsView: View {
         }
         .navigationTitle("\(airport.icao) AD细则")
         .navigationBarTitleDisplayMode(.large)
-        .task {
+        .task(id: airacService.dataRevision) {
             await loadRegulations()
         }
     }
@@ -317,16 +315,9 @@ struct AirportRegulationsView: View {
         errorMessage = nil
 
         do {
-            guard PDFCacheService.shared.getCurrentAIRACVersion(modelContext: modelContext) != nil
-            else {
-                throw AIRACHelper.makeMissingDataError()
-            }
-
-            let icao = airport.icao
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> { $0.icao == icao && $0.documentType == "ad" }
-            )
-            let localRegulations = try modelContext.fetch(descriptor)
+            let localCharts = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "ad", icao: airport.icao)
+            let localRegulations = localCharts
 
             await MainActor.run {
                 self.regulations = localRegulations.map { $0.toAIPDocumentResponse() }

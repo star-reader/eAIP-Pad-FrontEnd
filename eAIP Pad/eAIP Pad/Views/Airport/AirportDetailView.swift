@@ -6,6 +6,7 @@ import SwiftUI
 struct AirportDetailView: View {
     let airport: AirportResponse
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var airacService = AIRACService.shared
     @State private var charts: [ChartResponse] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -128,7 +129,7 @@ struct AirportDetailView: View {
                 }
             }
         }
-        .task {
+        .task(id: "\(airport.icao)|\(airacService.dataRevision)") {
             await loadCharts()
         }
     }
@@ -138,14 +139,9 @@ struct AirportDetailView: View {
         errorMessage = nil
 
         do {
-            let icao = airport.icao
-            let descriptor = FetchDescriptor<LocalChart>(
-                predicate: #Predicate<LocalChart> {
-                    $0.icao == icao && $0.documentType == "chart"
-                }
-            )
-            let localCharts = try modelContext.fetch(descriptor)
-            charts = localCharts.map { $0.toChartResponse() }
+            charts = try AIRACPackageStore.currentCharts(
+                modelContext: modelContext, documentType: "chart", icao: airport.icao
+            ).map { $0.toChartResponse() }
         } catch {
             errorMessage = "加载航图数据失败: \(error.localizedDescription)"
         }
@@ -268,7 +264,8 @@ struct ChartRowView: View {
                     PDFReaderView(
                         chartID: "chart_\(chart.id)",
                         displayName: chart.nameCn,
-                        documentType: .chart
+                        documentType: .chart,
+                        airacVersion: chart.airacVersion
                     )
                 } label: {
                     chartRowContent

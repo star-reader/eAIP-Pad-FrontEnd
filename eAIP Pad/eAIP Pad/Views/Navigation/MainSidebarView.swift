@@ -33,6 +33,7 @@ extension EnvironmentValues {
 
 // MARK: - iPad 侧边栏主视图
 struct MainSidebarView: View {
+    @ObservedObject private var airacService = AIRACService.shared
     @State private var selectedSidebarItem: SidebarItem? = .airports
     @State private var selectedChart: ChartResponse?
     @State private var selectedAirport: AirportResponse?
@@ -89,6 +90,10 @@ struct MainSidebarView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .tint(.primaryBlue)
+        .onChange(of: airacService.dataRevision) { _, _ in
+            selectedChart = nil
+            selectedAirport = nil
+        }
     }
 }
 
@@ -206,7 +211,8 @@ struct DetailView: View {
             PDFReaderView(
                 chartID: chart.readerChartID,
                 displayName: chart.nameCn,
-                documentType: chart.readerDocumentType
+                documentType: chart.readerDocumentType,
+                airacVersion: chart.airacVersion
             )
             .id(chart.readerChartID)
         } else {

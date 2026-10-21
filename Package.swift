@@ -1,18 +1,30 @@
 // swift-tools-version: 6.2
-// The swift-tools-version declares the minimum version of Swift required to build this package.
-
 import PackageDescription
 
 let package = Package(
-    name: "swift-executable",
-    platforms: [
-        .iOS(.v16)
-    ],
+    name: "EAIPDataCore",
+    platforms: [.macOS(.v14), .iOS(.v17)],
+    products: [.library(name: "EAIPDataCore", targets: ["EAIPDataCore"])],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
-        .executableTarget(
-            name: "swift-executable"
+        .target(
+            name: "EAIPDataCore",
+            path: "eAIP Pad/eAIP Pad",
+            exclude: [
+                "App.swift", "ContentView.swift", "Assets.xcassets", "Configs", "DependencyInjection", "Views",
+                "eAIP Pad.entitlements", "Common/Imports.swift", "Common/AIRACHelper.swift",
+                "Common/ColorScheme.swift", "Common/VersionIntroManager.swift", "Common/Extensions",
+                "Services/AIRACService.swift", "Services/LoggerService.swift", "Services/PDFCacheService.swift"
+            ],
+            sources: [
+                "Common/AIRACDocumentIdentity.swift", "Models/Import/EAIPPackageModels.swift",
+                "Models/Network/AirportModels.swift", "Models/Network/ChartModels.swift",
+                "Models/Network/DocumentModels.swift", "Models/SwiftDataModels.swift",
+                "Models/SwiftDataModels+Mapping.swift", "Services/LocalAIRACPackageParser.swift",
+                "Services/AIRACFileStore.swift", "Services/AIRACPackageStore.swift"
+            ],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
-    ]
+        .testTarget(name: "EAIPDataCoreTests", dependencies: ["EAIPDataCore"], path: "Tests/EAIPDataCoreTests")
+    ],
+    swiftLanguageModes: [.v5]
 )

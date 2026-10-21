@@ -55,10 +55,11 @@ struct ChartResponse: Codable, Hashable, Identifiable {
     }
 
     func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
+        hasher.combine(readerChartID)
+        hasher.combine(airacVersion)
     }
 
     static func == (lhs: ChartResponse, rhs: ChartResponse) -> Bool {
-        return lhs.id == rhs.id
+        return lhs.readerChartID == rhs.readerChartID && lhs.airacVersion == rhs.airacVersion
     }
 }
