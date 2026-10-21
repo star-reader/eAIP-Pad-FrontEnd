@@ -3,6 +3,7 @@ import Foundation
 import PDFKit
 import SwiftData
 import Testing
+import ZIPFoundation
 @testable import EAIPDataCore
 
 @Suite("AIRAC import and storage", .serialized)
@@ -388,6 +389,187 @@ struct AIRACDataCoreTests {
         try fixture.expectCurrent("2601", pages: 1)
     }
 
+    @Test func zipPackageImportsFromRootOrWrappedDirectory() async throws {
+        for keepParent in [false, true] {
+            let fixture = try Fixture()
+            defer { fixture.remove() }
+            let package = try fixture.package(notam: true, pages: 2)
+            let zip = try fixture.archive(package, keepParent: keepParent)
+            var fractions: [Double] = []
+            var messages: [String] = []
+            try await fixture.store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context) { fraction, message in
+                fractions.append(fraction)
+                messages.append(message)
+            }
+            try fixture.expectCurrent("2601", pages: 2)
+            #expect(try AIRACPackageStore.currentCharts(modelContext: fixture.context, documentType: "notam").count == 1)
+            #expect(messages.contains { $0.contains("解压") })
+            #expect(fractions == fractions.sorted())
+            #expect(fractions.last == 1)
+            try fixture.expectNoExtractedFiles()
+            #expect(FileManager.default.fileExists(atPath: zip.path))
+        }
+    }
+
+    @Test func invalidZipPreservesCurrentPackageAndRemovesTemporaryFiles() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.install(version: "2601", date: "2601010000")
+        let zip = fixture.root.appendingPathComponent("invalid.zip")
+        try Data("This is not a ZIP".utf8).write(to: zip)
+        do {
+            try await fixture.store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context)
+            Issue.record("Accepted invalid ZIP")
+        } catch { #expect(error.localizedDescription.contains("ZIP 解压失败")) }
+        try fixture.expectCurrent("2601", pages: 1)
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func failedZIPDatabaseCommitRemovesExtractionAndPreservesCurrentCycle() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.install(version: "2601", date: "2601010000")
+        let zip = try fixture.archive(fixture.package(version: "2602", date: "2602010000"))
+        let failingStore = AIRACPackageStore(
+            files: fixture.files, archiveExtractor: AIRACArchiveExtractor(temporaryDirectory: fixture.root)
+        ) { _ in throw InjectedFailure.database }
+        do {
+            try await failingStore.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context)
+            Issue.record("Expected database failure from ZIP import")
+        } catch {}
+        try fixture.expectCurrent("2601", pages: 1)
+        try fixture.expectNoExtractedFiles()
+        #expect(try fixture.context.fetch(FetchDescriptor<AIRACVersion>()).count == 1)
+    }
+
+    @Test func ZIPImportIgnoresMacMetadataWhenFindingThePackage() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let package = try fixture.package()
+        let metadata = package.appendingPathComponent("__MACOSX/duplicate/Data/JsonPath")
+        try FileManager.default.createDirectory(at: metadata, withIntermediateDirectories: true)
+        try Data("metadata".utf8).write(to: metadata.deletingLastPathComponent().appendingPathComponent("Customers.js"))
+        try await fixture.store.importPackage(
+            from: fixture.archive(package), isZIPArchive: true, modelContext: fixture.context)
+        try fixture.expectCurrent("2601", pages: 1)
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func zipMissingPDFDoesNotActivateNewCycle() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.install(version: "2601", date: "2601010000")
+        let package = try fixture.package(version: "2602", date: "2602010000")
+        try FileManager.default.removeItem(at: package.appendingPathComponent("Data/PDFs/chart_0.pdf"))
+        let zip = try fixture.archive(package)
+        do {
+            try await fixture.store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context)
+            Issue.record("Accepted missing PDF from ZIP")
+        } catch { #expect(error.localizedDescription.contains("缺少 PDF")) }
+        try fixture.expectCurrent("2601", pages: 1)
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func zipWithoutPackageIsRejected() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let folder = fixture.root.appendingPathComponent("unrelated")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("README".utf8).write(to: folder.appendingPathComponent("README.txt"))
+        let zip = try fixture.archive(folder)
+        do {
+            try await fixture.store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context)
+            Issue.record("Accepted unrelated ZIP")
+        } catch { #expect(error.localizedDescription.contains("未找到")) }
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func zipWithMultiplePackagesIsRejected() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let wrapper = fixture.root.appendingPathComponent("multiple")
+        try FileManager.default.createDirectory(at: wrapper, withIntermediateDirectories: true)
+        for number in 1...2 {
+            try FileManager.default.copyItem(at: fixture.package(), to: wrapper.appendingPathComponent("package\(number)"))
+        }
+        let zip = try fixture.archive(wrapper)
+        do {
+            try await fixture.store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context)
+            Issue.record("Accepted multiple AIRAC packages")
+        } catch { #expect(error.localizedDescription.contains("多个 AIRAC")) }
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func zipRejectsPathsOutsideExtractionDirectoryAndSymlinks() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        for (path, type) in [("../outside.txt", Entry.EntryType.file), ("/absolute.txt", .file), ("link", .symlink)] {
+            let zip = fixture.root.appendingPathComponent("invalid-\(UUID().uuidString).zip")
+            let archive = try Archive(url: zip, accessMode: .create)
+            let payload = Data("outside".utf8)
+            try archive.addEntry(with: path, type: type, uncompressedSize: Int64(payload.count)) { position, count in
+                payload.subdata(in: Int(position)..<(Int(position) + count))
+            }
+            do {
+                _ = try AIRACArchiveExtractor(temporaryDirectory: fixture.root).extract(at: zip, progress: Progress())
+                Issue.record("Accepted unsupported ZIP path")
+            } catch { #expect(error.localizedDescription.contains("不支持的路径或符号链接")) }
+            #expect(!FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("outside.txt").path))
+            try fixture.expectNoExtractedFiles()
+        }
+    }
+
+    @Test func corruptedZipChecksumIsRejectedAndCleanedUp() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let package = try fixture.package()
+        let zip = try fixture.archive(package, compression: .none)
+        var bytes = try Data(contentsOf: zip)
+        let contents = try Data(contentsOf: package.appendingPathComponent("Data/Customers.js"))
+        let range = try #require(bytes.range(of: contents))
+        bytes[range.lowerBound] ^= 1
+        try bytes.write(to: zip)
+        do {
+            _ = try AIRACArchiveExtractor(temporaryDirectory: fixture.root).extract(at: zip, progress: Progress())
+            Issue.record("Accepted corrupt ZIP checksum")
+        } catch { #expect(error.localizedDescription.contains("ZIP 解压失败")) }
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func failedZIPExtractionWriteKeepsCurrentCycle() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.install(version: "2601", date: "2601010000")
+        let zip = try fixture.archive(fixture.package(version: "2602", date: "2602010000"))
+        let blocked = fixture.root.appendingPathComponent("blocked")
+        try Data("file".utf8).write(to: blocked)
+        let store = AIRACPackageStore(files: fixture.files, archiveExtractor: AIRACArchiveExtractor(temporaryDirectory: blocked))
+        do {
+            try await store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context)
+            Issue.record("Accepted extraction write failure")
+        } catch { #expect(error.localizedDescription.contains("ZIP 解压失败")) }
+        try fixture.expectCurrent("2601", pages: 1)
+        try fixture.expectNoExtractedFiles()
+    }
+
+    @Test func cancelledZIPImportCleansUpAndKeepsCurrentCycle() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try await fixture.install(version: "2601", date: "2601010000")
+        let zip = try fixture.archive(fixture.package(version: "2602", date: "2602010000"))
+        let task = Task { @MainActor in
+            try await fixture.store.importPackage(from: zip, isZIPArchive: true, modelContext: fixture.context) { fraction, message in
+                if fraction == 0, message.contains("解压") { withUnsafeCurrentTask { $0?.cancel() } }
+            }
+        }
+        do {
+            try await task.value
+            Issue.record("Cancelled ZIP import committed data")
+        } catch { #expect(error is CancellationError) }
+        try fixture.expectCurrent("2601", pages: 1)
+        try fixture.expectNoExtractedFiles()
+    }
+
     @MainActor
     final class Fixture {
         let root: URL
@@ -406,10 +588,21 @@ struct AIRACDataCoreTests {
                 configurations: ModelConfiguration(isStoredInMemoryOnly: true))
             container.mainContext.autosaveEnabled = false
             files = AIRACFileStore(documentsDirectory: cacheRoot)
-            store = AIRACPackageStore(files: files)
+            store = AIRACPackageStore(files: files, archiveExtractor: AIRACArchiveExtractor(temporaryDirectory: root))
         }
 
         func remove() { try? FileManager.default.removeItem(at: root) }
+
+        func archive(_ folder: URL, keepParent: Bool = true, compression: CompressionMethod = .deflate) throws -> URL {
+            let zip = root.appendingPathComponent("package-\(UUID().uuidString).zip")
+            try FileManager.default.zipItem(at: folder, to: zip, shouldKeepParent: keepParent, compressionMethod: compression)
+            return zip
+        }
+
+        func expectNoExtractedFiles() throws {
+            let contents = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            #expect(!contents.contains { $0.lastPathComponent.hasPrefix("AIRACImport-") })
+        }
 
         func node(_ id: String, _ parent: String, _ name: String, _ path: String) -> [String: String] {
             ["id": id, "pId": parent, "name": name, "name_cn": name, "pdfPath": path]

@@ -27,7 +27,7 @@ struct FeatureIntroSheet: View {
                     featureRow(
                         icon: "tray.and.arrow.down.fill",
                         title: "导入 AIRAC 数据包",
-                        description: "点击「导入 AIRAC 数据包」，选择已下载的官方 EAIP Web 数据包文件夹。"
+                        description: "点击「导入 AIRAC 数据包」，选择官方 EAIP Web 数据包的 ZIP 文件或已解压的文件夹。"
                     )
 
                     featureRow(

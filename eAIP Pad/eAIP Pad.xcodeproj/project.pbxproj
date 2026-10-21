@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C3A147102EE9000000000001 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = C3A147102EE9000000000002 /* ZIPFoundation */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		D5DBE0DC2EB33A8C0074D54A /* eAIP Pad.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "eAIP Pad.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C3A147102EE9000000000001 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,6 +78,7 @@
 			);
 			name = "eAIP Pad";
 			packageProductDependencies = (
+				C3A147102EE9000000000002 /* ZIPFoundation */,
 			);
 			productName = "eAIP Pad";
 			productReference = D5DBE0DC2EB33A8C0074D54A /* eAIP Pad.app */;
@@ -103,6 +109,9 @@
 			mainGroup = D5DBE0D32EB33A8C0074D54A;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				C3A147102EE9000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+			);
 			productRefGroup = D5DBE0DD2EB33A8C0074D54A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -358,6 +367,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C3A147102EE9000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.9.20;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C3A147102EE9000000000002 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C3A147102EE9000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D5DBE0D42EB33A8C0074D54A /* Project object */;
 }

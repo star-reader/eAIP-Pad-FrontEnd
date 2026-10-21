@@ -5,9 +5,13 @@ let package = Package(
     name: "EAIPDataCore",
     platforms: [.macOS(.v14), .iOS(.v17)],
     products: [.library(name: "EAIPDataCore", targets: ["EAIPDataCore"])],
+    dependencies: [
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20")
+    ],
     targets: [
         .target(
             name: "EAIPDataCore",
+            dependencies: [.product(name: "ZIPFoundation", package: "ZIPFoundation")],
             path: "eAIP Pad/eAIP Pad",
             exclude: [
                 "App.swift", "ContentView.swift", "Assets.xcassets", "Configs", "DependencyInjection", "Views",
@@ -20,11 +24,15 @@ let package = Package(
                 "Models/Network/AirportModels.swift", "Models/Network/ChartModels.swift",
                 "Models/Network/DocumentModels.swift", "Models/SwiftDataModels.swift",
                 "Models/SwiftDataModels+Mapping.swift", "Services/LocalAIRACPackageParser.swift",
-                "Services/AIRACFileStore.swift", "Services/AIRACPackageStore.swift"
+                "Services/AIRACFileStore.swift", "Services/AIRACPackageStore.swift",
+                "Services/AIRACArchiveExtractor.swift"
             ],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
-        .testTarget(name: "EAIPDataCoreTests", dependencies: ["EAIPDataCore"], path: "Tests/EAIPDataCoreTests")
+        .testTarget(
+            name: "EAIPDataCoreTests",
+            dependencies: ["EAIPDataCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
+            path: "Tests/EAIPDataCoreTests")
     ],
     swiftLanguageModes: [.v5]
 )

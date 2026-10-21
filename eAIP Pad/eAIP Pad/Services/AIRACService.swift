@@ -19,24 +19,28 @@ final class AIRACService: ObservableObject {
     private init() {}
 
     /// 文件校验和写入全部成功后，才提交当前周期和元数据。
-    func importLocalPackage(from folderURL: URL, modelContext: ModelContext) async -> Bool {
+    func importLocalPackage(
+        from sourceURL: URL, isZIPArchive: Bool = false, modelContext: ModelContext
+    ) async -> Bool {
         guard !isUpdating else { return false }
         isUpdating = true
         errorMessage = nil
         updateProgress = 0
         updateMessage = "读取数据包..."
-        let scopedAccess = folderURL.startAccessingSecurityScopedResource()
+        let scopedAccess = sourceURL.startAccessingSecurityScopedResource()
         defer {
-            if scopedAccess { folderURL.stopAccessingSecurityScopedResource() }
+            if scopedAccess { sourceURL.stopAccessingSecurityScopedResource() }
             isUpdating = false
         }
-        guard scopedAccess || FileManager.default.isReadableFile(atPath: folderURL.path) else {
-            errorMessage = "无法访问所选文件夹，请重新选择"
+        guard scopedAccess || FileManager.default.isReadableFile(atPath: sourceURL.path) else {
+            errorMessage = "无法访问所选数据包，请重新选择"
             return false
         }
 
         do {
-            try await packageStore.importPackage(from: folderURL, modelContext: modelContext) { [weak self] progress, message in
+            try await packageStore.importPackage(
+                from: sourceURL, isZIPArchive: isZIPArchive, modelContext: modelContext
+            ) { [weak self] progress, message in
                 self?.updateProgress = progress
                 self?.updateMessage = message
                 await Task.yield()
@@ -84,19 +88,29 @@ struct AIRACUpdateView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var airacService = AIRACService.shared
     @Environment(\.modelContext) private var modelContext
-    @State private var showingFolderPicker = false
+    @State private var showingPackagePicker = false
+    @State private var selectingZIP = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
-            GeometryReader { geometry in
-                ScrollView {
+            ScrollView {
+                VStack(spacing: 28) {
                     importContent
-                        .frame(minHeight: geometry.size.height)
+
+                    if !airacService.isUpdating {
+                        localImportSection
+                            .transition(.opacity)
+                    }
                 }
-                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxWidth: 560)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 24)
+                .frame(maxWidth: .infinity)
             }
+            .scrollBounceBehavior(.basedOnSize)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("AIRAC 数据")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -116,16 +130,6 @@ struct AIRACUpdateView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !airacService.isUpdating {
-                    SheetWideBottomInset {
-                        VStack(spacing: 12) {
-                            selectFolderButton
-                            doneButton
-                        }
-                    }
-                }
-            }
             .animation(
                 reduceMotion ? nil : .easeInOut(duration: 0.25),
                 value: airacService.isUpdating
@@ -133,19 +137,20 @@ struct AIRACUpdateView: View {
         }
         .interactiveDismissDisabled(airacService.isUpdating)
         .fileImporter(
-            isPresented: $showingFolderPicker, allowedContentTypes: [.folder]
+            isPresented: $showingPackagePicker, allowedContentTypes: selectingZIP ? [.zip] : [.folder]
         ) { result in
             switch result {
             case .success(let url):
+                let isZIPArchive = selectingZIP
                 Task {
                     let succeeded = await airacService.importLocalPackage(
-                        from: url, modelContext: modelContext)
+                        from: url, isZIPArchive: isZIPArchive, modelContext: modelContext)
                     if succeeded {
                         dismiss()
                     }
                 }
             case .failure(let error):
-                airacService.errorMessage = "选择文件夹失败: \(error.localizedDescription)"
+                airacService.errorMessage = "选择数据包失败: \(error.localizedDescription)"
             }
         }
     }
@@ -157,7 +162,7 @@ struct AIRACUpdateView: View {
                 systemImage: airacService.isUpdating ? "arrow.down.doc.fill" : "tray.and.arrow.down.fill",
                 description: airacService.isUpdating
                     ? "请保持应用开启，完成后即可离线浏览。"
-                    : "选择从 EAIP China 官网下载\n并解压后的 Web 数据包文件夹。"
+                    : "选择从 EAIP China 官网下载的 Web 数据包，支持 ZIP 文件或已解压的文件夹。"
             )
             .id(airacService.isUpdating)
             .transition(.opacity)
@@ -197,52 +202,104 @@ struct AIRACUpdateView: View {
                 .modifier(StateEntranceModifier())
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 32)
+        .padding(.vertical, 24)
         .frame(maxWidth: .infinity)
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    @ViewBuilder
-    private var selectFolderButton: some View {
-        if #available(iOS 26.0, *) {
-            Button {
-                showingFolderPicker = true
-            } label: {
-                Label("选择文件夹", systemImage: "folder.badge.plus")
-                    .frame(maxWidth: .infinity)
+    private var localImportSection: some View {
+        AIRACDataActionSection(title: "本地导入") {
+            AIRACDataActionRow(
+                title: "选择 ZIP 文件",
+                subtitle: "自动解压并导入数据包",
+                systemImage: "doc.zipper"
+            ) {
+                selectingZIP = true
+                showingPackagePicker = true
             }
-            .buttonStyle(.glassProminent)
-        } else {
-            Button {
-                showingFolderPicker = true
-            } label: {
-                Label("选择文件夹", systemImage: "folder.badge.plus")
-                    .frame(maxWidth: .infinity)
+
+            Divider()
+                .padding(.leading, 68)
+
+            AIRACDataActionRow(
+                title: "选择已解压文件夹",
+                subtitle: "从解压后的 Web 数据包导入",
+                systemImage: "folder"
+            ) {
+                selectingZIP = false
+                showingPackagePicker = true
             }
-            .buttonStyle(.borderedProminent)
         }
     }
+}
 
-    @ViewBuilder
-    private var doneButton: some View {
-        if #available(iOS 26.0, *) {
-            Button {
-                dismiss()
-            } label: {
-                Text("完成")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glass)
-        } else {
-            Button {
-                dismiss()
-            } label: {
-                Text("完成")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
+// 数据入口按用途分组，后续在线数据源配置可使用同样的分组和行。
+private struct AIRACDataActionSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .accessibilityAddTraits(.isHeader)
+
+            VStack(spacing: 0, content: content)
+                .background(Color(uiColor: .secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
+    }
+}
+
+private struct AIRACDataActionRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.body.weight(.semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.blue)
+                    .frame(width: 36, height: 36)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(AIRACDataActionButtonStyle())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct AIRACDataActionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(configuration.isPressed ? Color.primary.opacity(0.06) : .clear)
     }
 }
 

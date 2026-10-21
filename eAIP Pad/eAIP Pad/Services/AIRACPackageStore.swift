@@ -7,26 +7,67 @@ import SwiftData
 final class AIRACPackageStore {
     private let files: AIRACFileStore
     private let saveChanges: (ModelContext) throws -> Void
+    private let archiveExtractor: AIRACArchiveExtractor
     private let logger = Logger(subsystem: "eAIP-Pad", category: "AIRACPackageStore")
     private var isImporting = false
 
     init(
         files: AIRACFileStore = .shared,
+        archiveExtractor: AIRACArchiveExtractor = AIRACArchiveExtractor(),
         saveChanges: @escaping (ModelContext) throws -> Void = { try $0.save() }
     ) {
         self.files = files
+        self.archiveExtractor = archiveExtractor
         self.saveChanges = saveChanges
     }
 
     func importPackage(
-        from folderURL: URL, modelContext: ModelContext,
+        from sourceURL: URL, isZIPArchive: Bool = false, modelContext: ModelContext,
         progress: (@MainActor (Double, String) async -> Void)? = nil
     ) async throws {
         guard !isImporting else { throw AIRACPackageError.invalidPackage("已有 AIRAC 操作正在进行") }
         isImporting = true
         defer { isImporting = false }
 
-        await progress?(0.05, "解析数据包...")
+        var extracted: ExtractedAIRACPackage?
+        defer {
+            if let extracted {
+                do { try extracted.remove() }
+                catch { logger.warning("临时解压目录清理失败：\(error.localizedDescription)") }
+            }
+        }
+        if isZIPArchive {
+            await progress?(0, "正在解压 ZIP 数据包...")
+            let extractor = archiveExtractor
+            let extractionProgress = Progress(totalUnitCount: 0)
+            let updates = AsyncStream<Double>.makeStream(bufferingPolicy: .bufferingNewest(1))
+            let observation = extractionProgress.observe(\.fractionCompleted) { value, _ in
+                updates.continuation.yield(value.fractionCompleted)
+            }
+            defer { observation.invalidate() }
+            let extractionTask = Task.detached(priority: .userInitiated) {
+                defer { updates.continuation.finish() }
+                return try extractor.extract(at: sourceURL, progress: extractionProgress)
+            }
+            // 先取得任务结果，再检查取消，确保解压成功时临时目录总能进入 defer 清理。
+            extracted = try await withTaskCancellationHandler {
+                for await fraction in updates.stream {
+                    await progress?(min(max(fraction, 0), 1) * 0.25, "正在解压 ZIP 数据包...")
+                }
+                return try await extractionTask.value
+            } onCancel: {
+                extractionProgress.cancel()
+                extractionTask.cancel()
+            }
+            try Task.checkCancellation()
+        }
+        let folderURL = extracted?.packageURL ?? sourceURL
+        let extractionWeight = isZIPArchive ? 0.25 : 0
+        let reportProgress: (@MainActor (Double, String) async -> Void) = { fraction, message in
+            await progress?(extractionWeight + fraction * (1 - extractionWeight), message)
+        }
+
+        await reportProgress(0.05, "解析数据包...")
         let parseTask = Task.detached(priority: .userInitiated) {
             try LocalAIRACPackageParser.parse(folderURL: folderURL)
         }
@@ -35,7 +76,7 @@ final class AIRACPackageStore {
         } onCancel: { parseTask.cancel() }
         try Task.checkCancellation()
 
-        await progress?(0.15, "校验并保存 \(parsed.charts.count) 份 PDF...")
+        await reportProgress(0.15, "校验并保存 \(parsed.charts.count) 份 PDF...")
         let files = self.files
         let prepareTask = Task.detached(priority: .utility) {
             try files.prepare(parsed, from: folderURL)
@@ -45,14 +86,14 @@ final class AIRACPackageStore {
         } onCancel: { prepareTask.cancel() }
         do {
             try Task.checkCancellation()
-            await progress?(0.9, "提交机场、文档和周期数据...")
+            await reportProgress(0.9, "提交机场、文档和周期数据...")
             try Task.checkCancellation()
             try commit(parsed, prepared: prepared, modelContext: modelContext)
         } catch {
             try? files.discard(prepared)
             throw error
         }
-        await progress?(1, "导入完成")
+        await reportProgress(1, "导入完成")
     }
 
     private func commit(
