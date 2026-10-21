@@ -24,6 +24,12 @@ extension LocalChart {
 
     var readerChartID: String { "\(documentType)_\(cacheDocumentID)" }
 
+    /// 兼容旧版本写入的 OTHERS 分类，已有本地资料无需重新导入。
+    var effectiveChartType: String {
+        guard documentType == "enroute", chartType == "OTHERS" else { return chartType }
+        return EAIPChartClassifier.classifyEnroute(name: nameEn, nameCn: nameCn)
+    }
+
     func toChartResponse() -> ChartResponse {
         ChartResponse(
             id: cacheDocumentID,
@@ -32,7 +38,7 @@ extension LocalChart {
             icao: icao,
             nameEn: nameEn,
             nameCn: nameCn,
-            chartType: chartType,
+            chartType: effectiveChartType,
             pdfPath: pdfPath,
             htmlPath: htmlPath,
             htmlEnPath: htmlEnPath,

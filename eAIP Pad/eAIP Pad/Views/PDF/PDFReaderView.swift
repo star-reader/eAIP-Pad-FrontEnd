@@ -281,7 +281,7 @@ struct PDFReaderView: View {
                 chartID: loadedChart.readerChartID,
                 displayName: loadedChart.nameCn,
                 icao: loadedChart.icao ?? "",
-                type: loadedChart.chartType,
+                type: loadedChart.effectiveChartType,
                 documentType: documentType.rawValue,
                 airacVersion: loadedVersion
             )

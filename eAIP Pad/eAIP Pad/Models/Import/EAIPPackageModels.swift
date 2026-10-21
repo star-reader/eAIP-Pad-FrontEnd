@@ -105,9 +105,16 @@ nonisolated enum EAIPChartClassifier {
     }
 
     /// ENR 6 航路图小节的分类（ENROUTE/AREA/OTHERS）
-    static func classifyEnroute(name: String) -> String {
+    static func classifyEnroute(name: String, nameCn: String = "") -> String {
         let upper = name.uppercased()
-        if upper.contains("AREA") { return "AREA" }
+        // 官方 ENR 6.3 使用 ARC Beijing 等名称；按独立缩写匹配，避免误命中 SEARCH/ARCHIVE。
+        let words = upper.split { !$0.isLetter && !$0.isNumber }
+        let localizedNames = name + " " + nameCn
+        if upper.contains("AREA") || words.contains("ARC")
+            || localizedNames.contains("区域图") || localizedNames.contains("區域圖")
+        {
+            return "AREA"
+        }
         if upper.contains("EN-ROUTE CHART") || upper.contains("ENROUTE CHART") { return "ENROUTE" }
         return "OTHERS"
     }

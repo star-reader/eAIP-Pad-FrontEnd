@@ -290,7 +290,7 @@ nonisolated enum LocalAIRACPackageParser {
 
         for node in nodes where !node.pdfPath.isEmpty {
             if enrouteIds.contains(node.id) {
-                let enrouteType = EAIPChartClassifier.classifyEnroute(name: node.name)
+                let enrouteType = EAIPChartClassifier.classifyEnroute(name: node.name, nameCn: node.nameCn)
                 charts.append(
                     ParsedAIRACPackage.Chart(
                         documentID: node.id, nameEn: node.name,
