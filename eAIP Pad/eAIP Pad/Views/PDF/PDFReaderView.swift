@@ -49,6 +49,14 @@ struct PDFReaderView: View {
         annotations.filter { $0.chartID == chartID && $0.documentType == documentType.rawValue }
     }
 
+    private var usesExtendedChartBackground: Bool {
+        if #available(iOS 26.0, *) {
+            return columnVisibilityBinding != nil && pdfDocument != nil
+                && !isLoading && errorMessage == nil && !reduceTransparency
+        }
+        return false
+    }
+
     private var shouldUseDarkMode: Bool {
         if currentSettings.followSystemAppearance {
             // 跟随系统时，检查当前的颜色方案
@@ -89,6 +97,7 @@ struct PDFReaderView: View {
                         }
                     )
                     .ignoresSafeArea(.all, edges: .bottom)
+                    .modifier(ReaderChartBackground(isEnabled: usesExtendedChartBackground))
                 } else {
                     ErrorStateView(message: "无法读取此 PDF，请尝试重新打开或导入数据包。")
                 }
@@ -107,8 +116,10 @@ struct PDFReaderView: View {
                 }
             }
             .airacNavigationTitle(displayName, displayMode: .inline)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .modifier(ReaderNavigationBackground(reduceTransparency: reduceTransparency))
+            .modifier(ReaderNavigationBackground(
+                reduceTransparency: reduceTransparency,
+                usesExtendedChartBackground: usesExtendedChartBackground
+            ))
             .toolbar {
                 if isPageActive, pdfDocument != nil {
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -692,16 +703,67 @@ struct PDFPageThumbnail: UIViewRepresentable {
     .modelContainer(for: ChartAnnotation.self, inMemory: true)
 }
 
-/// 导航栏始终保留系统毛玻璃背板，避免航图线条穿过标题与按钮区域。
-/// iOS 26 及以上仍由系统绘制 Liquid Glass 工具按钮；旧系统使用原生 material 模糊。
+/// 只延展航图的模糊背景，原始 PDF 仍留在安全区内，避免首行内容被导航栏遮住。
+private struct ReaderChartBackground: ViewModifier {
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *), isEnabled {
+            content
+                .backgroundExtensionEffect()
+                .overlay {
+                    GeometryReader { geometry in
+                        let topInset = geometry.safeAreaInsets.top
+                        let transitionHeight: CGFloat = 48
+                        let height = topInset + transitionHeight
+
+                        // 从顶部就开始减弱材质，底部完全透明，避免形成厚重的背板或阴影边界。
+                        if topInset > 0 {
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                                .mask {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .black.opacity(0.5), location: 0),
+                                            .init(color: .black.opacity(0.32), location: 0.3),
+                                            .init(color: .black.opacity(0.12), location: 0.6),
+                                            .init(color: .black.opacity(0.02), location: 0.85),
+                                            .init(color: .clear, location: 0.95),
+                                            .init(color: .clear, location: 1),
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                }
+                                .frame(height: height)
+                                .offset(y: -topInset)
+                        }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// iPad 延展背景时交由航图背板承接原生 Liquid Glass 按钮，避免叠加整块白色导航背景。
 private struct ReaderNavigationBackground: ViewModifier {
     let reduceTransparency: Bool
+    let usesExtendedChartBackground: Bool
 
     func body(content: Content) -> some View {
         if reduceTransparency {
-            content.toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+            content
+                .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        } else if usesExtendedChartBackground {
+            content.toolbarBackground(.hidden, for: .navigationBar)
         } else {
-            content.toolbarBackground(.regularMaterial, for: .navigationBar)
+            content
+                .toolbarBackground(.regularMaterial, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 }

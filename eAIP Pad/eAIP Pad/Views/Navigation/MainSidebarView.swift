@@ -126,21 +126,26 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $selectedItem) {
-            Section("") {
-                ForEach(SidebarItem.allCases) { item in
-                    Label {
-                        Text(item.title)
-                    } icon: {
-                        NavigationSymbolView(
-                            systemImage: item.icon, isSelected: selectedItem == item
-                        )
-                    }
-                    .tag(item)
+            ForEach(SidebarItem.allCases) { item in
+                Label {
+                    Text(item.title)
+                        .font(.body)
+                } icon: {
+                    NavigationSymbolView(
+                        systemImage: item.icon, isSelected: selectedItem == item
+                    )
+                    .imageScale(.small)
+                    .frame(width: 22)
                 }
+                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                .tag(item)
             }
         }
-        .navigationTitle("eAIP Pad")
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .listStyle(.sidebar)
+        .listRowSpacing(2)
+        .environment(\.defaultMinListRowHeight, 44)
     }
 }
 
