@@ -39,12 +39,16 @@ nonisolated final class AIRACFileStore: Sendable {
         let url = cacheURL(version: version, revision: revision, documentType: documentType, id: id)
         if let document = PDFDocument(url: url) { return document }
         guard revision == nil else { return nil }
-        // 升级前的文件名没有转义，兼容其中的句点、空格和中文。
-        let legacy = versionDirectory(version).appendingPathComponent("\(documentType)_\(id).pdf")
-        guard legacy.standardizedFileURL.deletingLastPathComponent() == versionDirectory(version).standardizedFileURL else {
-            return nil
+        // 旧版的周期目录和文件名都没有转义，例如 2026-09.V1；仅兼容没有事务 revision 的缓存。
+        let names = ["\(documentType)_\(AIRACDocumentIdentity.fileComponent(id)).pdf", "\(documentType)_\(id).pdf"]
+        for directory in versionDirectories(version, root: "PDFCache") {
+            for name in names {
+                let candidate = directory.appendingPathComponent(name)
+                guard isDirectChild(candidate, of: directory), fileManager.fileExists(atPath: candidate.path) else { continue }
+                if let document = PDFDocument(url: candidate) { return document }
+            }
         }
-        return PDFDocument(url: legacy)
+        return nil
     }
 
     func savePDF(_ data: Data, version: String, revision: String?, documentType: String, id: String) throws {
@@ -100,9 +104,9 @@ nonisolated final class AIRACFileStore: Sendable {
 
     func removeVersion(_ version: String) throws {
         for root in ["PDFCache", "DataCache"] {
-            let directory = documentsDirectory.appendingPathComponent(root)
-                .appendingPathComponent(AIRACDocumentIdentity.fileComponent(version))
-            if fileManager.fileExists(atPath: directory.path) { try fileManager.removeItem(at: directory) }
+            for directory in versionDirectories(version, root: root) {
+                if fileManager.fileExists(atPath: directory.path) { try fileManager.removeItem(at: directory) }
+            }
         }
     }
 
@@ -116,9 +120,12 @@ nonisolated final class AIRACFileStore: Sendable {
     }
 
     func quarantineVersions(_ versions: [String]) throws -> QuarantinedAIRACCache {
-        try quarantine(paths: ["PDFCache", "DataCache"].flatMap { root in
-            versions.map { "\(root)/\(AIRACDocumentIdentity.fileComponent($0))" }
-        })
+        let paths = ["PDFCache", "DataCache"].flatMap { root in
+            versions.flatMap { version in
+                versionDirectories(version, root: root).map { "\(root)/\($0.lastPathComponent)" }
+            }
+        }
+        return try quarantine(paths: Array(Set(paths)).sorted())
     }
 
     private func quarantine(paths: [String]) throws -> QuarantinedAIRACCache {
@@ -181,6 +188,20 @@ nonisolated final class AIRACFileStore: Sendable {
     private func versionDirectory(_ version: String) -> URL {
         documentsDirectory.appendingPathComponent("PDFCache")
             .appendingPathComponent(AIRACDocumentIdentity.fileComponent(version))
+    }
+
+    private func versionDirectories(_ version: String, root name: String) -> [URL] {
+        let root = documentsDirectory.appendingPathComponent(name)
+        let current = root.appendingPathComponent(AIRACDocumentIdentity.fileComponent(version))
+        let legacy = root.appendingPathComponent(version)
+        guard legacy != current, isDirectChild(legacy, of: root) else { return [current] }
+        return [current, legacy]
+    }
+
+    private func isDirectChild(_ url: URL, of directory: URL) -> Bool {
+        url.standardizedFileURL.deletingLastPathComponent() == directory.standardizedFileURL
+            && url.resolvingSymlinksInPath().standardizedFileURL.deletingLastPathComponent()
+                == directory.resolvingSymlinksInPath().standardizedFileURL
     }
 
     private func sourceURL(_ path: String, in folder: URL) throws -> URL {
