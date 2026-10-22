@@ -110,7 +110,7 @@ Host the extracted Web package on a static HTTPS server and enter its **package 
 https://example.com/eaip/current/
 ```
 
-The app reads files such as `Data/Customers.js` and `Data/JsonPath/AD.JSON` directly beneath that root. Paths beginning with `/Data/` also resolve beneath the configured package root, rather than the domain root. Enter a plain HTTPS URL without embedded credentials, query parameters, or fragments; files must be directly accessible without an interactive sign-in.
+The app reads files such as `Data/Customers.js` and `Data/JsonPath/AD.JSON` directly beneath that root. Paths beginning with `/Data/` also resolve beneath the configured package root, rather than the domain root. A trailing slash is optional. Web hash routes are ignored: `https://example.com/#/eaip/` uses `https://example.com/`, while `https://example.com/eaip/data/#/ad` preserves `https://example.com/eaip/data/`. Enter an HTTPS URL without embedded credentials or query parameters before the hash; files must be directly accessible without an interactive sign-in.
 
 | Mode | Stored on the device | Offline browsing |
 | --- | --- | --- |

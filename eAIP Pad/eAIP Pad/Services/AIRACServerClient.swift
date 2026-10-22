@@ -16,11 +16,13 @@ nonisolated struct AIRACServerConfiguration: Equatable, Sendable {
         guard var components = URLComponents(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
             components.scheme?.lowercased() == "https", let host = components.host, !host.isEmpty,
             components.user == nil, components.password == nil,
-            components.query == nil, components.fragment == nil
+            components.query == nil
         else {
-            throw AIRACPackageError.invalidPackage("请输入有效的 HTTPS 数据包根目录地址，不包含账号、查询参数或片段")
+            throw AIRACPackageError.invalidPackage("请输入有效的 HTTPS 数据包根目录地址，不包含账号或查询参数")
         }
         components.scheme = "https"
+        // # 后的内容属于 Web 前端路由，不参与数据包路径解析或服务器请求。
+        components.fragment = nil
         if !components.path.hasSuffix("/") { components.path += "/" }
         guard let url = components.url else {
             throw AIRACPackageError.invalidPackage("服务器地址无效")
