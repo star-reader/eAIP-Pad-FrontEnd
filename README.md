@@ -20,7 +20,7 @@ Import an official EAIP Web package to browse offline, or connect to a static HT
 - **Adaptive navigation** — Use tab navigation on iPhone and a multicolumn layout on iPad. Visited pages retain their in-memory results and pending requests across navigation.
 - **Appearance settings** — Follow the system appearance or choose light/dark mode manually.
 
-The AMDT document tab is temporarily hidden because compatibility with the official AMDT index format is incomplete.
+The AMDT document tab is temporarily hidden. Imports accept both official tree-shaped AMDT indexes and flat document indexes.
 
 ## Technical Stack
 
@@ -85,7 +85,7 @@ package-root/
     │   ├── SUP.JSON       # Optional
     │   ├── AIC.JSON       # Optional
     │   ├── NOTAM.JSON     # Optional
-    │   └── AMDT.JSON      # Optional; compatibility is incomplete
+    │   └── AMDT.JSON      # Optional; tree or flat document index
     └── ...               # PDF files at the paths specified by the indexes
 ```
 
@@ -100,6 +100,8 @@ Imports validate indexes, document identities, file paths, and PDFs. Invalid pat
 
 Packages imported with an older parser should be reimported to recover documents that were previously omitted.
 
+Existing PDFs saved by older app versions remain readable, including unescaped cycle directories such as `2026-09.V1`. Reimporting is unnecessary when those cached files are intact.
+
 ### Online sources
 
 Host the extracted Web package on a static HTTPS server and enter its **package root URL**, for example:
@@ -108,7 +110,7 @@ Host the extracted Web package on a static HTTPS server and enter its **package 
 https://example.com/eaip/current/
 ```
 
-The app reads files such as `Data/Customers.js` and `Data/JsonPath/AD.JSON` directly beneath that root. Paths beginning with `/Data/` also resolve beneath the configured package root, rather than the domain root. Enter a plain HTTPS URL without embedded credentials, query parameters, or fragments; files must be directly accessible without an interactive sign-in.
+The app reads files such as `Data/Customers.js` and `Data/JsonPath/AD.JSON` directly beneath that root. Paths beginning with `/Data/` also resolve beneath the configured package root, rather than the domain root. A trailing slash is optional. Web hash routes are ignored: `https://example.com/#/eaip/` uses `https://example.com/`, while `https://example.com/eaip/data/#/ad` preserves `https://example.com/eaip/data/`. Enter an HTTPS URL without embedded credentials or query parameters before the hash; files must be directly accessible without an interactive sign-in.
 
 | Mode | Stored on the device | Offline browsing |
 | --- | --- | --- |
@@ -213,7 +215,7 @@ For bug reports, include the app version/build, device and OS version, AIRAC cyc
 - Check the active AIRAC cycle and clear search/filter selections.
 - Look under **Other** for unclassified airport charts, and **Documents → AIP → AD** for AD general documents.
 - Reimport packages created before the catalog-completeness fixes.
-- The **AMDT** tab is intentionally hidden; full compatibility with that index format is not yet available.
+- The **AMDT** tab is intentionally hidden; its index is still parsed during package validation and import.
 - If an index reports missing fields, include a sanitized failing record in your bug report so the actual format can be checked.
 
 ### A pinned document no longer opens

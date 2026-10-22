@@ -82,9 +82,10 @@ nonisolated enum LocalAIRACPackageParser {
         if let data = indexes["AD"] { try parseAD(data, charts: &pendingCharts, airports: &pendingAirports) }
         if let data = indexes["GEN"] { try parseGEN(data, charts: &pendingCharts) }
         if let data = indexes["ENR"] { try parseENR(data, charts: &pendingCharts) }
-        for section in ["SUP", "AIC", "AMDT"] {
+        for section in ["SUP", "AIC"] {
             if let data = indexes[section] { try parseFlatDocuments(data, section: section, charts: &pendingCharts) }
         }
+        if let data = indexes["AMDT"] { try parseAmendments(data, charts: &pendingCharts) }
         if let data = indexes["NOTAM"] { try parseNOTAM(data, charts: &pendingCharts) }
 
         guard !requireDocuments || !pendingCharts.isEmpty else {
@@ -165,9 +166,42 @@ nonisolated enum LocalAIRACPackageParser {
         return data
     }
 
+    private static func decodeIndex<T: Decodable>(_ type: T.Type, from raw: Data, name: String) throws -> T {
+        do {
+            return try JSONDecoder().decode(type, from: stripBOM(raw))
+        } catch let error as DecodingError {
+            let context: DecodingError.Context
+            let reason: String
+            switch error {
+            case .keyNotFound(let key, let details):
+                context = details
+                reason = "缺少字段 \(key.stringValue)"
+            case .valueNotFound(_, let details):
+                context = details
+                reason = "必填字段为空"
+            case .typeMismatch(_, let details):
+                context = details
+                reason = "字段类型不正确"
+            case .dataCorrupted(let details):
+                context = details
+                reason = "JSON 内容无效"
+            @unknown default:
+                throw AIRACPackageError.invalidPackage("无法解析 \(name)：索引格式无效")
+            }
+            let location = context.codingPath.map { key in
+                key.intValue.map { "第 \($0 + 1) 条" } ?? key.stringValue
+            }.joined(separator: ".")
+            throw AIRACPackageError.invalidPackage("无法解析 \(name)\(location.isEmpty ? "" : "（\(location)）")：\(reason)")
+        }
+    }
+
     private static func loadNodes(_ raw: Data, name: String) throws -> [EAIPTreeNode] {
-        let data = stripBOM(raw)
-        let nodes = try JSONDecoder().decode([EAIPTreeNode].self, from: data)
+        let nodes = try decodeIndex([EAIPTreeNode].self, from: raw, name: name)
+        try validateNodes(nodes, name: name)
+        return nodes
+    }
+
+    private static func validateNodes(_ nodes: [EAIPTreeNode], name: String) throws {
         var byID: [String: EAIPTreeNode] = [:]
         for node in nodes {
             try Task.checkCancellation()
@@ -189,7 +223,6 @@ nonisolated enum LocalAIRACPackageParser {
             }
             validated.formUnion(path)
         }
-        return nodes
     }
 
     private static func parseAD(
@@ -312,8 +345,31 @@ nonisolated enum LocalAIRACPackageParser {
     }
 
     private static func parseFlatDocuments(_ raw: Data, section: String, charts: inout [ParsedAIRACPackage.Chart]) throws {
-        let data = stripBOM(raw)
-        let docs = try JSONDecoder().decode([EAIPFlatDocument].self, from: data)
+        let docs = try decodeIndex([EAIPFlatDocument].self, from: raw, name: "\(section).JSON")
+        try appendFlatDocuments(docs, section: section, charts: &charts)
+    }
+
+    private static func parseAmendments(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
+        let records = try decodeIndex([EAIPAmendmentRecord].self, from: raw, name: "AMDT.JSON")
+        let nodes = records.compactMap { record -> EAIPTreeNode? in
+            if case .tree(let node) = record { return node }
+            return nil
+        }
+        try validateNodes(nodes, name: "AMDT.JSON")
+        for node in nodes where !node.pdfPath.isEmpty {
+            try Task.checkCancellation()
+            charts.append(treeChart(node, documentType: "amdt", chartType: "AMDT"))
+        }
+        let documents = records.compactMap { record -> EAIPFlatDocument? in
+            if case .flat(let document) = record { return document }
+            return nil
+        }
+        try appendFlatDocuments(documents, section: "AMDT", charts: &charts)
+    }
+
+    private static func appendFlatDocuments(
+        _ docs: [EAIPFlatDocument], section: String, charts: inout [ParsedAIRACPackage.Chart]
+    ) throws {
         for doc in docs {
             try Task.checkCancellation()
             charts.append(
@@ -331,8 +387,7 @@ nonisolated enum LocalAIRACPackageParser {
     }
 
     private static func parseNOTAM(_ raw: Data, charts: inout [ParsedAIRACPackage.Chart]) throws {
-        let data = stripBOM(raw)
-        let docs = try JSONDecoder().decode([EAIPNotamDocument].self, from: data)
+        let docs = try decodeIndex([EAIPNotamDocument].self, from: raw, name: "NOTAM.JSON")
         for doc in docs {
             try Task.checkCancellation()
             let stableID = "\(doc.seriesName)_\(doc.generateTime)"

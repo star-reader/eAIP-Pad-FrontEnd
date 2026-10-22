@@ -73,12 +73,48 @@ struct AIRACServerTests {
         let config = try AIRACServerConfiguration(address: "  https://example.com/packages/current  ", mode: .request)
         #expect(config.rootURL.absoluteString == "https://example.com/packages/current/")
         #expect(try config.resourceURL("/Data/PDFs/a%20b.pdf").absoluteString == "https://example.com/packages/current/Data/PDFs/a%20b.pdf")
-        for address in ["", "file:///tmp/data", "http://example.com/", "https://name:secret@example.com/", "https://example.com/?token=x", "https://example.com/#fragment"] {
+        for address in ["", "file:///tmp/data", "http://example.com/", "https://name:secret@example.com/", "https://example.com/?token=x", "https://example.com/?token=x#/eaip"] {
             #expect(throws: (any Error).self) { try AIRACServerConfiguration(address: address, mode: .copy) }
         }
         for path in ["../outside.pdf", "/Data/../../outside.pdf", "%2e%2e/outside.pdf", "//other.example/file.pdf", "https://other.example/file.pdf", "Data\\outside.pdf", ""] {
             #expect(throws: (any Error).self) { try config.resourceURL(path) }
         }
+    }
+
+    @Test(arguments: AIRACServerMode.allCases)
+    func serverAddressesIgnoreHashRoutesAndNormalizeTrailingSlash(_ mode: AIRACServerMode) throws {
+        for root in ["https://example.com", "https://example.com/packages/current"] {
+            let expectedRoot = root + "/"
+            for suffix in ["", "/", "#/eaip", "/#/eaip", "/#/eaip/", "/#/", "/#/ad", "/#", "/#/eaip?tab=AD"] {
+                let configuration = try AIRACServerConfiguration(address: "  \(root)\(suffix)  ", mode: mode)
+                #expect(configuration.rootURL.absoluteString == expectedRoot)
+                #expect(try configuration.resourceURL("Data/Customers.js").absoluteString == expectedRoot + "Data/Customers.js")
+                #expect(try configuration.resourceURL("/Data/PDFs/chart.pdf").absoluteString == expectedRoot + "Data/PDFs/chart.pdf")
+            }
+        }
+        // %23 is part of a real path component, rather than a hash-router separator.
+        let encoded = try AIRACServerConfiguration(address: "https://example.com/package%23archive/#/ad", mode: mode)
+        #expect(encoded.rootURL.absoluteString == "https://example.com/package%23archive/")
+    }
+
+    @Test(arguments: AIRACServerMode.allCases)
+    func hashRoutedServerImportPersistsNormalizedRootAndLoadsPDF(_ mode: AIRACServerMode) async throws {
+        let fixture = try Fixture(); defer { fixture.remove() }
+        let (server, client) = try server(fixture.package())
+        let configuration = try AIRACServerConfiguration(
+            address: "https://example.com/packages/current/#/eaip/", mode: mode)
+        try await fixture.store.configureServer(configuration, modelContext: fixture.context, client: client)
+        let reopened = ModelContext(fixture.container)
+        let current = try #require(try AIRACPackageStore.currentVersion(modelContext: reopened))
+        #expect(current.serverURL == "https://example.com/packages/current/")
+        let charts = try await AIRACPackageStore.loadCharts(modelContext: reopened, documentType: "chart", client: client)
+        let chart = try #require(charts.first)
+        let loaded = try await AIRACPackageStore.loadDocument(
+            chartID: chart.readerChartID, documentType: "chart", version: current.version,
+            modelContext: reopened, client: client, files: fixture.files)
+        #expect(loaded.document.pageCount == 1)
+        let requests = await server.requests
+        #expect(requests.allSatisfy { $0.hasPrefix("/packages/current/Data/") && !$0.contains("#") })
     }
 
     @Test func copyPersistsConfigurationAndAllPDFsWorkOffline() async throws {

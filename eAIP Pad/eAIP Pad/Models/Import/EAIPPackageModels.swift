@@ -41,7 +41,7 @@ nonisolated struct EAIPTreeNode: Codable {
     }
 }
 
-/// Data/JsonPath/{SUP,AIC,AMDT}.JSON 里的平铺文档记录
+/// Data/JsonPath/{SUP,AIC}.JSON 里的平铺文档记录，也兼容平铺格式的 AMDT。
 nonisolated struct EAIPFlatDocument: Codable {
     let id: String
     let document: String
@@ -65,6 +65,23 @@ nonisolated struct EAIPFlatDocument: Codable {
         case effectiveTime = "Effective_Time"
         case outDate = "Out_Date"
         case pubDate = "Pub_Date"
+    }
+}
+
+/// 官方 AMDT 使用树形节点；部分数据源使用平铺文档。按字段选择格式，避免掩盖损坏记录。
+nonisolated enum EAIPAmendmentRecord: Decodable {
+    case tree(EAIPTreeNode)
+    case flat(EAIPFlatDocument)
+
+    private enum CodingKeys: String, CodingKey { case id, pId }
+
+    init(from decoder: Decoder) throws {
+        let keys = try decoder.container(keyedBy: CodingKeys.self)
+        if keys.contains(.id) || keys.contains(.pId) {
+            self = .tree(try EAIPTreeNode(from: decoder))
+        } else {
+            self = .flat(try EAIPFlatDocument(from: decoder))
+        }
     }
 }
 
