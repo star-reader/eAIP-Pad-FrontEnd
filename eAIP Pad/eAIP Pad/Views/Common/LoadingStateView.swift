@@ -27,13 +27,16 @@ struct StateEntranceModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .opacity(reduceMotion || appeared ? 1 : 0)
-            .offset(y: reduceMotion || appeared ? 0 : 8)
-            .onAppear {
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.28)) {
-                    appeared = true
-                }
+            // 先在本地坐标中完成布局，避免新插入的图标层从父视图原点开始插值。
+            .geometryGroup()
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.28)) { view in
+                view
+                    .opacity(reduceMotion || appeared ? 1 : 0)
+                    .offset(y: reduceMotion || appeared ? 0 : 8)
             }
+            // 入场只动画化上面的视觉效果，不继承加载切换、导航等父级的布局动画。
+            .transaction { $0.animation = nil }
+            .onAppear { appeared = true }
     }
 }
 
@@ -119,6 +122,8 @@ struct LoadingStateView<Content: View>: View {
                     .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .geometryGroup()
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: phase)
     }
 }
